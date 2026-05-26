@@ -1,4 +1,15 @@
-import { Trophy, Users, Calendar, TrendingUp, ArrowUp, ArrowDown, Circle, Crown } from 'lucide-react';
+import { Link } from 'react-router-dom';
+
+import {
+  Trophy,
+  Users,
+  Calendar,
+  TrendingUp,
+  ArrowUp,
+  ArrowDown,
+  Circle,
+  Crown,
+} from 'lucide-react';
 
 export default function Dashboard() {
   const upcomingRaces = [
@@ -113,8 +124,12 @@ export default function Dashboard() {
             <div className="bg-[#1a1a1a] border border-white/10 rounded-lg p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-white">Upcoming Races</h2>
-                <button className="text-[#e10600] hover:text-[#c00500] text-sm font-semibold">View All</button>
-              </div>
+                <Link
+                  to="/tournaments"
+                  className="text-[#e10600] hover:text-[#c00500] text-sm font-semibold"
+                >
+                  View All
+                </Link>              </div>
               <div className="space-y-4">
                 {upcomingRaces.map((race) => (
                   <div
@@ -154,7 +169,12 @@ export default function Dashboard() {
             <div className="bg-[#1a1a1a] border border-white/10 rounded-lg p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-2xl font-bold text-white">Recent Results</h2>
-                <button className="text-[#e10600] hover:text-[#c00500] text-sm font-semibold">View All</button>
+                <Link
+                  to="/results"
+                  className="text-[#e10600] hover:text-[#c00500] text-sm font-semibold"
+                >
+                  View All
+                </Link>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -199,15 +219,14 @@ export default function Dashboard() {
                   >
                     <div className="flex items-center gap-4">
                       <div
-                        className={`w-10 h-10 rounded flex items-center justify-center font-bold ${
-                          jockey.rank === 1
-                            ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-black'
-                            : jockey.rank === 2
+                        className={`w-10 h-10 rounded flex items-center justify-center font-bold ${jockey.rank === 1
+                          ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-black'
+                          : jockey.rank === 2
                             ? 'bg-gradient-to-br from-gray-300 to-gray-500 text-black'
                             : jockey.rank === 3
-                            ? 'bg-gradient-to-br from-orange-400 to-orange-600 text-black'
-                            : 'bg-[#2a2a2a] text-white'
-                        }`}
+                              ? 'bg-gradient-to-br from-orange-400 to-orange-600 text-black'
+                              : 'bg-[#2a2a2a] text-white'
+                          }`}
                       >
                         {jockey.rank}
                       </div>

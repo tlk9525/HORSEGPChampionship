@@ -4,7 +4,6 @@ import {
   Award,
   TrendingUp,
   Activity,
-  Star,
 } from 'lucide-react';
 
 interface JockeyProfileProps {
