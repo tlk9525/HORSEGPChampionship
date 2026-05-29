@@ -1,0 +1,148 @@
+{
+  "users": [
+    {
+      "id": "u_admin",
+      "name": "Admin User",
+      "email": "admin@race.test",
+      "password": "admin123",
+      "role": "admin",
+      "status": "active"
+    },
+    {
+      "id": "u_owner",
+      "name": "Sterling Stables",
+      "email": "owner@race.test",
+      "password": "owner123",
+      "role": "owner",
+      "status": "active"
+    },
+    {
+      "id": "u_jockey",
+      "name": "Marcus Sterling",
+      "email": "jockey@race.test",
+      "password": "jockey123",
+      "role": "jockey",
+      "status": "active"
+    },
+    {
+      "id": "u_referee",
+      "name": "Olivia Grant",
+      "email": "referee@race.test",
+      "password": "referee123",
+      "role": "referee",
+      "status": "active"
+    },
+    {
+      "id": "u_spectator",
+      "name": "Spectator User",
+      "email": "spectator@race.test",
+      "password": "spectator123",
+      "role": "spectator",
+      "status": "active"
+    },
+    {
+      "id": "u_jockey_pending",
+      "name": "Diego Martinez",
+      "email": "diego@race.test",
+      "password": "diego123",
+      "role": "jockey",
+      "status": "active"
+    }
+  ],
+  "tournaments": [
+    {
+      "id": "t_001",
+      "name": "Summer Derby Classic",
+      "status": "approvals",
+      "registrationWindow": "May 20 - May 31, 2026",
+      "startDate": "June 10, 2026",
+      "finalDate": "June 30, 2026",
+      "location": "Churchill Downs",
+      "prizePool": 750000
+    }
+  ],
+  "horses": [
+    {
+      "id": "h_001",
+      "name": "Midnight Storm",
+      "breed": "Thoroughbred",
+      "age": 4,
+      "ownerUserId": "u_owner",
+      "status": "approved",
+      "selectedJockeyUserId": "u_jockey",
+      "jockeyConfirmation": "confirmed"
+    },
+    {
+      "id": "h_002",
+      "name": "Racing Thunder",
+      "breed": "Quarter Horse",
+      "age": 3,
+      "ownerUserId": "u_owner",
+      "status": "approved",
+      "selectedJockeyUserId": null,
+      "jockeyConfirmation": "waiting-owner"
+    }
+  ],
+  "races": [
+    {
+      "id": "r_001",
+      "tournamentId": "t_001",
+      "name": "Summer Derby Qualifier R1",
+      "date": "June 10, 2026",
+      "time": "16:30",
+      "venue": "Churchill Downs",
+      "distance": "1400m",
+      "surface": "Turf",
+      "refereeUserId": "u_referee",
+      "status": "awaiting-confirmations"
+    }
+  ],
+  "jockeyProfiles": [
+    {
+      "id": "jp_001",
+      "userId": "u_jockey",
+      "bio": "Experienced sprint jockey with strong turf performance.",
+      "certificate": "Class A Racing License",
+      "competitionLevel": "Elite",
+      "weight": 54,
+      "status": "published"
+    },
+    {
+      "id": "jp_002",
+      "userId": "u_jockey_pending",
+      "bio": "Pending jockey profile awaiting admin approval.",
+      "certificate": "Class B Racing License",
+      "competitionLevel": "Qualifier",
+      "weight": 56,
+      "status": "draft"
+    }
+  ],
+  "jockeyInvitations": [],
+  "notifications": [
+    {
+      "id": "6c736589-8c46-4431-8ca3-d8a0a99a7a76",
+      "userId": "u_jockey_pending",
+      "title": "Jockey account approved",
+      "message": "Your jockey application has been approved by Admin.",
+      "read": false,
+      "createdAt": "2026-05-29T09:50:12.731Z"
+    },
+    {
+      "id": "0f827d69-7d47-473e-aa0b-183af14b598e",
+      "userId": "u_owner",
+      "title": "Horse approved",
+      "message": "Racing Thunder has been approved by Admin.",
+      "read": true,
+      "createdAt": "2026-05-29T09:50:07.073Z"
+    },
+    {
+      "id": "n_seed_owner",
+      "userId": "u_owner",
+      "title": "Horse registration submitted",
+      "message": "Racing Thunder is waiting for admin approval.",
+      "read": true,
+      "createdAt": "2026-05-29T09:00:00.000Z"
+    }
+  ],
+  "sessions": []
+}

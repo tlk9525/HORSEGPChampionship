@@ -5,6 +5,10 @@ import {
   TrendingUp,
   Activity,
 } from 'lucide-react';
+import {
+  currentTournament,
+  raceSchedule,
+} from '../data/tournamentWorkflow';
 
 interface JockeyProfileProps {
   onNavigate: (page: string) => void;
@@ -115,6 +119,39 @@ export default function JockeyProfile({
 
               </div>
 
+            </div>
+
+            <div className="mt-8 bg-[#0a0a0a] border border-white/10 rounded-2xl p-6">
+              <p className="text-[#e10600] uppercase tracking-[0.2em] text-sm font-bold">
+                Pending Jockey Action
+              </p>
+
+              <h2 className="text-2xl font-black text-white mt-3">
+                Confirm pairing for {currentTournament.name}
+              </h2>
+
+              <p className="text-gray-400 mt-2">
+                Horse Owner selected this jockey for {raceSchedule[0].name}. The race cannot open predictions until the jockey confirmation is completed.
+              </p>
+
+              <div className="flex flex-wrap gap-4 mt-6">
+                <button
+                  onClick={() => onNavigate('race-details')}
+                  className="px-6 py-3 rounded-xl bg-white/10 text-white hover:bg-white/15 transition-all"
+                >
+                  Review Race Card
+                </button>
+
+                <button
+                  onClick={() => {
+                    alert('Jockey confirmed the pairing and race participation.');
+                    onNavigate('jockeys');
+                  }}
+                  className="px-6 py-3 rounded-xl bg-[#e10600] text-white font-bold hover:bg-[#c00500] transition-all"
+                >
+                  Confirm Pairing
+                </button>
+              </div>
             </div>
 
           </div>

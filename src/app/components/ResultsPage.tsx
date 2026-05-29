@@ -1,4 +1,8 @@
 import { Trophy, TrendingUp, ArrowUp, ArrowDown, Clock } from 'lucide-react';
+import {
+  currentTournament,
+  resultPipeline,
+} from '../data/tournamentWorkflow';
 
 export default function ResultsPage() {
   const recentResults = [
@@ -53,8 +57,37 @@ export default function ResultsPage() {
       <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-4xl font-bold text-white mb-2">Results & Rankings</h1>
-          <p className="text-gray-400">Complete race results and championship standings</p>
+          <h1 className="text-4xl font-bold text-white mb-2">Results Publishing</h1>
+          <p className="text-gray-400">
+            Referee confirms results, Admin publishes them, then rankings and prediction rewards are updated for {currentTournament.name}.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-5 gap-4 mb-8">
+          {[
+            ['Referee Result', resultPipeline.refereeConfirmed],
+            ['Admin Published', resultPipeline.adminPublished],
+            ['Rankings Updated', resultPipeline.rankingsUpdated],
+            ['Rewards Calculated', resultPipeline.rewardsCalculated],
+            ['Awards Delivered', resultPipeline.awardsDelivered],
+          ].map(([label, done]) => (
+            <div
+              key={String(label)}
+              className={`border rounded-xl p-4 ${
+                done
+                  ? 'border-green-500/30 bg-green-500/10 text-green-400'
+                  : 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400'
+              }`}
+            >
+              <div className="text-xs uppercase tracking-wider">
+                Status
+              </div>
+
+              <div className="font-bold mt-1">
+                {label}
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* Recent Results */}

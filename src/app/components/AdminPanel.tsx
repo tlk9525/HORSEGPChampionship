@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
   Users,
@@ -13,142 +13,110 @@ import {
   Pencil,
   Plus,
 } from 'lucide-react';
+import {
+  currentTournament,
+  raceSchedule,
+  statusLabel,
+} from '../data/tournamentWorkflow';
+import {
+  ApprovalItem,
+  decideApproval,
+  getAdminDatabase,
+  getApprovals,
+} from '../services/api';
 
-export default function AdminPanel() {
+interface AdminPanelProps {
+  onNavigate: (page: string) => void;
+}
+
+export default function AdminPanel({ onNavigate }: AdminPanelProps) {
+
+  const [pendingApprovals, setPendingApprovals] = useState<ApprovalItem[]>([]);
+  const [adminDb, setAdminDb] = useState<Record<string, unknown> | null>(null);
+  const [approvalMessage, setApprovalMessage] = useState('');
+  const [isLoadingApprovals, setIsLoadingApprovals] = useState(true);
+
+  const loadAdminData = () => {
+    setIsLoadingApprovals(true);
+
+    Promise.all([getApprovals(), getAdminDatabase()])
+      .then(([approvalResult, databaseResult]) => {
+        setPendingApprovals(approvalResult.approvals);
+        setAdminDb(databaseResult);
+      })
+      .catch((error) => {
+        setApprovalMessage(
+          error instanceof Error ? error.message : 'Unable to load admin data'
+        );
+      })
+      .finally(() => setIsLoadingApprovals(false));
+  };
+
+  useEffect(() => {
+    loadAdminData();
+  }, []);
+
+  const handleDecision = (
+    item: ApprovalItem,
+    decision: 'approved' | 'rejected'
+  ) => {
+    decideApproval(item.entityType, item.id, decision)
+      .then((result) => {
+        setPendingApprovals(result.approvals);
+        setApprovalMessage(
+          `${item.name} has been ${decision}. Notification sent.`
+        );
+        return getAdminDatabase();
+      })
+      .then(setAdminDb)
+      .catch((error) => {
+        setApprovalMessage(
+          error instanceof Error ? error.message : 'Approval action failed'
+        );
+      });
+  };
 
   const systemStats = [
     {
       label: 'Total Users',
-      value: '2,450',
-      change: '+12%',
+      value: String(
+        Array.isArray(adminDb?.users) ? adminDb.users.length : '-'
+      ),
+      change: 'DB',
       icon: Users,
     },
 
     {
       label: 'Active Tournaments',
-      value: '12',
-      change: '+3',
+      value: '1',
+      change: currentTournament.phase,
       icon: Calendar,
     },
 
     {
       label: 'Pending Approvals',
-      value: '8',
-      change: '-2',
+      value: String(pendingApprovals.length),
+      change: 'Review now',
       icon: Shield,
     },
 
     {
-      label: 'System Health',
-      value: '98%',
-      change: '+1%',
+      label: 'Race Confirmations',
+      value: `${raceSchedule[0].ownerConfirmed + raceSchedule[0].jockeyConfirmed}/${raceSchedule[0].participants * 2}`,
+      change: 'Owner + Jockey',
       icon: BarChart3,
     },
   ];
 
-  const pendingApprovals = [
-    {
-      id: 1,
-      type: 'Horse Registration',
-      name: 'Storm Rider',
-      owner: 'Blue Ridge Stables',
-      date: 'May 18, 2026',
-    },
-
-    {
-      id: 2,
-      type: 'Jockey Application',
-      name: 'Alex Thompson',
-      experience: '5 years',
-      date: 'May 17, 2026',
-    },
-
-    {
-      id: 3,
-      type: 'Tournament Entry',
-      name: 'Swift Lightning',
-      tournament: 'Summer Derby',
-      date: 'May 16, 2026',
-    },
-  ];
-
   const [races, setRaces] = useState([
-    {
-      id: 1,
-      name: 'Elite Cup Qualifier',
-      date: 'May 22, 2026',
-      time: '16:30',
-      status: 'scheduled',
-      participants: 12,
-    },
-
-    {
-      id: 2,
-      name: 'Spring Derby Finals',
-      date: 'May 25, 2026',
-      time: '15:00',
-      status: 'scheduled',
-      participants: 16,
-    },
-
-    {
-      id: 3,
-      name: 'Regional Championship',
-      date: 'May 28, 2026',
-      time: '14:00',
-      status: 'pending',
-      participants: 8,
-    },
+    ...raceSchedule,
   ]);
-
-  const [showCreateModal, setShowCreateModal] =
-    useState(false);
 
   const [showViewModal, setShowViewModal] =
     useState<any>(null);
 
   const [editRace, setEditRace] =
     useState<any>(null);
-
-  const [newRace, setNewRace] = useState({
-    name: '',
-    date: '',
-    time: '',
-    participants: '',
-  });
-
-  const createRace = () => {
-
-    if (
-      !newRace.name ||
-      !newRace.date ||
-      !newRace.time
-    ) {
-      alert('Please fill all fields');
-      return;
-    }
-
-    const race = {
-      id: Date.now(),
-      name: newRace.name,
-      date: newRace.date,
-      time: newRace.time,
-      participants:
-        Number(newRace.participants) || 0,
-      status: 'scheduled',
-    };
-
-    setRaces((prev) => [...prev, race]);
-
-    setNewRace({
-      name: '',
-      date: '',
-      time: '',
-      participants: '',
-    });
-
-    setShowCreateModal(false);
-  };
 
   const updateRace = () => {
 
@@ -240,7 +208,25 @@ export default function AdminPanel() {
                 </div>
               </div>
 
+              {approvalMessage && (
+                <div className="mb-5 rounded-xl border border-[#e10600]/30 bg-[#e10600]/10 px-4 py-3 text-[#ff6b66] font-semibold">
+                  {approvalMessage}
+                </div>
+              )}
+
               <div className="space-y-5">
+
+                {isLoadingApprovals && (
+                  <div className="bg-[#0a0a0a] border border-white/10 rounded-2xl p-5 text-gray-400">
+                    Loading approvals from API...
+                  </div>
+                )}
+
+                {!isLoadingApprovals && pendingApprovals.length === 0 && (
+                  <div className="bg-[#0a0a0a] border border-white/10 rounded-2xl p-5 text-gray-400">
+                    No pending approvals.
+                  </div>
+                )}
 
                 {pendingApprovals.map((item) => (
 
@@ -269,26 +255,25 @@ export default function AdminPanel() {
                         </h3>
 
                         <p className="text-gray-400">
-                          {'owner' in item &&
-                            `Owner: ${item.owner}`}
-
-                          {'experience' in item &&
-                            `Experience: ${item.experience}`}
-
-                          {'tournament' in item &&
-                            `Tournament: ${item.tournament}`}
+                          {item.detail}
                         </p>
                       </div>
                     </div>
 
                     <div className="flex gap-4">
 
-                      <button className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-600 rounded-xl hover:bg-green-700 transition-all text-white font-bold">
+                      <button
+                        onClick={() => handleDecision(item, 'approved')}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-600 rounded-xl hover:bg-green-700 transition-all text-white font-bold"
+                      >
                         <CheckCircle className="w-5 h-5" />
                         Approve
                       </button>
 
-                      <button className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-600 rounded-xl hover:bg-red-700 transition-all text-white font-bold">
+                      <button
+                        onClick={() => handleDecision(item, 'rejected')}
+                        className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-600 rounded-xl hover:bg-red-700 transition-all text-white font-bold"
+                      >
                         <XCircle className="w-5 h-5" />
                         Reject
                       </button>
@@ -309,9 +294,7 @@ export default function AdminPanel() {
                 </h2>
 
                 <button
-                  onClick={() =>
-                    setShowCreateModal(true)
-                  }
+                  onClick={() => onNavigate('create-race')}
                   className="flex items-center gap-2 px-5 py-3 bg-[#e10600] rounded-xl hover:bg-[#c00500] transition-all text-white font-bold"
                 >
                   <Plus className="w-5 h-5" />
@@ -346,7 +329,7 @@ export default function AdminPanel() {
                                 : 'bg-yellow-600/20 border border-yellow-600/30 text-yellow-500'
                             }`}
                           >
-                            {race.status}
+                            {statusLabel(race.status)}
                           </span>
                         </div>
 
@@ -368,6 +351,16 @@ export default function AdminPanel() {
                             {race.participants}{' '}
                             participants
                           </span>
+
+                          {'referee' in race && (
+                            <>
+                              <span>•</span>
+
+                              <span>
+                                {race.referee}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
 
@@ -430,7 +423,7 @@ export default function AdminPanel() {
                   {
                     icon: Calendar,
                     label:
-                      'Tournament Manager',
+                      'Open Registration',
                   },
 
                   {
@@ -500,100 +493,30 @@ export default function AdminPanel() {
           </div>
         </div>
 
-        {/* CREATE MODAL */}
-
-        {showCreateModal && (
-
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-
-            <div className="bg-[#1a1a1a] p-8 rounded-3xl w-full max-w-lg border border-white/10">
-
-              <h2 className="text-3xl font-black text-white mb-8">
-                Create Race
+        <div className="mt-8 bg-[#1a1a1a] border border-white/10 rounded-3xl p-8">
+          <div className="flex items-center justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-3xl font-black text-white">
+                API Database Preview
               </h2>
 
-              <div className="space-y-5">
-
-                <input
-                  type="text"
-                  placeholder="Race Name"
-                  value={newRace.name}
-                  onChange={(e) =>
-                    setNewRace({
-                      ...newRace,
-                      name:
-                        e.target.value,
-                    })
-                  }
-                  className="w-full bg-[#0a0a0a] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
-
-                <input
-                  type="date"
-                  value={newRace.date}
-                  onChange={(e) =>
-                    setNewRace({
-                      ...newRace,
-                      date:
-                        e.target.value,
-                    })
-                  }
-                  className="w-full bg-[#0a0a0a] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
-
-                <input
-                  type="time"
-                  value={newRace.time}
-                  onChange={(e) =>
-                    setNewRace({
-                      ...newRace,
-                      time:
-                        e.target.value,
-                    })
-                  }
-                  className="w-full bg-[#0a0a0a] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
-
-                <input
-                  type="number"
-                  placeholder="Participants"
-                  value={
-                    newRace.participants
-                  }
-                  onChange={(e) =>
-                    setNewRace({
-                      ...newRace,
-                      participants:
-                        e.target.value,
-                    })
-                  }
-                  className="w-full bg-[#0a0a0a] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
-              </div>
-
-              <div className="flex gap-4 mt-8">
-
-                <button
-                  onClick={() =>
-                    setShowCreateModal(
-                      false
-                    )
-                  }
-                  className="flex-1 py-4 bg-white/10 rounded-2xl text-white"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  onClick={createRace}
-                  className="flex-1 py-4 bg-[#e10600] rounded-2xl text-white font-bold"
-                >
-                  Create
-                </button>
-              </div>
+              <p className="text-gray-400 mt-2">
+                Live data from <span className="text-white">GET /api/admin/database</span>.
+              </p>
             </div>
+
+            <button
+              onClick={loadAdminData}
+              className="px-5 py-3 rounded-xl bg-white/10 text-white hover:bg-white/15 transition-all font-bold"
+            >
+              Refresh
+            </button>
           </div>
-        )}
+
+          <pre className="max-h-[360px] overflow-auto rounded-2xl bg-[#0a0a0a] border border-white/10 p-5 text-sm text-gray-300">
+            {JSON.stringify(adminDb, null, 2)}
+          </pre>
+        </div>
 
         {/* EDIT MODAL */}
 

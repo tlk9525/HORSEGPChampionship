@@ -7,8 +7,15 @@ import {
   Flag,
   Crown,
 } from 'lucide-react';
+import {
+  currentTournament,
+  tournamentHorses,
+  statusLabel,
+} from '../data/tournamentWorkflow';
 
 export default function HorseDetails() {
+  const entry = tournamentHorses[0];
+
   const raceHistory = [
     {
       race: 'Spring Derby Finals',
@@ -52,7 +59,7 @@ export default function HorseDetails() {
               <div className="flex items-center gap-3 mb-4">
 
                 <div className="px-4 py-2 bg-[#e10600] rounded-lg text-white font-bold text-sm">
-                  CHAMPION HORSE
+                  {statusLabel(entry.profileStatus)}
                 </div>
 
                 <div className="flex items-center gap-2 px-4 py-2 bg-yellow-500/20 border border-yellow-500 rounded-lg">
@@ -71,6 +78,10 @@ export default function HorseDetails() {
 
               <p className="text-gray-300 text-lg">
                 Thoroughbred • United States 🇺🇸
+              </p>
+
+              <p className="text-gray-300 mt-2">
+                Tournament entry: {currentTournament.name} • Jockey: {entry.selectedJockey} • Race confirmation: {statusLabel(entry.raceConfirmation)}
               </p>
 
             </div>
@@ -160,10 +171,7 @@ export default function HorseDetails() {
               </h2>
 
               <p className="text-gray-400 leading-8 text-lg">
-                Midnight Storm is one of the most successful racing horses
-                in the international championship circuit. Known for elite
-                acceleration, incredible stamina, and championship mentality,
-                this horse has dominated races across North America and Europe.
+                This profile is part of the active tournament. After Admin approval, the Owner selects a Jockey, the Jockey confirms the pairing, then both parties confirm the scheduled race before spectator predictions can open.
               </p>
 
             </div>
@@ -274,6 +282,22 @@ export default function HorseDetails() {
 
                     <h3 className="text-white font-bold text-lg">
                       6 Titles
+                    </h3>
+                  </div>
+
+                </div>
+
+                <div className="flex items-center gap-4">
+
+                  <User className="w-6 h-6 text-[#e10600]" />
+
+                  <div>
+                    <p className="text-gray-400 text-sm">
+                      Owner
+                    </p>
+
+                    <h3 className="text-white font-bold text-lg">
+                      {entry.owner}
                     </h3>
                   </div>
 

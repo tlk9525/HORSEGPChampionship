@@ -8,12 +8,21 @@ import {
   Trophy,
   User,
 } from 'lucide-react';
+import {
+  AuthUser,
+  UserRole,
+  login,
+  register,
+  storeToken,
+} from '../services/api';
 
 interface LoginPageProps {
+  onLogin: (user: AuthUser) => void;
   onNavigate: (page: string) => void;
 }
 
 export default function LoginPage({
+  onLogin,
   onNavigate,
 }: LoginPageProps) {
 
@@ -22,6 +31,41 @@ export default function LoginPage({
 
   const [isRegister, setIsRegister] =
     useState(false);
+
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [role, setRole] = useState<UserRole>('spectator');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const submit = async () => {
+    setError('');
+    setIsSubmitting(true);
+
+    try {
+      if (isRegister) {
+        if (password !== confirmPassword) {
+          throw new Error('Password confirmation does not match');
+        }
+
+        const { user } = await register(name, email, password, role);
+
+        const result = await login(email, password);
+        storeToken(result.token);
+        onLogin(result.user);
+      } else {
+        const result = await login(email, password);
+        storeToken(result.token);
+        onLogin(result.user);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center px-4 pt-24 pb-12">
@@ -163,6 +207,8 @@ export default function LoginPage({
 
                     <input
                       type="text"
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
                       placeholder="Enter your full name"
                       className="w-full h-14 bg-[#0a0a0a] border border-white/10 rounded-xl pl-12 pr-4 text-white placeholder:text-gray-500 focus:outline-none focus:border-[#e10600] transition-all"
                     />
@@ -184,12 +230,35 @@ export default function LoginPage({
 
                   <input
                     type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
                     placeholder="Enter your email"
                     className="w-full h-14 bg-[#0a0a0a] border border-white/10 rounded-xl pl-12 pr-4 text-white placeholder:text-gray-500 focus:outline-none focus:border-[#e10600] transition-all"
                   />
 
                 </div>
               </div>
+
+              {/* PASSWORD */}
+              {isRegister && (
+                <div>
+                  <label className="block text-sm text-gray-300 mb-2 font-medium">
+                    Role
+                  </label>
+
+                  <select
+                    value={role}
+                    onChange={(event) => setRole(event.target.value as UserRole)}
+                    className="w-full h-14 bg-[#0a0a0a] border border-white/10 rounded-xl px-4 text-white focus:outline-none focus:border-[#e10600] transition-all"
+                  >
+                    <option value="owner">Horse Owner</option>
+                    <option value="jockey">Jockey</option>
+                    <option value="referee">Referee</option>
+                    <option value="spectator">Spectator</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              )}
 
               {/* PASSWORD */}
               <div>
@@ -208,6 +277,8 @@ export default function LoginPage({
                         ? 'text'
                         : 'password'
                     }
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
                     placeholder="Enter your password"
                     className="w-full h-14 bg-[#0a0a0a] border border-white/10 rounded-xl pl-12 pr-14 text-white placeholder:text-gray-500 focus:outline-none focus:border-[#e10600] transition-all"
                   />
@@ -247,11 +318,19 @@ export default function LoginPage({
 
                     <input
                       type="password"
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
                       placeholder="Confirm password"
                       className="w-full h-14 bg-[#0a0a0a] border border-white/10 rounded-xl pl-12 pr-4 text-white placeholder:text-gray-500 focus:outline-none focus:border-[#e10600] transition-all"
                     />
 
                   </div>
+                </div>
+              )}
+
+              {error && (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-red-300 text-sm">
+                  {error}
                 </div>
               )}
 
@@ -283,13 +362,14 @@ export default function LoginPage({
               {/* BUTTON */}
               <button
                 type="button"
-                onClick={() =>
-                  onNavigate('dashboard')
-                }
+                onClick={submit}
+                disabled={isSubmitting}
                 className="w-full h-14 rounded-xl bg-[#e10600] hover:bg-[#c00500] transition-all text-white font-bold text-lg shadow-lg shadow-[#e10600]/30"
               >
 
-                {isRegister
+                {isSubmitting
+                  ? 'Please wait...'
+                  : isRegister
                   ? 'Create Account'
                   : 'Login'}
 

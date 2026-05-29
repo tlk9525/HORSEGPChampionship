@@ -10,6 +10,10 @@ import {
   Crown,
   Award,
 } from 'lucide-react';
+import {
+  currentTournament,
+  resultPipeline,
+} from '../data/tournamentWorkflow';
 
 type Tab = 'horses' | 'jockeys' | 'trainers' | 'stables';
 
@@ -195,7 +199,7 @@ export default function RankingsPage() {
             </div>
 
             <p className="text-gray-400">
-              Official championship standings
+              Official championship standings for {currentTournament.name}. Rankings update after Admin publishes referee-confirmed results.
             </p>
           </div>
 
@@ -213,6 +217,24 @@ export default function RankingsPage() {
               <option value="2025">2025</option>
               <option value="2024">2024</option>
             </select>
+          </div>
+        </div>
+
+        <div className="mb-8 border border-white/10 bg-[#111111] rounded-lg p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="text-white font-bold">
+                Ranking update gate
+              </div>
+
+              <p className="text-gray-400 mt-1">
+                Referee confirmed: {resultPipeline.refereeConfirmed ? 'Yes' : 'No'} • Admin published: {resultPipeline.adminPublished ? 'Yes' : 'No'} • Rewards calculated: {resultPipeline.rewardsCalculated ? 'Yes' : 'No'}
+              </p>
+            </div>
+
+            <span className="px-4 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 font-bold">
+              Awaiting Official Result
+            </span>
           </div>
         </div>
 

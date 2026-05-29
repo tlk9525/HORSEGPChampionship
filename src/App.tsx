@@ -1,6 +1,6 @@
 // App.tsx
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import Navbar from './app/components/Navbar';
 import Footer from './app/components/Footer';
@@ -24,14 +24,76 @@ import PredictionPage from './app/components/PredictionPage';
 import ResultsPage from './app/components/ResultsPage';
 import RankingsPage from './app/components/RankingsPage';
 import AdminPanel from './app/components/AdminPanel';
+import CreateRacePage from './app/components/CreateRacePage';
 
 import LoginPage from './app/components/LoginPage';
 import RegisterPage from './app/components/RegisterPage';
+import { AuthUser, clearToken, getMe, logout } from './app/services/api';
+
+const roleHome: Record<string, string> = {
+  admin: 'admin',
+  owner: 'horses',
+  jockey: 'jockeys',
+  referee: 'live-race',
+  spectator: 'predictions',
+};
+
+const protectedPages: Record<string, string[]> = {
+  admin: ['admin'],
+  'create-race': ['admin'],
+  horses: ['admin', 'owner'],
+  'register-horse': ['owner'],
+  'horse-details': ['admin', 'owner'],
+  jockeys: ['admin', 'owner', 'jockey'],
+  'jockey-profile': ['jockey', 'admin'],
+  'live-race': ['admin', 'referee', 'spectator'],
+  predictions: ['spectator'],
+  results: ['admin', 'referee', 'spectator'],
+};
 
 export default function App() {
 
   const [currentPage, setCurrentPage] =
-    useState('dashboard');
+    useState('login');
+
+  const [currentUser, setCurrentUser] =
+    useState<AuthUser | null>(null);
+
+  useEffect(() => {
+    getMe()
+      .then(({ user }) => {
+        setCurrentUser(user);
+        setCurrentPage(roleHome[user.role] || 'dashboard');
+      })
+      .catch(() => clearToken());
+  }, []);
+
+  const navigate = (page: string) => {
+    const allowedRoles = protectedPages[page];
+
+    if (allowedRoles && !currentUser) {
+      setCurrentPage('login');
+      return;
+    }
+
+    if (
+      allowedRoles &&
+      currentUser &&
+      !allowedRoles.includes(currentUser.role)
+    ) {
+      setCurrentPage(roleHome[currentUser.role] || 'dashboard');
+      return;
+    }
+
+    setCurrentPage(page);
+  };
+
+  const handleLogout = async () => {
+    await logout().catch(() => undefined);
+    clearToken();
+    setCurrentUser(null);
+    setCurrentPage('login');
+  };
 
   const renderPage = () => {
 
@@ -40,21 +102,21 @@ export default function App() {
       case 'home':
         return (
           <LandingPage
-            onNavigate={setCurrentPage}
+            onNavigate={navigate}
           />
         );
 
       case 'dashboard':
         return (
           <Dashboard
-            onNavigate={setCurrentPage}
+            onNavigate={navigate}
           />
         );
 
       case 'tournaments':
         return (
           <TournamentPage
-            onNavigate={setCurrentPage}
+            onNavigate={navigate}
           />
         );
 
@@ -71,7 +133,7 @@ export default function App() {
       case 'horses':
         return (
           <HorseManagement
-            onNavigate={setCurrentPage}
+            onNavigate={navigate}
           />
         );
 
@@ -83,21 +145,22 @@ export default function App() {
       case 'register-horse':
         return (
           <RegisterHorsePage
-            onNavigate={setCurrentPage}
+            onNavigate={navigate}
           />
         );
 
       case 'jockeys':
         return (
           <JockeyPage
-            onNavigate={setCurrentPage}
+            currentUser={currentUser}
+            onNavigate={navigate}
           />
         );
 
       case 'jockey-profile':
         return (
           <JockeyProfile
-            onNavigate={setCurrentPage}
+            onNavigate={navigate}
           />
         );
 
@@ -123,27 +186,40 @@ export default function App() {
 
       case 'admin':
         return (
-          <AdminPanel />
+          <AdminPanel
+            onNavigate={navigate}
+          />
+        );
+
+      case 'create-race':
+        return (
+          <CreateRacePage
+            onNavigate={navigate}
+          />
         );
 
       case 'login':
         return (
           <LoginPage
-            onNavigate={setCurrentPage}
+            onLogin={(user) => {
+              setCurrentUser(user);
+              setCurrentPage(roleHome[user.role] || 'dashboard');
+            }}
+            onNavigate={navigate}
           />
         );
 
       case 'register':
         return (
           <RegisterPage
-            onNavigate={setCurrentPage}
+            onNavigate={navigate}
           />
         );
 
       default:
         return (
           <Dashboard
-            onNavigate={setCurrentPage}
+            onNavigate={navigate}
           />
         );
     }
@@ -155,7 +231,9 @@ export default function App() {
       {/* NAVBAR */}
       <Navbar
         currentPage={currentPage}
-        onNavigate={setCurrentPage}
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        onNavigate={navigate}
       />
 
       {/* PAGE CONTENT */}

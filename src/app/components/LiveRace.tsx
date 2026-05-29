@@ -1,5 +1,10 @@
-  import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Circle, Flag, Trophy, Zap, Clock } from 'lucide-react';
+import {
+  raceSchedule,
+  refereeChecklist,
+} from '../data/tournamentWorkflow';
+import NotificationsPanel from './NotificationsPanel';
 
 export default function LiveRace() {
   const [raceTime, setRaceTime] = useState({ minutes: 0, seconds: 0 });
@@ -19,10 +24,10 @@ export default function LiveRace() {
   }, []);
 
   const raceData = {
-    name: 'Championship Grand Prix',
-    track: 'Churchill Downs',
-    distance: '2000m',
-    surface: 'Dirt',
+    name: raceSchedule[0].name,
+    track: raceSchedule[0].venue,
+    distance: raceSchedule[0].distance,
+    surface: raceSchedule[0].surface,
     weather: 'Clear',
   };
 
@@ -77,6 +82,8 @@ export default function LiveRace() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] pt-24 pb-12">
       <div className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8">
+        <NotificationsPanel />
+
         {/* Live Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
@@ -86,7 +93,9 @@ export default function LiveRace() {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-white">{raceData.name}</h1>
-              <p className="text-gray-400">{raceData.track}</p>
+              <p className="text-gray-400">
+                {raceData.track} • Referee: {raceSchedule[0].referee}
+              </p>
             </div>
           </div>
 
@@ -216,6 +225,33 @@ export default function LiveRace() {
 
           {/* Right Sidebar */}
           <div className="space-y-6">
+            {/* Race Progress */}
+            <div className="bg-[#1a1a1a] border border-white/10 rounded-lg p-6">
+              <h2 className="text-2xl font-bold text-white mb-6">Referee Pre-Race Check</h2>
+
+              <div className="space-y-3">
+                {refereeChecklist.map((item) => (
+                  <div
+                    key={item.label}
+                    className="flex items-center justify-between gap-4 bg-[#0a0a0a] border border-white/10 rounded-lg p-3"
+                  >
+                    <span className="text-gray-300 text-sm">{item.label}</span>
+
+                    <span className="text-yellow-400 text-xs font-bold uppercase">
+                      {item.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={() => alert('Referee checklist marked as passed. Race can start.')}
+                className="w-full mt-5 py-3 bg-[#e10600] hover:bg-[#c00500] text-white rounded-xl font-bold transition-all"
+              >
+                Mark Pre-Race Check Passed
+              </button>
+            </div>
+
             {/* Race Progress */}
             <div className="bg-[#1a1a1a] border border-white/10 rounded-lg p-6">
               <h2 className="text-2xl font-bold text-white mb-6">Race Progress</h2>

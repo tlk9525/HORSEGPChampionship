@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   Trophy,
 } from 'lucide-react';
+import { currentTournament } from '../data/tournamentWorkflow';
 
 interface RegisterHorsePageProps {
   onNavigate: (page: string) => void;
@@ -37,12 +38,16 @@ export default function RegisterHorsePage({
 
             <div>
               <p className="text-[#e10600] uppercase tracking-[0.2em] text-sm font-bold">
-                Horse Registration
+                Horse Owner Registration
               </p>
 
               <h1 className="text-4xl font-black text-white mt-2">
                 Register New Horse
               </h1>
+
+              <p className="text-gray-400 mt-2">
+                Tournament: {currentTournament.name} • registration window {currentTournament.registrationWindow}
+              </p>
             </div>
 
           </div>
@@ -100,7 +105,7 @@ export default function RegisterHorsePage({
 
             <div>
               <label className="block text-gray-300 mb-2">
-                Jockey
+                Preferred Jockey
               </label>
 
               <input
@@ -112,7 +117,7 @@ export default function RegisterHorsePage({
 
             <div>
               <label className="block text-gray-300 mb-2">
-                Image URL
+                Veterinary Certificate URL
               </label>
 
               <input
@@ -135,9 +140,13 @@ export default function RegisterHorsePage({
             </button>
 
             <button
+              onClick={() => {
+                alert('Horse registration submitted. Status: pending admin approval.');
+                onNavigate('horses');
+              }}
               className="px-6 py-3 rounded-xl bg-[#e10600] hover:bg-[#c00500] text-white font-semibold transition-all"
             >
-              Register Horse
+              Submit for Approval
             </button>
 
           </div>

@@ -5,15 +5,21 @@ import {
   X,
   TrendingUp,
   Circle,
+  LogOut,
 } from 'lucide-react';
+import { AuthUser } from '../services/api';
 
 interface NavbarProps {
   currentPage: string;
+  currentUser: AuthUser | null;
+  onLogout: () => void;
   onNavigate: (page: string) => void;
 }
 
 export default function Navbar({
   currentPage,
+  currentUser,
+  onLogout,
   onNavigate,
 }: NavbarProps) {
 
@@ -75,16 +81,22 @@ export default function Navbar({
   }, []);
 
   const navItems = [
-    { name: 'Dashboard', page: 'dashboard' },
-    { name: 'Tournaments', page: 'tournaments' },
-    { name: 'Horses', page: 'horses' },
-    { name: 'Jockeys', page: 'jockeys' },
-    { name: 'Live Race', page: 'live-race' },
-    { name: 'Rankings', page: 'rankings' },
-    { name: 'Predictions', page: 'predictions' },
-    { name: 'Results', page: 'results' },
-    { name: 'Admin', page: 'admin' },
+    { name: 'Dashboard', page: 'dashboard', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
+    { name: 'Tournaments', page: 'tournaments', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
+    { name: 'Horses', page: 'horses', roles: ['admin', 'owner'] },
+    { name: 'Jockeys', page: 'jockeys', roles: ['admin', 'owner', 'jockey'] },
+    { name: 'Live Race', page: 'live-race', roles: ['admin', 'referee', 'spectator'] },
+    { name: 'Rankings', page: 'rankings', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
+    { name: 'Predictions', page: 'predictions', roles: ['spectator'] },
+    { name: 'Results', page: 'results', roles: ['admin', 'referee', 'spectator'] },
+    { name: 'Admin', page: 'admin', roles: ['admin'] },
   ];
+
+  const visibleNavItems = navItems.filter(
+    (item) =>
+      currentUser &&
+      item.roles.includes(currentUser.role)
+  );
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-[9999] bg-[#0a0a0a]/95 backdrop-blur-lg border-b border-white/10">
@@ -121,7 +133,7 @@ export default function Navbar({
           {/* DESKTOP NAV */}
           <div className="hidden xl:flex items-center gap-1">
 
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <button
                 key={item.page}
                 onClick={() =>
@@ -211,16 +223,34 @@ export default function Navbar({
               </div>
             </div>
 
-            {/* LOGIN */}
-            <button
-              onClick={() => {
-                console.log('LOGIN CLICKED');
-                onNavigate('login');
-              }}
-              className="px-6 py-2 bg-[#e10600] text-white rounded-lg hover:bg-[#c00500] transition-all font-semibold"
-            >
-              Login
-            </button>
+            {currentUser ? (
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <div className="text-white text-sm font-bold">
+                    {currentUser.name}
+                  </div>
+
+                  <div className="text-[#8a8a8a] text-xs uppercase">
+                    {currentUser.role}
+                  </div>
+                </div>
+
+                <button
+                  onClick={onLogout}
+                  className="p-2 bg-white/5 text-white rounded-lg hover:bg-white/10 transition-all"
+                  aria-label="Logout"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => onNavigate('login')}
+                className="px-6 py-2 bg-[#e10600] text-white rounded-lg hover:bg-[#c00500] transition-all font-semibold"
+              >
+                Login
+              </button>
+            )}
 
           </div>
 
@@ -249,7 +279,7 @@ export default function Navbar({
 
             <div className="flex flex-col gap-2">
 
-              {navItems.map((item) => (
+              {visibleNavItems.map((item) => (
                 <button
                   key={item.page}
                   onClick={() => {
@@ -270,18 +300,27 @@ export default function Navbar({
               ))}
 
               {/* MOBILE LOGIN */}
-              <button
-                onClick={() => {
-
-                  onNavigate('login');
-
-                  setIsMenuOpen(false);
-
-                }}
-                className="mt-2 px-4 py-3 bg-[#e10600] text-white rounded-lg hover:bg-[#c00500] transition-all font-semibold"
-              >
-                Login / Register
-              </button>
+              {currentUser ? (
+                <button
+                  onClick={() => {
+                    onLogout();
+                    setIsMenuOpen(false);
+                  }}
+                  className="mt-2 px-4 py-3 bg-white/10 text-white rounded-lg hover:bg-white/15 transition-all font-semibold"
+                >
+                  Logout {currentUser.name}
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    onNavigate('login');
+                    setIsMenuOpen(false);
+                  }}
+                  className="mt-2 px-4 py-3 bg-[#e10600] text-white rounded-lg hover:bg-[#c00500] transition-all font-semibold"
+                >
+                  Login / Register
+                </button>
+              )}
 
             </div>
           </div>

@@ -17,6 +17,12 @@ import {
   Flag,
   Medal,
 } from 'lucide-react';
+import {
+  currentTournament,
+  raceSchedule,
+  tournamentHorses,
+  statusLabel,
+} from '../data/tournamentWorkflow';
 
 interface DashboardProps {
   onNavigate: (page: string) => void;
@@ -30,8 +36,18 @@ export default function Dashboard({
     useState(false);
 
   const upcomingRaces = [
+    ...raceSchedule.map((race) => ({
+      id: race.id,
+      name: race.name,
+      date: race.date,
+      time: race.time,
+      location: race.venue,
+      status: race.status,
+      horses: race.participants,
+      prize: currentTournament.prizePool,
+    })),
     {
-      id: 1,
+      id: 2,
       name: 'Championship Grand Prix',
       date: 'May 20, 2026',
       time: '14:00',
@@ -39,16 +55,6 @@ export default function Dashboard({
       status: 'upcoming',
       horses: 12,
       prize: '$500,000',
-    },
-    {
-      id: 2,
-      name: 'Elite Cup Qualifier',
-      date: 'May 22, 2026',
-      time: '16:30',
-      location: 'Ascot Racecourse',
-      status: 'upcoming',
-      horses: 10,
-      prize: '$350,000',
     },
     {
       id: 3,
@@ -131,7 +137,7 @@ export default function Dashboard({
                 </div>
 
                 <div className="px-4 py-2 rounded-full bg-white/5 border border-white/10 text-white text-sm">
-                  Race 4 starts in 06:23:58
+                  Current phase: {currentTournament.phase}
                 </div>
 
               </div>
@@ -144,8 +150,7 @@ export default function Dashboard({
               </h1>
 
               <p className="text-lg text-gray-400 max-w-2xl">
-                Real-time horse racing analytics, race cards,
-                live tracking, odds, rankings and performance monitoring.
+                Manage approvals, owner and jockey confirmations, referee checks, predictions, official results, rankings and awards.
               </p>
 
             </div>
@@ -156,7 +161,7 @@ export default function Dashboard({
               {[
                 {
                   label: 'Live Races',
-                  value: '04',
+                  value: String(raceSchedule.length),
                 },
                 {
                   label: 'Prize Pool',
@@ -164,11 +169,11 @@ export default function Dashboard({
                 },
                 {
                   label: 'Horses',
-                  value: '250',
+                  value: String(tournamentHorses.length),
                 },
                 {
                   label: 'Jockeys',
-                  value: '180',
+                  value: '03',
                 },
               ].map((item, index) => (
 
@@ -201,26 +206,26 @@ export default function Dashboard({
             {
               icon: Trophy,
               title: 'Total Horses',
-              value: '250',
-              growth: '12%',
+              value: String(tournamentHorses.length),
+              growth: 'Registration',
             },
             {
               icon: Users,
               title: 'Active Jockeys',
-              value: '180',
-              growth: '8%',
+              value: '03',
+              growth: 'Pairing',
             },
             {
               icon: Flag,
               title: 'Upcoming Races',
-              value: '24',
-              growth: '4 LIVE',
+              value: String(raceSchedule.length),
+              growth: 'Confirming',
             },
             {
               icon: TrendingUp,
               title: 'Total Prize',
-              value: '$2.5M',
-              growth: '25%',
+              value: currentTournament.prizePool,
+              growth: 'Awards',
             },
           ].map((item, index) => (
 
@@ -325,7 +330,7 @@ export default function Dashboard({
                             <Circle className="w-2 h-2 fill-[#e10600] text-[#e10600] animate-pulse" />
 
                             <span className="text-[#e10600] text-xs font-bold uppercase">
-                              Live
+                              {statusLabel(race.status)}
                             </span>
 
                           </div>

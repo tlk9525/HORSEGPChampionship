@@ -6,6 +6,12 @@ import {
   Users,
   Clock,
 } from 'lucide-react';
+import {
+  currentTournament,
+  raceSchedule,
+  tournamentHorses,
+  statusLabel,
+} from '../data/tournamentWorkflow';
 
 interface TournamentPageProps {
   onNavigate: (page: string) => void;
@@ -16,17 +22,16 @@ export default function TournamentPage({
 }: TournamentPageProps) {
   const tournaments = [
     {
-      id: 1,
-      name: 'Spring Championship Series',
-      status: 'live',
-      startDate: 'May 15, 2026',
-      endDate: 'June 30, 2026',
-      location: 'Multiple Venues',
-      prizePool: '$500,000',
-      participants: 45,
-      rounds: 8,
-      image:
-        'https://images.unsplash.com/photo-1507514604110-ba3347c457f6?w=1200',
+      id: currentTournament.id,
+      name: currentTournament.name,
+      status: currentTournament.status,
+      startDate: currentTournament.startDate,
+      endDate: currentTournament.finalDate,
+      location: currentTournament.location,
+      prizePool: currentTournament.prizePool,
+      participants: tournamentHorses.length,
+      rounds: 6,
+      image: currentTournament.image,
     },
     {
       id: 2,
@@ -69,26 +74,12 @@ export default function TournamentPage({
     },
   ];
 
-  const upcomingRaces = [
-    {
-      round: 'Quarter Finals',
-      date: 'May 22, 2026',
-      time: '14:00',
-      venue: 'Churchill Downs',
-    },
-    {
-      round: 'Semi Finals',
-      date: 'May 25, 2026',
-      time: '16:30',
-      venue: 'Ascot Racecourse',
-    },
-    {
-      round: 'Finals',
-      date: 'May 30, 2026',
-      time: '15:00',
-      venue: 'Epsom Downs',
-    },
-  ];
+  const upcomingRaces = raceSchedule.map((race) => ({
+    round: `${currentTournament.round} • ${statusLabel(race.status)}`,
+    date: race.date,
+    time: race.time,
+    venue: race.venue,
+  }));
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] pt-24 pb-12">
@@ -150,6 +141,14 @@ export default function TournamentPage({
                     <div className="px-4 py-2 bg-green-600 rounded-lg shadow-lg">
                       <span className="text-white text-xs font-bold uppercase">
                         Open
+                      </span>
+                    </div>
+                  )}
+
+                  {tournament.status === 'approvals' && (
+                    <div className="px-4 py-2 bg-yellow-600 rounded-lg shadow-lg">
+                      <span className="text-white text-xs font-bold uppercase">
+                        Approvals
                       </span>
                     </div>
                   )}

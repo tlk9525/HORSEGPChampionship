@@ -16,64 +16,22 @@ import {
   PayPalScriptProvider,
   PayPalButtons,
 } from '@paypal/react-paypal-js';
+import {
+  predictionMarkets,
+  resultPipeline,
+  statusLabel,
+} from '../data/tournamentWorkflow';
+import NotificationsPanel from './NotificationsPanel';
 
 export default function PredictionPage() {
-  const upcomingRaces = [
-    {
-      id: 1,
-      name: 'Elite Cup Qualifier',
-      date: 'May 22, 2026',
-      time: '16:30',
-      status: 'upcoming',
-      horses: [
-        {
-          name: 'Midnight Storm',
-          odds: 2.5,
-        },
-        {
-          name: 'Silver Bullet',
-          odds: 3.2,
-        },
-        {
-          name: 'Racing Thunder',
-          odds: 4.1,
-        },
-        {
-          name: 'Golden Spirit',
-          odds: 5.8,
-        },
-      ],
-    },
-
-    {
-      id: 2,
-      name: 'Spring Derby Finals',
-      date: 'May 25, 2026',
-      time: '15:00',
-      status: 'live',
-      horses: [
-        {
-          name: 'Thunder Bolt',
-          odds: 3.0,
-        },
-
-        {
-          name: 'Swift Arrow',
-          odds: 2.8,
-        },
-
-        {
-          name: 'Lightning Strike',
-          odds: 4.5,
-        },
-
-        {
-          name: 'Storm Chaser',
-          odds: 6.2,
-        },
-      ],
-    },
-  ];
+  const upcomingRaces = predictionMarkets.map((market) => ({
+    id: market.id,
+    name: market.raceName,
+    date: market.window,
+    time: 'Prediction window',
+    status: market.status,
+    horses: market.horses,
+  }));
 
   const leaderboard = [
     {
@@ -181,7 +139,7 @@ export default function PredictionPage() {
     }
 
     if (!betAmount) {
-      alert('Please enter bet amount');
+      alert('Please enter prediction stake');
       return;
     }
 
@@ -218,7 +176,7 @@ export default function PredictionPage() {
     ]);
 
     alert(
-      `Bet placed on ${selectedHorse.name}`
+      `Prediction submitted for ${selectedHorse.name}`
     );
 
     setBetAmount('');
@@ -227,18 +185,19 @@ export default function PredictionPage() {
   return (
     <div className="min-h-screen bg-black pt-24 pb-12 text-white">
       <div className="max-w-[1800px] mx-auto px-4 sm:px-6 lg:px-8">
+        <NotificationsPanel />
 
         {/* HEADER */}
 
         <div className="flex items-center justify-between mb-10">
 
           <div>
-            <h1 className="text-5xl font-black mb-3">
-              Horse Racing Betting
+              <h1 className="text-5xl font-black mb-3">
+              Race Predictions
             </h1>
 
             <p className="text-gray-400 text-lg">
-              Predict winners and place bets.
+              Spectators predict results after Owner and Jockey confirmations. Rewards are calculated only after Admin publishes official results.
             </p>
           </div>
 
@@ -278,12 +237,12 @@ export default function PredictionPage() {
           <div className="bg-[#121212] border border-white/10 rounded-3xl p-6">
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 bg-[#e10600]/10 rounded-2xl flex items-center justify-center">
-                <Target className="text-[#e10600]" />
+                  <Target className="text-[#e10600]" />
               </div>
 
               <div>
                 <div className="text-gray-400 text-sm">
-                  Accuracy
+                  Prediction Accuracy
                 </div>
 
                 <div className="text-3xl font-black text-[#e10600]">
@@ -301,11 +260,11 @@ export default function PredictionPage() {
 
               <div>
                 <div className="text-gray-400 text-sm">
-                  Win Streak
+                  Reward Queue
                 </div>
 
                 <div className="text-3xl font-black">
-                  5
+                  {resultPipeline.rewardsCalculated ? 'Paid' : 'Pending'}
                 </div>
               </div>
             </div>
@@ -319,7 +278,7 @@ export default function PredictionPage() {
 
               <div>
                 <div className="text-gray-400 text-sm">
-                  Rank
+                  Spectator Rank
                 </div>
 
                 <div className="text-3xl font-black">
@@ -343,12 +302,12 @@ export default function PredictionPage() {
               <div className="flex items-center justify-between mb-8">
 
                 <h2 className="text-3xl font-black">
-                  Live Betting Arena
+                  Prediction Arena
                 </h2>
 
                 <div className="flex items-center gap-2 text-red-500 animate-pulse font-bold">
                   <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                  LIVE
+                  LOCKED
                 </div>
               </div>
 
@@ -378,7 +337,7 @@ export default function PredictionPage() {
                                 : 'bg-yellow-600/20 text-yellow-400 border border-yellow-500/30'
                             }`}
                           >
-                            {race.status}
+                            {statusLabel(race.status)}
                           </span>
                         </div>
 
@@ -390,11 +349,11 @@ export default function PredictionPage() {
 
                       <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl px-5 py-4">
                         <div className="text-yellow-500 text-sm">
-                          Betting closes in
+                          Predictions open after
                         </div>
 
                         <div className="text-2xl font-black">
-                          02:14:22
+                          race confirmations
                         </div>
                       </div>
                     </div>
@@ -468,7 +427,7 @@ export default function PredictionPage() {
                 <CircleDollarSign className="text-[#e10600]" />
 
                 <h2 className="text-3xl font-black">
-                  My Betting History
+                  My Prediction History
                 </h2>
               </div>
 
@@ -498,7 +457,7 @@ export default function PredictionPage() {
 
                         <div>
                           <div className="text-gray-400 text-sm">
-                            Bet
+                            Stake
                           </div>
 
                           <div className="font-bold">
@@ -564,7 +523,7 @@ export default function PredictionPage() {
                 <DollarSign className="text-[#e10600]" />
 
                 <h2 className="text-3xl font-black">
-                  Bet Slip
+                  Prediction Slip
                 </h2>
               </div>
 
@@ -588,7 +547,7 @@ export default function PredictionPage() {
                     <div className="bg-black border border-white/10 rounded-2xl p-5">
 
                       <div className="text-gray-400 text-sm mb-2">
-                        Odds
+                      Multiplier
                       </div>
 
                       <div className="text-2xl font-black">
@@ -599,7 +558,7 @@ export default function PredictionPage() {
                     <div className="bg-black border border-white/10 rounded-2xl p-5">
 
                       <div className="text-gray-400 text-sm mb-2">
-                        Potential Win
+                      Potential Reward
                       </div>
 
                       <div className="text-2xl font-black text-green-500">
@@ -611,7 +570,7 @@ export default function PredictionPage() {
                   <div>
 
                     <label className="block text-sm text-gray-400 mb-3">
-                      Bet Amount
+                      Prediction Stake
                     </label>
 
                     <input
@@ -631,12 +590,12 @@ export default function PredictionPage() {
                     onClick={placeBet}
                     className="w-full py-4 bg-[#e10600] hover:bg-[#c00500] rounded-2xl text-lg font-black transition-all"
                   >
-                    Place Bet
+                    Submit Prediction
                   </button>
                 </div>
               ) : (
                 <div className="text-center py-10 text-gray-500">
-                  Select a horse to begin betting.
+                  Select a horse to predict the winner.
                 </div>
               )}
             </div>

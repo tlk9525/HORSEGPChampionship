@@ -8,8 +8,14 @@ import {
   Shield,
   Gauge,
 } from 'lucide-react';
+import {
+  currentTournament,
+  raceSchedule,
+  tournamentHorses,
+} from '../data/tournamentWorkflow';
 
 export default function RaceDetails() {
+  const race = raceSchedule[0];
 
   const horses = [
     {
@@ -126,38 +132,38 @@ export default function RaceDetails() {
                     <Circle className="w-2 h-2 fill-[#e10600] text-[#e10600] animate-pulse" />
 
                     <span className="text-[#e10600] text-xs font-bold uppercase tracking-wider">
-                      Live Race
+                      Awaiting Confirmations
                     </span>
                   </div>
 
                   <div className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-gray-300 text-sm">
-                    Happy Valley
+                    {currentTournament.name}
                   </div>
 
                   <div className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-gray-300 text-sm">
-                    Race 4
+                    {race.name}
                   </div>
                 </div>
 
                 <h1 className="text-4xl xl:text-5xl font-black text-white leading-tight">
-                  Championship Grand Prix
+                  {race.name}
                 </h1>
 
                 <div className="flex flex-wrap items-center gap-5 mt-5 text-sm text-gray-400">
 
                   <div className="flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-[#e10600]" />
-                    Churchill Downs
+                    {race.venue}
                   </div>
 
                   <div className="flex items-center gap-2">
                     <Timer className="w-4 h-4 text-[#e10600]" />
-                    1400m Turf
+                    {race.distance} {race.surface}
                   </div>
 
                   <div className="flex items-center gap-2">
                     <Trophy className="w-4 h-4 text-[#e10600]" />
-                    Prize Pool: $500,000
+                    Prize Pool: {currentTournament.prizePool}
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -172,21 +178,21 @@ export default function RaceDetails() {
 
                 <div className="bg-black/40 border border-white/10 rounded-xl p-4">
                   <div className="text-xs text-gray-500 uppercase mb-2">
-                    Starts In
+                    Owner Confirmed
                   </div>
 
                   <div className="text-2xl font-black text-[#e10600]">
-                    06:23:58
+                    {race.ownerConfirmed}/{race.participants}
                   </div>
                 </div>
 
                 <div className="bg-black/40 border border-white/10 rounded-xl p-4">
                   <div className="text-xs text-gray-500 uppercase mb-2">
-                    Surface
+                    Jockey Confirmed
                   </div>
 
                   <div className="text-2xl font-black text-white">
-                    TURF
+                    {race.jockeyConfirmed}/{race.participants}
                   </div>
                 </div>
 
@@ -203,11 +209,11 @@ export default function RaceDetails() {
 
                 <div className="bg-black/40 border border-white/10 rounded-xl p-4">
                   <div className="text-xs text-gray-500 uppercase mb-2">
-                    Class
+                    Referee
                   </div>
 
-                  <div className="text-2xl font-black text-white">
-                    Class 1
+                  <div className="text-lg font-black text-white">
+                    {race.referee}
                   </div>
                 </div>
 
@@ -242,20 +248,20 @@ export default function RaceDetails() {
 
               <div className="flex flex-wrap items-center gap-5 text-sm text-gray-400">
 
-                <span>1400m Turf</span>
+                <span>{race.distance} {race.surface}</span>
                 <span>Good Track</span>
-                <span>Class 1 Handicap</span>
-                <span>12 Horses</span>
+                <span>{currentTournament.round}</span>
+                <span>{tournamentHorses.length} Horses</span>
               </div>
 
               <div className="flex items-center gap-3">
 
                 <div className="px-4 py-2 rounded-lg bg-[#e10600]/10 border border-[#e10600]/20 text-[#e10600] font-bold text-sm">
-                  LIVE ODDS
+                  RACE CONFIRMATION
                 </div>
 
                 <div className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm">
-                  Updated 5s ago
+                  Predictions locked
                 </div>
               </div>
             </div>
