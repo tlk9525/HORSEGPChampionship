@@ -1,0 +1,98 @@
+<mxfile host="app.diagrams.net" modified="2026-06-03T00:00:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="horse-racing-erd" name="Horse Racing ERD">
+    <mxGraphModel dx="1800" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="Horse Racing Tournament Management System - ERD" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=28;fontStyle=1;fontColor=#071A2F;" vertex="1" parent="1">
+          <mxGeometry x="0" y="20" width="1800" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="users" value="&lt;b&gt;USERS&lt;/b&gt;&lt;hr/&gt;PK id&lt;br/&gt;name&lt;br/&gt;email UK&lt;br/&gt;password&lt;br/&gt;role&lt;br/&gt;status" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#071A2F;strokeColor=#D4AF37;strokeWidth=2;fontColor=#FFFFFF;fontSize=13;align=left;spacingLeft=12;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="70" y="110" width="250" height="180" as="geometry" />
+        </mxCell>
+
+        <mxCell id="tournaments" value="&lt;b&gt;TOURNAMENTS&lt;/b&gt;&lt;hr/&gt;PK id&lt;br/&gt;name&lt;br/&gt;status&lt;br/&gt;registrationWindow&lt;br/&gt;startDate&lt;br/&gt;finalDate&lt;br/&gt;location&lt;br/&gt;prizePool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#12304F;strokeColor=#D4AF37;strokeWidth=2;fontColor=#FFFFFF;fontSize=13;align=left;spacingLeft=12;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="650" y="110" width="270" height="210" as="geometry" />
+        </mxCell>
+
+        <mxCell id="races" value="&lt;b&gt;RACES&lt;/b&gt;&lt;hr/&gt;PK id&lt;br/&gt;FK tournamentId&lt;br/&gt;raceNumber&lt;br/&gt;name&lt;br/&gt;date / time / venue&lt;br/&gt;distance / surface / raceClass&lt;br/&gt;handicapMin / handicapMax&lt;br/&gt;FK refereeUserId&lt;br/&gt;refereeUserIds&lt;br/&gt;status&lt;br/&gt;resultStatus&lt;br/&gt;awardsPublished&lt;br/&gt;FK createdBy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#071A2F;strokeColor=#D4AF37;strokeWidth=2;fontColor=#FFFFFF;fontSize=13;align=left;spacingLeft=12;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="1070" y="100" width="330" height="330" as="geometry" />
+        </mxCell>
+
+        <mxCell id="horses" value="&lt;b&gt;HORSES&lt;/b&gt;&lt;hr/&gt;PK id&lt;br/&gt;name&lt;br/&gt;breed / species / age / sex / color&lt;br/&gt;weightKg / heightCm&lt;br/&gt;baseHandicap&lt;br/&gt;speedRating / staminaRating&lt;br/&gt;formRating / healthRating&lt;br/&gt;overallRating&lt;br/&gt;FK ownerUserId&lt;br/&gt;FK selectedJockeyUserId&lt;br/&gt;status&lt;br/&gt;jockeyConfirmation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8F5EC;strokeColor=#7A4A24;strokeWidth=2;fontColor=#071A2F;fontSize=13;align=left;spacingLeft=12;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="70" y="410" width="330" height="310" as="geometry" />
+        </mxCell>
+
+        <mxCell id="jockeyProfiles" value="&lt;b&gt;JOCKEY_PROFILES&lt;/b&gt;&lt;hr/&gt;PK id&lt;br/&gt;FK userId UK&lt;br/&gt;bio&lt;br/&gt;certificate&lt;br/&gt;competitionLevel&lt;br/&gt;weight&lt;br/&gt;status&lt;br/&gt;updatedAt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8F5EC;strokeColor=#7A4A24;strokeWidth=2;fontColor=#071A2F;fontSize=13;align=left;spacingLeft=12;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="70" y="790" width="290" height="230" as="geometry" />
+        </mxCell>
+
+        <mxCell id="jockeyTournamentRegistrations" value="&lt;b&gt;JOCKEY_TOURNAMENT_REGISTRATIONS&lt;/b&gt;&lt;hr/&gt;PK id&lt;br/&gt;FK tournamentId&lt;br/&gt;FK jockeyUserId&lt;br/&gt;status&lt;br/&gt;createdAt&lt;br/&gt;reviewedAt&lt;br/&gt;UNIQUE tournamentId + jockeyUserId" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8F5EC;strokeColor=#7A4A24;strokeWidth=2;fontColor=#071A2F;fontSize=13;align=left;spacingLeft=12;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="520" y="470" width="370" height="220" as="geometry" />
+        </mxCell>
+
+        <mxCell id="jockeyInvitations" value="&lt;b&gt;JOCKEY_INVITATIONS&lt;/b&gt;&lt;hr/&gt;PK id&lt;br/&gt;FK horseId&lt;br/&gt;FK ownerUserId&lt;br/&gt;FK jockeyUserId&lt;br/&gt;FK tournamentId&lt;br/&gt;FK raceId&lt;br/&gt;status&lt;br/&gt;adminStatus&lt;br/&gt;createdAt&lt;br/&gt;respondedAt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF7D1;strokeColor=#D4AF37;strokeWidth=2;fontColor=#071A2F;fontSize=13;align=left;spacingLeft=12;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="520" y="760" width="330" height="270" as="geometry" />
+        </mxCell>
+
+        <mxCell id="raceEntries" value="&lt;b&gt;RACE_ENTRIES&lt;/b&gt;&lt;hr/&gt;PK id&lt;br/&gt;FK raceId&lt;br/&gt;FK horseId&lt;br/&gt;FK jockeyUserId&lt;br/&gt;FK invitationId&lt;br/&gt;status&lt;br/&gt;lane&lt;br/&gt;handicap&lt;br/&gt;ratingSnapshot&lt;br/&gt;ownerConfirmed / jockeyConfirmed&lt;br/&gt;preRaceStatus&lt;br/&gt;disqualified&lt;br/&gt;resultStatus&lt;br/&gt;position&lt;br/&gt;finishTime&lt;br/&gt;notes / violationNotes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF7D1;strokeColor=#D4AF37;strokeWidth=2;fontColor=#071A2F;fontSize=13;align=left;spacingLeft=12;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="520" width="360" height="390" as="geometry" />
+        </mxCell>
+
+        <mxCell id="notifications" value="&lt;b&gt;NOTIFICATIONS&lt;/b&gt;&lt;hr/&gt;PK id&lt;br/&gt;FK userId&lt;br/&gt;title&lt;br/&gt;message&lt;br/&gt;isRead&lt;br/&gt;createdAt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF2FF;strokeColor=#12304F;strokeWidth=2;fontColor=#071A2F;fontSize=13;align=left;spacingLeft=12;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="1470" y="180" width="250" height="180" as="geometry" />
+        </mxCell>
+
+        <mxCell id="sessions" value="&lt;b&gt;SESSIONS&lt;/b&gt;&lt;hr/&gt;PK token&lt;br/&gt;FK userId&lt;br/&gt;createdAt" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EAF2FF;strokeColor=#12304F;strokeWidth=2;fontColor=#071A2F;fontSize=13;align=left;spacingLeft=12;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="1470" y="430" width="250" height="130" as="geometry" />
+        </mxCell>
+
+        <mxCell id="rel-users-horses" value="owns" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;strokeColor=#7A4A24;fontColor=#071A2F;" edge="1" parent="1" source="users" target="horses">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-users-profiles" value="has profile" style="endArrow=ERone;startArrow=ERone;html=1;rounded=0;strokeColor=#7A4A24;fontColor=#071A2F;" edge="1" parent="1" source="users" target="jockeyProfiles">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-users-jtr" value="jockey registers" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;strokeColor=#7A4A24;fontColor=#071A2F;" edge="1" parent="1" source="users" target="jockeyTournamentRegistrations">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-tournament-jtr" value="approves jockeys" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;strokeColor=#D4AF37;fontColor=#071A2F;" edge="1" parent="1" source="tournaments" target="jockeyTournamentRegistrations">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-tournament-races" value="contains" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;strokeColor=#D4AF37;fontColor=#071A2F;" edge="1" parent="1" source="tournaments" target="races">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-races-entries" value="has entries" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;strokeColor=#D4AF37;fontColor=#071A2F;" edge="1" parent="1" source="races" target="raceEntries">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-horses-entries" value="competes" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;strokeColor=#7A4A24;fontColor=#071A2F;" edge="1" parent="1" source="horses" target="raceEntries">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-users-entries" value="jockey rides" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;strokeColor=#7A4A24;fontColor=#071A2F;" edge="1" parent="1" source="users" target="raceEntries">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-horses-invitations" value="invited for" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;strokeColor=#7A4A24;fontColor=#071A2F;" edge="1" parent="1" source="horses" target="jockeyInvitations">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-invitations-entries" value="can create" style="endArrow=ERone;startArrow=ERone;html=1;rounded=0;strokeColor=#D4AF37;fontColor=#071A2F;" edge="1" parent="1" source="jockeyInvitations" target="raceEntries">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-users-notifications" value="receives" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;strokeColor=#12304F;fontColor=#071A2F;" edge="1" parent="1" source="users" target="notifications">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-users-sessions" value="logs in" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;strokeColor=#12304F;fontColor=#071A2F;" edge="1" parent="1" source="users" target="sessions">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="rel-races-invitations" value="registration request" style="endArrow=ERmany;startArrow=ERone;html=1;rounded=0;strokeColor=#D4AF37;fontColor=#071A2F;" edge="1" parent="1" source="races" target="jockeyInvitations">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="note" value="Main rule: Tournament contains Races. RaceEntries connect Race + Horse + Jockey. Results and rankings are calculated from RaceEntries.position and finishTime." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#D4AF37;strokeWidth=2;fontColor=#071A2F;fontSize=16;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1030" y="970" width="690" height="90" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
