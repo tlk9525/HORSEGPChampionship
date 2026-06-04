@@ -60,9 +60,19 @@ export default function LiveRace() {
     Promise.all([getMe().catch(() => ({ user: null as any })), getBootstrap()])
       .then(([me, data]) => {
         setCurrentUser(me.user);
-        setRaces(data.races);
+        const visibleRaces =
+          me.user?.role === 'referee'
+            ? data.races.filter((race) =>
+                String(race.refereeUserIds || race.refereeUserId || '')
+                  .split(',')
+                  .map((id) => id.trim())
+                  .includes(me.user.id)
+              )
+            : data.races;
+
+        setRaces(visibleRaces);
         setEntries(data.raceEntries);
-        setSelectedRaceId((current) => current || data.races[0]?.id || '');
+        setSelectedRaceId((current) => current || visibleRaces[0]?.id || '');
       })
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : 'Unable to load races')
@@ -412,6 +422,12 @@ export default function LiveRace() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {!selectedRace && (
+          <div className="bg-[#12304f] border border-white/10 rounded-2xl p-8 text-gray-400">
+            No race is available for your role yet.
           </div>
         )}
       </div>

@@ -6,6 +6,8 @@ export interface AuthUser {
   email: string;
   role: UserRole;
   status: string;
+  authProvider?: string;
+  avatarUrl?: string;
 }
 
 export interface ApprovalItem {
@@ -162,7 +164,7 @@ export interface JockeyTournamentRegistration {
   reviewedAt?: string | null;
 }
 
-const API_URL = 'http://127.0.0.1:4000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:4000/api';
 const TOKEN_KEY = 'horse-racing-token';
 
 export const getStoredToken = () => localStorage.getItem(TOKEN_KEY);
@@ -199,6 +201,16 @@ export const login = async (email: string, password: string) => {
   return request<{ token: string; user: AuthUser }>('/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
+  });
+};
+
+export const loginWithGoogle = async (
+  credential: string,
+  role: UserRole = 'spectator'
+) => {
+  return request<{ token: string; user: AuthUser }>('/auth/google', {
+    method: 'POST',
+    body: JSON.stringify({ credential, role }),
   });
 };
 

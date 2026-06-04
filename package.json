@@ -5,9 +5,11 @@
   "type": "module",
   "scripts": {
     "api": "node backend/src/index.js",
+    "start": "node backend/src/index.js",
     "db:init": "node scripts/run-postgres-file.mjs database/postgres/schema.sql && node scripts/run-postgres-file.mjs database/postgres/seed.sql",
     "db:schema": "node scripts/run-postgres-file.mjs database/postgres/schema.sql",
     "db:seed": "node scripts/run-postgres-file.mjs database/postgres/seed.sql",
+    "db:migrate:google": "node scripts/run-postgres-file.mjs database/postgres/migrations/001_google_auth.sql",
     "build": "vite build --config frontend/vite.config.ts",
     "dev": "vite --config frontend/vite.config.ts --host 127.0.0.1",
     "preview": "vite preview --config frontend/vite.config.ts --host 127.0.0.1"

@@ -85,7 +85,7 @@ export default function Navbar({
     { name: 'Tournaments', page: 'tournaments', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
     { name: 'Horses', page: 'horses', roles: ['admin', 'owner'] },
     { name: 'Jockey Profiles', page: 'jockey-profiles', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
-    { name: 'Jockey Portal', page: 'jockeys', roles: ['admin', 'owner', 'jockey'] },
+    { name: 'Jockey Portal', page: 'jockeys', roles: ['jockey'] },
     { name: 'Live Race', page: 'live-race', roles: ['admin', 'referee', 'spectator'] },
     { name: 'Rankings', page: 'rankings', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
     { name: 'Results', page: 'results', roles: ['admin', 'referee', 'spectator'] },

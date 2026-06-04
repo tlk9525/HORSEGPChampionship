@@ -48,10 +48,11 @@ const protectedPages: Record<string, string[]> = {
   'edit-horse': ['owner'],
   'horse-details': ['admin', 'owner'],
   'jockey-profiles': ['admin', 'owner', 'jockey', 'referee', 'spectator'],
-  jockeys: ['admin', 'owner', 'jockey'],
+  jockeys: ['jockey'],
   'jockey-profile': ['jockey', 'admin'],
   'live-race': ['admin', 'referee', 'spectator'],
-  results: ['admin', 'referee', 'spectator'],
+  results: ['admin', 'owner', 'jockey', 'referee', 'spectator'],
+  rankings: ['admin', 'owner', 'jockey', 'referee', 'spectator'],
 };
 
 export default function App() {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import {
   Mail,
@@ -12,6 +12,7 @@ import {
   AuthUser,
   UserRole,
   login,
+  loginWithGoogle,
   register,
   storeToken,
 } from '../services/api';
@@ -39,6 +40,71 @@ export default function LoginPage({
   const [role, setRole] = useState<UserRole>('spectator');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const googleButtonRef = useRef<HTMLDivElement | null>(null);
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+
+  useEffect(() => {
+    if (!googleClientId || !googleButtonRef.current) return;
+
+    const renderGoogleButton = () => {
+      const google = (window as any).google;
+
+      if (!google?.accounts?.id || !googleButtonRef.current) return;
+
+      googleButtonRef.current.innerHTML = '';
+
+      google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: async (response: { credential?: string }) => {
+          if (!response.credential) {
+            setError('Google did not return a login credential.');
+            return;
+          }
+
+          setError('');
+          setIsSubmitting(true);
+
+          try {
+            const result = await loginWithGoogle(response.credential, role);
+            storeToken(result.token);
+            onLogin(result.user);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Google login failed');
+          } finally {
+            setIsSubmitting(false);
+          }
+        },
+      });
+
+      google.accounts.id.renderButton(googleButtonRef.current, {
+        theme: 'outline',
+        size: 'large',
+        width: 190,
+        text: isRegister ? 'signup_with' : 'signin_with',
+      });
+    };
+
+    if ((window as any).google?.accounts?.id) {
+      renderGoogleButton();
+      return;
+    }
+
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[src="https://accounts.google.com/gsi/client"]'
+    );
+
+    if (existingScript) {
+      existingScript.addEventListener('load', renderGoogleButton, { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = renderGoogleButton;
+    document.head.appendChild(script);
+  }, [googleClientId, isRegister, onLogin, role]);
 
   const submit = async () => {
     setError('');
@@ -255,7 +321,6 @@ export default function LoginPage({
                     <option value="jockey">Jockey</option>
                     <option value="referee">Referee</option>
                     <option value="spectator">Spectator</option>
-                    <option value="admin">Admin</option>
                   </select>
                 </div>
               )}
@@ -376,39 +441,31 @@ export default function LoginPage({
               </button>
 
               {/* DIVIDER */}
-              <div className="relative py-2">
+              {googleClientId && (
+                <div className="relative py-2">
 
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-white/10" />
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-white/10" />
+                  </div>
+
+                  <div className="relative flex justify-center">
+
+                    <span className="bg-[#0b223d] px-4 text-sm text-gray-500">
+                      OR CONTINUE WITH
+                    </span>
+
+                  </div>
                 </div>
-
-                <div className="relative flex justify-center">
-
-                  <span className="bg-[#0b223d] px-4 text-sm text-gray-500">
-                    OR CONTINUE WITH
-                  </span>
-
-                </div>
-              </div>
+              )}
 
               {/* SOCIAL */}
-              <div className="grid grid-cols-2 gap-4">
-
-                <button
-                  type="button"
-                  className="h-12 rounded-xl border border-white/10 bg-[#12304f] text-white hover:border-[#d4af37]/50 transition-all"
-                >
-                  Google
-                </button>
-
-                <button
-                  type="button"
-                  className="h-12 rounded-xl border border-white/10 bg-[#12304f] text-white hover:border-[#d4af37]/50 transition-all"
-                >
-                  Discord
-                </button>
-
-              </div>
+              {googleClientId && (
+                <div className="grid gap-4">
+                  <div className="min-h-12 rounded-xl border border-white/10 bg-white flex items-center justify-center overflow-hidden">
+                    <div ref={googleButtonRef} />
+                  </div>
+                </div>
+              )}
 
               {/* SWITCH MODE */}
               <div className="text-center pt-4 text-gray-400 text-sm">

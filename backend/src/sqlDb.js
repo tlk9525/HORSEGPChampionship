@@ -164,8 +164,13 @@ export const writeDb = async (db) => {
     await insertRows(
       client,
       'users',
-      ['id', 'name', 'email', 'password', 'role', 'status'],
-      db.users || []
+      ['id', 'name', 'email', 'password', 'role', 'status', 'authProvider', 'googleId', 'avatarUrl'],
+      (db.users || []).map((user) => ({
+        ...user,
+        authProvider: user.authProvider || 'password',
+        googleId: user.googleId || null,
+        avatarUrl: user.avatarUrl || '',
+      }))
     );
 
     await insertRows(

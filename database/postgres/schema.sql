@@ -19,7 +19,10 @@ CREATE TABLE "users" (
   "email" VARCHAR(255) NOT NULL UNIQUE,
   "password" VARCHAR(255) NOT NULL,
   "role" VARCHAR(32) NOT NULL CHECK ("role" IN ('admin', 'owner', 'jockey', 'referee', 'spectator')),
-  "status" VARCHAR(32) NOT NULL DEFAULT 'active' CHECK ("status" IN ('pending', 'active', 'approved', 'rejected', 'suspended', 'locked'))
+  "status" VARCHAR(32) NOT NULL DEFAULT 'active' CHECK ("status" IN ('pending', 'active', 'approved', 'rejected', 'suspended', 'locked')),
+  "authProvider" VARCHAR(32) NOT NULL DEFAULT 'password',
+  "googleId" VARCHAR(255),
+  "avatarUrl" TEXT
 );
 
 CREATE TABLE "tournaments" (
