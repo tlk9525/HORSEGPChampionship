@@ -4,7 +4,6 @@ import {
   useParams,
 } from 'react-router-dom';
 import { Circle, Flag, ShieldCheck, Timer } from 'lucide-react';
-import NotificationsPanel from './NotificationsPanel';
 import {
   AuthUser,
   RaceEntryRecord,
@@ -240,8 +239,6 @@ export default function LiveRace() {
   return (
     <div className="min-h-screen bg-[#071a2f] pt-24 pb-12">
       <div className="max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8">
-        <NotificationsPanel />
-
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5 mb-8">
           <div>
             <div className="flex items-center gap-2 mb-3">

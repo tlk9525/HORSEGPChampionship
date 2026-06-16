@@ -9,7 +9,6 @@ import {
   Save,
   XCircle,
 } from 'lucide-react';
-import NotificationsPanel from './NotificationsPanel';
 import {
   AuthUser,
   HorseRecord,
@@ -17,6 +16,7 @@ import {
   JockeyProfileRecord,
   RaceEntryRecord,
   RaceRecord,
+  TournamentRecord,
   decideJockeyInvitation,
   getJockeyPortal,
   saveJockeyProfile,
@@ -35,6 +35,7 @@ export default function JockeyPage({
 }: JockeyPageProps) {
   const [profile, setProfile] = useState<JockeyProfileRecord | null>(null);
   const [horses, setHorses] = useState<HorseRecord[]>([]);
+  const [tournaments, setTournaments] = useState<TournamentRecord[]>([]);
   const [races, setRaces] = useState<RaceRecord[]>([]);
   const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
   const [invitations, setInvitations] = useState<JockeyInvitation[]>([]);
@@ -50,6 +51,7 @@ export default function JockeyPage({
       .then((data) => {
         setProfile(data.profile);
         setHorses(data.horses);
+        setTournaments(data.tournaments);
         setRaces(data.races);
         setRaceEntries(data.raceEntries);
         setInvitations(data.invitations);
@@ -91,7 +93,7 @@ export default function JockeyPage({
       .then(() => {
         setMessage(
           decision === 'accepted'
-            ? 'Invitation accepted. Admin has been notified to approve your race assignment.'
+            ? 'Invitation accepted. Admin has been notified to approve your tournament assignment.'
             : 'Invitation rejected. Owner has been notified.'
         );
         loadPortal();
@@ -103,6 +105,8 @@ export default function JockeyPage({
 
   const raceById = (raceId: string) =>
     races.find((race) => race.id === raceId);
+  const tournamentById = (tournamentId?: string | null) =>
+    tournaments.find((tournament) => tournament.id === tournamentId);
 
   const visibleAssignedEntries = assignedExpanded
     ? raceEntries
@@ -148,8 +152,6 @@ export default function JockeyPage({
         <p className="text-gray-400 mb-8">
           Publish your jockey profile, certificate and competition level so Horse Owners can send riding requests for active tournament races.
         </p>
-
-        <NotificationsPanel />
 
         {message && (
           <div className={`mb-8 rounded-2xl border p-4 font-semibold ${messageToneClasses(message)}`}>
@@ -246,12 +248,15 @@ export default function JockeyPage({
                   </div>
 
                   <div className="text-gray-400 text-sm mt-1">
-                    Race: {races.find((race) => race.id === invitation.raceId)?.name || 'Race'} • Status: {statusLabel(invitation.status)}
+                    {invitation.raceId
+                      ? `Race: ${races.find((race) => race.id === invitation.raceId)?.name || 'Race'}`
+                      : `Tournament: ${tournamentById(invitation.tournamentId)?.name || 'Tournament'}`}{' '}
+                    • Status: {statusLabel(invitation.status)}
                   </div>
 
                   {invitation.status === 'pending' && (
                     <div className="text-blue-300 text-sm mt-2 font-semibold">
-                      Owner request: accept to send this race entry to Admin approval.
+                      Owner request: accept to send this tournament pairing to Admin approval.
                     </div>
                   )}
 

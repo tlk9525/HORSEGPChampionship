@@ -6,6 +6,7 @@ DROP TABLE IF EXISTS "notifications";
 DROP TABLE IF EXISTS "sessions";
 DROP TABLE IF EXISTS "refereeReports";
 DROP TABLE IF EXISTS "raceEntries";
+DROP TABLE IF EXISTS "horseTournamentRegistrations";
 DROP TABLE IF EXISTS "jockeyInvitations";
 DROP TABLE IF EXISTS "jockeyTournamentRegistrations";
 DROP TABLE IF EXISTS "jockeyProfiles";
@@ -195,6 +196,45 @@ CREATE TABLE "jockeyInvitations" (
 
 CREATE INDEX "idx_jockey_invitations_jockey"
   ON "jockeyInvitations" ("jockeyUserId", "status");
+
+CREATE TABLE "horseTournamentRegistrations" (
+  "id" VARCHAR(64) PRIMARY KEY,
+  "tournamentId" VARCHAR(64) NOT NULL,
+  "horseId" VARCHAR(64) NOT NULL,
+  "ownerUserId" VARCHAR(64) NOT NULL,
+  "jockeyUserId" VARCHAR(64) NOT NULL,
+  "invitationId" VARCHAR(64),
+  "status" VARCHAR(32) NOT NULL DEFAULT 'pending-jockey'
+    CHECK ("status" IN ('pending-jockey', 'pending-admin', 'approved', 'rejected', 'cancelled')),
+  "notes" TEXT,
+  "createdAt" TIMESTAMPTZ NOT NULL,
+  "reviewedAt" TIMESTAMPTZ,
+  CONSTRAINT "uq_horse_tournament_registration"
+    UNIQUE ("tournamentId", "horseId"),
+  CONSTRAINT "uq_jockey_tournament_pairing"
+    UNIQUE ("tournamentId", "jockeyUserId"),
+  CONSTRAINT "fk_horse_tournament_registrations_tournament"
+    FOREIGN KEY ("tournamentId") REFERENCES "tournaments" ("id")
+    ON DELETE CASCADE,
+  CONSTRAINT "fk_horse_tournament_registrations_horse"
+    FOREIGN KEY ("horseId") REFERENCES "horses" ("id")
+    ON DELETE CASCADE,
+  CONSTRAINT "fk_horse_tournament_registrations_owner"
+    FOREIGN KEY ("ownerUserId") REFERENCES "users" ("id")
+    ON DELETE CASCADE,
+  CONSTRAINT "fk_horse_tournament_registrations_jockey"
+    FOREIGN KEY ("jockeyUserId") REFERENCES "users" ("id")
+    ON DELETE CASCADE,
+  CONSTRAINT "fk_horse_tournament_registrations_invitation"
+    FOREIGN KEY ("invitationId") REFERENCES "jockeyInvitations" ("id")
+    ON DELETE SET NULL
+);
+
+CREATE INDEX "idx_horse_tournament_registrations_tournament"
+  ON "horseTournamentRegistrations" ("tournamentId", "status");
+
+CREATE INDEX "idx_horse_tournament_registrations_owner"
+  ON "horseTournamentRegistrations" ("ownerUserId", "status");
 
 CREATE TABLE "raceEntries" (
   "id" VARCHAR(64) PRIMARY KEY,

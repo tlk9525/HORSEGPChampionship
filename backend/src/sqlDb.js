@@ -94,6 +94,7 @@ export const readDb = async () => {
     jockeyProfiles,
     jockeyTournamentRegistrations,
     jockeyInvitations,
+    horseTournamentRegistrations,
     raceEntries,
     raceRefereeAssignments,
     refereeReports,
@@ -116,6 +117,10 @@ export const readDb = async () => {
       { column: 'id' },
     ]),
     selectAll('jockeyInvitations', [
+      { column: 'createdAt', direction: 'DESC' },
+      { column: 'id' },
+    ]),
+    selectAll('horseTournamentRegistrations', [
       { column: 'createdAt', direction: 'DESC' },
       { column: 'id' },
     ]),
@@ -179,6 +184,7 @@ export const readDb = async () => {
     jockeyProfiles,
     jockeyTournamentRegistrations,
     jockeyInvitations,
+    horseTournamentRegistrations,
     raceEntries: raceEntries.map((entry) => ({
       ...entry,
       ownerConfirmed: bool(entry.ownerConfirmed),
@@ -216,6 +222,7 @@ const tableDeleteOrder = [
   'sessions',
   'refereeReports',
   'raceEntries',
+  'horseTournamentRegistrations',
   'jockeyInvitations',
   'jockeyTournamentRegistrations',
   'jockeyProfiles',
@@ -415,6 +422,31 @@ export const writeDb = async (db) => {
         raceId: invitation.raceId || null,
         adminStatus: invitation.adminStatus || null,
         respondedAt: invitation.respondedAt || null,
+      }))
+    );
+
+    await insertRows(
+      client,
+      'horseTournamentRegistrations',
+      [
+        'id',
+        'tournamentId',
+        'horseId',
+        'ownerUserId',
+        'jockeyUserId',
+        'invitationId',
+        'status',
+        'notes',
+        'createdAt',
+        'reviewedAt',
+      ],
+      (db.horseTournamentRegistrations || []).map((registration) => ({
+        ...registration,
+        invitationId: registration.invitationId || null,
+        status: registration.status || 'pending-jockey',
+        notes: registration.notes || '',
+        createdAt: registration.createdAt || nowIso(),
+        reviewedAt: registration.reviewedAt || null,
       }))
     );
 

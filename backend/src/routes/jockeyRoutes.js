@@ -5,6 +5,7 @@ import {
   ownerName,
   publicRaceEntries,
   raceName,
+  tournamentName,
 } from '../services/domainService.js';
 import {
   createNotification,
@@ -98,6 +99,7 @@ export const handleJockeyRoutes = async ({
     send(res, 200, {
       profile,
       horses: db.horses,
+      tournaments: db.tournaments,
       races: db.races,
       raceEntries: publicRaceEntries(db).filter(
         (entry) => entry.jockeyUserId === user.id
@@ -181,10 +183,18 @@ export const handleJockeyRoutes = async ({
     invitation.respondedAt = new Date().toISOString();
 
     const horse = db.horses.find((item) => item.id === invitation.horseId);
-    const raceLabel = raceName(db, invitation.raceId);
+    const targetLabel = invitation.tournamentId
+      ? tournamentName(db, invitation.tournamentId)
+      : raceName(db, invitation.raceId);
+    const horseRegistration = (db.horseTournamentRegistrations || []).find(
+      (registration) => registration.invitationId === invitation.id
+    );
 
     if (decision === 'accepted') {
       invitation.adminStatus = 'pending';
+      if (horseRegistration) {
+        horseRegistration.status = 'pending-admin';
+      }
 
       if (horse) {
         horse.jockeyConfirmation = 'pending-admin';
@@ -194,17 +204,21 @@ export const handleJockeyRoutes = async ({
       createNotification(
         db,
         invitation.ownerUserId,
-        'Jockey accepted race participation',
-        `${user.name} accepted riding ${horse?.name || 'your horse'} for ${raceLabel}. Waiting for Admin approval.`
+        'Jockey accepted tournament participation',
+        `${user.name} accepted riding ${horse?.name || 'your horse'} for ${targetLabel}. Waiting for Admin approval.`
       );
 
       notifyAdmins(
         db,
-        'Race entry needs approval',
-        `${ownerName(db, invitation.ownerUserId)} registered ${horse?.name || 'Horse'} + ${user.name} for ${raceLabel}.`
+        'Tournament horse registration needs approval',
+        `${ownerName(db, invitation.ownerUserId)} registered ${horse?.name || 'Horse'} + ${user.name} for ${targetLabel}.`
       );
     } else {
       invitation.adminStatus = null;
+      if (horseRegistration) {
+        horseRegistration.status = 'rejected';
+        horseRegistration.reviewedAt = new Date().toISOString();
+      }
 
       if (horse) {
         horse.jockeyConfirmation = 'waiting-owner';

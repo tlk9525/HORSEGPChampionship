@@ -21,6 +21,7 @@ import TournamentDetails from './app/components/TournamentDetails';
 import HorseManagement from './app/components/HorseManagement';
 import HorseDetails from './app/components/HorseDetails';
 import RegisterHorsePage from './app/components/RegisterHorsePage';
+import RaceRegistrationPage from './app/components/RaceRegistrationPage';
 
 import JockeyPage from './app/components/JockeyPage';
 import JockeyDirectoryPage from './app/components/JockeyDirectoryPage';
@@ -50,6 +51,7 @@ const protectedPages: Record<string, string[]> = {
   'create-race': ['admin'],
   horses: ['admin', 'owner'],
   'register-horse': ['owner'],
+  'tournament-registration': ['owner'],
   'edit-horse': ['owner'],
   'horse-details': ['admin', 'owner'],
   'jockey-profiles': ['admin', 'owner', 'jockey', 'referee', 'spectator'],
@@ -66,6 +68,7 @@ const pageFromPath = (pathname: string) => {
   if (path === '/login') return 'login';
   if (path === '/register') return 'register';
   if (path === '/tournaments') return 'tournaments';
+  if (path === '/tournaments/register-horse') return 'tournament-registration';
   if (path.startsWith('/tournaments/')) return 'tournament-details';
   if (path === '/races' || path.startsWith('/races/')) return 'race-details';
   if (path === '/horses') return 'horses';
@@ -115,6 +118,7 @@ export default function App() {
         : '/races',
       horses: '/horses',
       'register-horse': '/horses/new',
+      'tournament-registration': '/tournaments/register-horse',
       'horse-details': selectedHorseId
         ? `/horses/${selectedHorseId}`
         : '/horses',
@@ -254,6 +258,10 @@ export default function App() {
             <Route
               path="/horses/new"
               element={<RegisterHorsePage onNavigate={navigate} />}
+            />
+            <Route
+              path="/tournaments/register-horse"
+              element={<RaceRegistrationPage onNavigate={navigate} />}
             />
             <Route
               path="/horses/:horseId"

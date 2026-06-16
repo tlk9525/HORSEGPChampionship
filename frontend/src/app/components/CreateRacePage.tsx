@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Bell, CalendarClock, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Bell, CalendarClock } from 'lucide-react';
 import {
   RaceBuilderReferee,
   RaceRecord,
@@ -15,7 +15,7 @@ interface CreateRacePageProps {
 
 export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
   const fieldClass =
-    'w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 outline-none focus:border-[#d4af37]/70 focus:ring-2 focus:ring-[#d4af37]/20';
+    'min-h-[54px] w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 outline-none focus:border-[#d4af37]/70 focus:ring-2 focus:ring-[#d4af37]/20';
 
   const [tournaments, setTournaments] = useState<TournamentRecord[]>([]);
   const [races, setRaces] = useState<RaceRecord[]>([]);
@@ -27,7 +27,6 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
     tournamentId: '',
     raceNumber: '',
     raceName: '',
-    round: 'Qualifier',
     raceDate: '',
     startTime: '',
     venue: '',
@@ -36,11 +35,10 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
     raceClass: 'Open',
     handicapMin: '0',
     handicapMax: '10',
-    totalPrize: '',
     refereeUserId: '',
     registrationOpenTime: '',
     registrationCloseTime: '',
-    registrationPeriodMinutes: '10',
+    registrationPeriodMinutes: '',
   });
 
   const selectedTournament = useMemo(
@@ -101,9 +99,11 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
       !form.startTime ||
       !form.venue ||
       !form.distance ||
-      !form.refereeUserId
+      !form.refereeUserId ||
+      !form.registrationPeriodMinutes ||
+      Number(form.registrationPeriodMinutes) <= 0
     ) {
-      setMessage('Please create/select tournament first, then complete race name, date, start time, venue, distance and referee.');
+      setMessage('Please create/select tournament first, then complete race name, date, start time, venue, distance, registration minutes and referee.');
       return;
     }
 
@@ -113,7 +113,6 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
       tournamentId: form.tournamentId,
       raceNumber: form.raceNumber,
       name: form.raceName,
-      round: form.round,
       date: form.raceDate,
       time: form.startTime,
       venue: form.venue,
@@ -122,7 +121,6 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
       raceClass: form.raceClass,
       handicapMin: form.handicapMin,
       handicapMax: form.handicapMax,
-      totalPrize: form.totalPrize,
       refereeUserId: form.refereeUserId,
       registrationPeriodMinutes: form.registrationPeriodMinutes,
       registrationOpenTime: form.registrationOpenTime,
@@ -162,7 +160,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
         </button>
 
         <div className="bg-[#12304f] border border-white/10 rounded-3xl p-8">
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5 mb-8">
+          <div className="mb-8">
             <div>
               <h1 className="text-4xl font-black text-white">
                 Create Race
@@ -171,26 +169,6 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
               <p className="text-gray-400 mt-2">
                 Step 1: create a tournament. Step 2: create R1, R2, R3, R4 inside that tournament.
               </p>
-            </div>
-
-            <div className="rounded-2xl border border-[#d4af37]/30 bg-[#d4af37]/10 px-5 py-3 text-[#f6d77a] font-bold">
-              Default registration: {form.registrationPeriodMinutes || 10} minutes
-            </div>
-          </div>
-
-          <div className="mb-6 rounded-2xl border border-[#d4af37]/30 bg-[#d4af37]/10 p-5">
-            <div className="flex items-start gap-3">
-              <ShieldCheck className="w-6 h-6 text-[#d4af37] mt-0.5" />
-
-              <div>
-                <div className="text-white font-bold">
-                  Race workflow
-                </div>
-
-                <p className="text-gray-400 mt-1">
-                  Admin phải tạo Tournament trước. Sau đó mỗi Race như R1, R2, R3, R4 sẽ được tạo bên trong Tournament đã chọn, rồi mới mở đăng ký cho Owner và Jockey.
-                </p>
-              </div>
             </div>
           </div>
 
@@ -218,9 +196,9 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
               </button>
             </div>
           ) : (
-          <div className="grid lg:grid-cols-[1fr,360px] gap-8">
-            <div className="grid md:grid-cols-2 gap-5">
-              <div>
+          <div className="grid lg:grid-cols-[minmax(0,1fr),360px] gap-8">
+            <div className="grid md:grid-cols-2 gap-x-6 gap-y-5">
+              <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Tournament</label>
                 <select
                   className={fieldClass}
@@ -235,7 +213,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 </select>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Race Number</label>
                 <input
                   placeholder={form.tournamentId ? getNextRaceNumber(form.tournamentId) : 'R1'}
@@ -250,7 +228,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Race Name</label>
                 <input
                   placeholder={`${selectedTournament?.name || 'Tournament'} ${form.raceNumber || 'R1'}`}
@@ -265,30 +243,12 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 />
               </div>
 
-              <div>
-                <label className="block text-gray-300 mb-2">Round</label>
-                <select
-                  className={fieldClass}
-                  value={form.round}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      round: event.target.value,
-                    })
-                  }
-                >
-                  <option>Qualifier</option>
-                  <option>Round 2</option>
-                  <option>Semi Final</option>
-                  <option>Final</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-gray-300 mb-2">Registration Period (minutes)</label>
+              <div className="min-w-0">
+                <label className="block text-gray-300 mb-2">Registration Minutes</label>
                 <input
                   type="number"
                   min="1"
+                  placeholder="Enter minutes"
                   className={fieldClass}
                   value={form.registrationPeriodMinutes}
                   onChange={(event) =>
@@ -300,7 +260,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Registration Open Time</label>
                 <input
                   type="datetime-local"
@@ -315,7 +275,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Registration Close Time</label>
                 <input
                   type="datetime-local"
@@ -330,7 +290,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Race Date</label>
                 <input
                   type="date"
@@ -345,7 +305,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Start Time</label>
                 <input
                   type="time"
@@ -360,7 +320,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Venue</label>
                 <input
                   placeholder="Churchill Downs"
@@ -375,7 +335,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Distance (m)</label>
                 <input
                   type="number"
@@ -391,7 +351,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Surface</label>
                 <select
                   className={fieldClass}
@@ -409,7 +369,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 </select>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Race Class</label>
                 <input
                   placeholder="Open"
@@ -424,7 +384,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Handicap Min</label>
                 <input
                   type="number"
@@ -441,7 +401,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Handicap Max</label>
                 <input
                   type="number"
@@ -458,24 +418,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 />
               </div>
 
-              <div>
-                <label className="block text-gray-300 mb-2">Total Prize</label>
-                <input
-                  type="number"
-                  min="0"
-                  placeholder="125000"
-                  className={fieldClass}
-                  value={form.totalPrize}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      totalPrize: event.target.value,
-                    })
-                  }
-                />
-              </div>
-
-              <div>
+              <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Assigned Referee</label>
                 <select
                   className={fieldClass}

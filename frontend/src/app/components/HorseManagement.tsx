@@ -6,7 +6,6 @@ import {
   Plus,
   Search,
 } from 'lucide-react';
-import NotificationsPanel from './NotificationsPanel';
 import {
   HorseRecord,
   RaceEntryRecord,
@@ -23,11 +22,10 @@ interface HorseManagementProps {
 const horseRating = (horse: HorseRecord) =>
   Number(
     (
-      Number(horse.overallRating || 0) ||
       Number(horse.speedRating || 75) * 0.4 +
-        Number(horse.staminaRating || 75) * 0.3 +
+        Number(horse.staminaRating || 75) * 0.25 +
         Number(horse.formRating || 75) * 0.2 +
-        Number(horse.healthRating || 80) * 0.1
+        Number(horse.healthRating || 80) * 0.15
     ).toFixed(2)
   );
 
@@ -121,8 +119,6 @@ export default function HorseManagement({
             </button>
           </div>
         </div>
-
-        <NotificationsPanel />
 
         {message && (
           <div className={`mb-8 rounded-2xl border p-4 font-semibold ${messageToneClasses(message)}`}>

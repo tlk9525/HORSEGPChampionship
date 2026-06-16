@@ -72,6 +72,12 @@ const visibleUsers = (db, user) => {
 const visibleJockeyRegistrations = (db, user) => {
   if (user?.role === USER_ROLES.ADMIN) return db.jockeyTournamentRegistrations || [];
 
+  if (user?.role === USER_ROLES.OWNER) {
+    return (db.jockeyTournamentRegistrations || []).filter(
+      (registration) => registration.status === 'approved'
+    );
+  }
+
   if (user?.role === USER_ROLES.JOCKEY) {
     return (db.jockeyTournamentRegistrations || []).filter(
       (registration) => registration.jockeyUserId === user.id
@@ -93,6 +99,24 @@ const visibleJockeyInvitations = (db, user) => {
   if (user?.role === USER_ROLES.JOCKEY) {
     return (db.jockeyInvitations || []).filter(
       (invitation) => invitation.jockeyUserId === user.id
+    );
+  }
+
+  return [];
+};
+
+const visibleHorseTournamentRegistrations = (db, user) => {
+  if (user?.role === USER_ROLES.ADMIN) return db.horseTournamentRegistrations || [];
+
+  if (user?.role === USER_ROLES.OWNER) {
+    return (db.horseTournamentRegistrations || []).filter(
+      (registration) => registration.ownerUserId === user.id
+    );
+  }
+
+  if (user?.role === USER_ROLES.JOCKEY) {
+    return (db.horseTournamentRegistrations || []).filter(
+      (registration) => registration.jockeyUserId === user.id
     );
   }
 
@@ -134,6 +158,7 @@ export const handlePublicRoutes = async ({ req, res, url, db, send }) => {
       jockeyProfiles: publicJockeyProfiles(db),
       jockeyTournamentRegistrations: visibleJockeyRegistrations(db, user),
       jockeyInvitations: visibleJockeyInvitations(db, user),
+      horseTournamentRegistrations: visibleHorseTournamentRegistrations(db, user),
       raceEntries,
       users: visibleUsers(db, user),
       notifications: user

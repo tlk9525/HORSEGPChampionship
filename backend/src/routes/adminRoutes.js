@@ -11,6 +11,8 @@ import {
   publicRaceEntries,
   raceRefereeIds,
   raceName,
+  tournamentName,
+  tournamentRaces,
 } from '../services/domainService.js';
 import { computeRaceHandicap } from '../services/handicapService.js';
 import { broadcastRaceUpdate } from '../services/liveRaceEvents.js';
@@ -18,6 +20,131 @@ import {
   createNotification,
   notifyAdmins,
 } from '../services/notificationService.js';
+
+const nonRejectedEntry = (entry) => entry.status !== 'rejected';
+
+const registrationPair = (registration, invitation) => ({
+  horseId: registration?.horseId || invitation?.horseId,
+  jockeyUserId: registration?.jockeyUserId || invitation?.jockeyUserId,
+  ownerUserId: registration?.ownerUserId || invitation?.ownerUserId,
+  invitationId: registration?.invitationId || invitation?.id || null,
+  notes: registration?.notes || invitation?.notes || '',
+});
+
+const validatePairForRace = (db, race, pair) => {
+  const existingEntry = (db.raceEntries || []).find(
+    (entry) =>
+      entry.raceId === race.id &&
+      entry.horseId === pair.horseId &&
+      nonRejectedEntry(entry)
+  );
+
+  if (existingEntry) return null;
+
+  const jockeyConflict = (db.raceEntries || []).find(
+    (entry) =>
+      entry.raceId === race.id &&
+      entry.jockeyUserId === pair.jockeyUserId &&
+      entry.horseId !== pair.horseId &&
+      nonRejectedEntry(entry)
+  );
+
+  if (jockeyConflict) {
+    return `${jockeyName(db, pair.jockeyUserId)} is already assigned in ${race.name}.`;
+  }
+
+  if (approvedRaceEntries(db, race.id).length >= MAX_RACE_FIELD_SIZE) {
+    return `${race.name} already has ${MAX_RACE_FIELD_SIZE} approved horses.`;
+  }
+
+  return null;
+};
+
+const addPairToRace = (db, race, pair, createdAt) => {
+  db.raceEntries = db.raceEntries || [];
+
+  const existingEntry = db.raceEntries.find(
+    (entry) =>
+      entry.raceId === race.id &&
+      entry.horseId === pair.horseId &&
+      nonRejectedEntry(entry)
+  );
+
+  if (existingEntry) return false;
+
+  db.raceEntries.push({
+    id: randomUUID(),
+    raceId: race.id,
+    horseId: pair.horseId,
+    jockeyUserId: pair.jockeyUserId,
+    invitationId: pair.invitationId,
+    status: 'approved',
+    lane: null,
+    handicap: 0,
+    ratingSnapshot: 0,
+    ownerConfirmed: true,
+    jockeyConfirmed: true,
+    preRaceStatus: 'pending',
+    disqualified: false,
+    resultStatus: 'draft',
+    notes: pair.notes,
+    violationNotes: '',
+    finishTime: '',
+    position: null,
+    createdAt,
+  });
+
+  race.participants = approvedRaceEntries(db, race.id).length;
+  race.ownerConfirmed = race.participants;
+  race.jockeyConfirmed = race.participants;
+  return true;
+};
+
+const addPairToTournamentRaces = (db, invitation, registration, createdAt) => {
+  const pair = registrationPair(registration, invitation);
+  const races = tournamentRaces(db, invitation.tournamentId);
+  const errors = races
+    .map((race) => validatePairForRace(db, race, pair))
+    .filter(Boolean);
+
+  if (errors.length) {
+    return { error: errors[0], races: [] };
+  }
+
+  const touchedRaces = races.filter((race) =>
+    addPairToRace(db, race, pair, createdAt)
+  );
+
+  return { error: null, races: touchedRaces };
+};
+
+const addApprovedTournamentPairsToRace = (db, race, createdAt) => {
+  const registrations = (db.horseTournamentRegistrations || []).filter(
+    (registration) =>
+      registration.tournamentId === race.tournamentId &&
+      registration.status === 'approved'
+  );
+
+  if (registrations.length > MAX_RACE_FIELD_SIZE) {
+    return {
+      error: `Tournament already has more than ${MAX_RACE_FIELD_SIZE} approved horse-jockey pairs.`,
+    };
+  }
+
+  const errors = registrations
+    .map((registration) =>
+      validatePairForRace(db, race, registrationPair(registration, null))
+    )
+    .filter(Boolean);
+
+  if (errors.length) return { error: errors[0] };
+
+  registrations.forEach((registration) =>
+    addPairToRace(db, race, registrationPair(registration, null), createdAt)
+  );
+
+  return { error: null };
+};
 
 export const handleAdminRoutes = async ({
   req,
@@ -225,6 +352,12 @@ export const handleAdminRoutes = async ({
       createdAt: now.toISOString(),
       updatedAt: now.toISOString(),
     };
+
+    const addExistingPairsResult = addApprovedTournamentPairsToRace(db, race, now.toISOString());
+    if (addExistingPairsResult.error) {
+      send(res, 400, { message: addExistingPairsResult.error });
+      return true;
+    }
 
     db.races.unshift(race);
     db.raceRefereeAssignments = db.raceRefereeAssignments || [];
@@ -597,23 +730,56 @@ export const handleAdminRoutes = async ({
       }
 
       const horse = db.horses.find((item) => item.id === invitation.horseId);
-      const raceLabel = raceName(db, invitation.raceId);
-
-      invitation.adminStatus = decision;
+      const registration = (db.horseTournamentRegistrations || []).find(
+        (item) => item.invitationId === invitation.id
+      );
+      const targetLabel = invitation.tournamentId
+        ? tournamentName(db, invitation.tournamentId)
+        : raceName(db, invitation.raceId);
 
       if (decision === 'approved') {
+        if (invitation.tournamentId) {
+          const addResult = addPairToTournamentRaces(
+            db,
+            invitation,
+            registration,
+            new Date().toISOString()
+          );
+
+          if (addResult.error) {
+            send(res, 400, { message: addResult.error });
+            return true;
+          }
+
+          addResult.races.forEach((race) => raceIdsToBroadcast.add(race.id));
+        }
+
+        invitation.adminStatus = decision;
+
+        if (registration) {
+          registration.status = 'approved';
+          registration.reviewedAt = new Date().toISOString();
+        }
+
         if (horse) {
           horse.jockeyConfirmation = 'confirmed';
           horse.updatedAt = new Date().toISOString();
         }
 
-        if (invitation.raceId) {
+        if (!invitation.tournamentId && invitation.raceId) {
           db.raceEntries = db.raceEntries || [];
+          const race = db.races.find((item) => item.id === invitation.raceId);
+
+          if (!race) {
+            send(res, 404, { message: 'Race not found' });
+            return true;
+          }
 
           const alreadyEntered = db.raceEntries.some(
             (entry) =>
               entry.raceId === invitation.raceId &&
-              entry.horseId === invitation.horseId
+              entry.horseId === invitation.horseId &&
+              nonRejectedEntry(entry)
           );
 
           if (!alreadyEntered) {
@@ -629,30 +795,14 @@ export const handleAdminRoutes = async ({
               return true;
             }
 
-            db.raceEntries.push({
-              id: randomUUID(),
-              raceId: invitation.raceId,
-              horseId: invitation.horseId,
-              jockeyUserId: invitation.jockeyUserId,
-              invitationId: invitation.id,
-              status: 'approved',
-              lane: null,
-              handicap: 0,
-              ratingSnapshot: 0,
-              ownerConfirmed: true,
-              jockeyConfirmed: true,
-              preRaceStatus: 'pending',
-              disqualified: false,
-              resultStatus: 'draft',
-              notes: invitation.notes || '',
-              violationNotes: '',
-              finishTime: '',
-              position: null,
-              createdAt: new Date().toISOString(),
-            });
+            addPairToRace(
+              db,
+              race,
+              registrationPair(null, invitation),
+              new Date().toISOString()
+            );
           }
 
-          const race = db.races.find((item) => item.id === invitation.raceId);
           if (race) {
             race.participants = approvedRaceEntries(db, race.id).length;
             raceIdsToBroadcast.add(race.id);
@@ -662,17 +812,28 @@ export const handleAdminRoutes = async ({
         createNotification(
           db,
           invitation.ownerUserId,
-          'Pairing approved for race',
-          `Admin approved ${horse?.name || 'your horse'} with ${jockeyName(db, invitation.jockeyUserId)} for ${raceLabel}.`
+          invitation.tournamentId
+            ? 'Pairing approved for tournament'
+            : 'Pairing approved for race',
+          `Admin approved ${horse?.name || 'your horse'} with ${jockeyName(db, invitation.jockeyUserId)} for ${targetLabel}.`
         );
 
         createNotification(
           db,
           invitation.jockeyUserId,
-          'You are approved for the race',
-          `Admin approved your assignment to ride ${horse?.name || 'the horse'} in ${raceLabel}.`
+          invitation.tournamentId
+            ? 'You are approved for the tournament'
+            : 'You are approved for the race',
+          `Admin approved your assignment to ride ${horse?.name || 'the horse'} in ${targetLabel}.`
         );
       } else {
+        invitation.adminStatus = decision;
+
+        if (registration) {
+          registration.status = 'rejected';
+          registration.reviewedAt = new Date().toISOString();
+        }
+
         if (horse) {
           horse.jockeyConfirmation = 'waiting-owner';
           horse.updatedAt = new Date().toISOString();
@@ -681,15 +842,19 @@ export const handleAdminRoutes = async ({
         createNotification(
           db,
           invitation.ownerUserId,
-          'Pairing rejected for race',
-          `Admin rejected the ${horse?.name || 'horse'} + ${jockeyName(db, invitation.jockeyUserId)} assignment for ${raceLabel}.`
+          invitation.tournamentId
+            ? 'Pairing rejected for tournament'
+            : 'Pairing rejected for race',
+          `Admin rejected the ${horse?.name || 'horse'} + ${jockeyName(db, invitation.jockeyUserId)} assignment for ${targetLabel}.`
         );
 
         createNotification(
           db,
           invitation.jockeyUserId,
-          'Race assignment rejected',
-          `Admin rejected your assignment for ${horse?.name || 'the horse'} in ${raceLabel}.`
+          invitation.tournamentId
+            ? 'Tournament assignment rejected'
+            : 'Race assignment rejected',
+          `Admin rejected your assignment for ${horse?.name || 'the horse'} in ${targetLabel}.`
         );
       }
     }

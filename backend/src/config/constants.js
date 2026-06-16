@@ -29,11 +29,14 @@ export const ACCOUNT_APPROVAL_ROLES = [
   USER_ROLES.REFEREE,
 ];
 
-export const ACTIVE_TOURNAMENT_STATUSES = [
+export const TOURNAMENT_REGISTRATION_STATUSES = [
   'registration',
+  'registration-open',
   'approvals',
   'active',
 ];
+
+export const ACTIVE_TOURNAMENT_STATUSES = TOURNAMENT_REGISTRATION_STATUSES;
 
 export const PUBLIC_RACE_STATUSES = [
   'registration-closed',

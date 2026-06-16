@@ -45,6 +45,31 @@ CREATE INDEX IF NOT EXISTS "idx_referee_reports_race"
 CREATE INDEX IF NOT EXISTS "idx_referee_reports_referee"
   ON "refereeReports" ("refereeUserId", "status");
 
+CREATE TABLE IF NOT EXISTS "horseTournamentRegistrations" (
+  "id" VARCHAR(64) PRIMARY KEY,
+  "tournamentId" VARCHAR(64) NOT NULL,
+  "horseId" VARCHAR(64) NOT NULL,
+  "ownerUserId" VARCHAR(64) NOT NULL,
+  "jockeyUserId" VARCHAR(64) NOT NULL,
+  "invitationId" VARCHAR(64),
+  "status" VARCHAR(32) NOT NULL DEFAULT 'pending-jockey',
+  "notes" TEXT,
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "reviewedAt" TIMESTAMPTZ
+);
+
+ALTER TABLE "horseTournamentRegistrations"
+  ADD COLUMN IF NOT EXISTS "invitationId" VARCHAR(64),
+  ADD COLUMN IF NOT EXISTS "notes" TEXT,
+  ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS "reviewedAt" TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS "idx_horse_tournament_registrations_tournament"
+  ON "horseTournamentRegistrations" ("tournamentId", "status");
+
+CREATE INDEX IF NOT EXISTS "idx_horse_tournament_registrations_owner"
+  ON "horseTournamentRegistrations" ("ownerUserId", "status");
+
 ALTER TABLE "users"
   ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMPTZ;
@@ -89,6 +114,8 @@ BEGIN
       ('jockeyTournamentRegistrations', 'reviewedAt'),
       ('jockeyInvitations', 'createdAt'),
       ('jockeyInvitations', 'respondedAt'),
+      ('horseTournamentRegistrations', 'createdAt'),
+      ('horseTournamentRegistrations', 'reviewedAt'),
       ('raceEntries', 'createdAt'),
       ('refereeReports', 'createdAt'),
       ('refereeReports', 'reviewedAt'),
@@ -398,6 +425,59 @@ BEGIN
       ADD CONSTRAINT "fk_jockey_invitations_race"
       FOREIGN KEY ("raceId") REFERENCES "races" ("id")
       ON DELETE CASCADE NOT VALID;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_horse_tournament_registration') THEN
+    ALTER TABLE "horseTournamentRegistrations"
+      ADD CONSTRAINT "uq_horse_tournament_registration"
+      UNIQUE ("tournamentId", "horseId");
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_horse_tournament_registrations_status') THEN
+    ALTER TABLE "horseTournamentRegistrations"
+      ADD CONSTRAINT "chk_horse_tournament_registrations_status"
+      CHECK ("status" IN ('pending-jockey', 'pending-admin', 'approved', 'rejected', 'cancelled')) NOT VALID;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_jockey_tournament_pairing') THEN
+    ALTER TABLE "horseTournamentRegistrations"
+      ADD CONSTRAINT "uq_jockey_tournament_pairing"
+      UNIQUE ("tournamentId", "jockeyUserId");
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_horse_tournament_registrations_tournament') THEN
+    ALTER TABLE "horseTournamentRegistrations"
+      ADD CONSTRAINT "fk_horse_tournament_registrations_tournament"
+      FOREIGN KEY ("tournamentId") REFERENCES "tournaments" ("id")
+      ON DELETE CASCADE NOT VALID;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_horse_tournament_registrations_horse') THEN
+    ALTER TABLE "horseTournamentRegistrations"
+      ADD CONSTRAINT "fk_horse_tournament_registrations_horse"
+      FOREIGN KEY ("horseId") REFERENCES "horses" ("id")
+      ON DELETE CASCADE NOT VALID;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_horse_tournament_registrations_owner') THEN
+    ALTER TABLE "horseTournamentRegistrations"
+      ADD CONSTRAINT "fk_horse_tournament_registrations_owner"
+      FOREIGN KEY ("ownerUserId") REFERENCES "users" ("id")
+      ON DELETE CASCADE NOT VALID;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_horse_tournament_registrations_jockey') THEN
+    ALTER TABLE "horseTournamentRegistrations"
+      ADD CONSTRAINT "fk_horse_tournament_registrations_jockey"
+      FOREIGN KEY ("jockeyUserId") REFERENCES "users" ("id")
+      ON DELETE CASCADE NOT VALID;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_horse_tournament_registrations_invitation') THEN
+    ALTER TABLE "horseTournamentRegistrations"
+      ADD CONSTRAINT "fk_horse_tournament_registrations_invitation"
+      FOREIGN KEY ("invitationId") REFERENCES "jockeyInvitations" ("id")
+      ON DELETE SET NULL NOT VALID;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_race_entries_race') THEN

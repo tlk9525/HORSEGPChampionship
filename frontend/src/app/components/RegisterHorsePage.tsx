@@ -54,9 +54,9 @@ export default function RegisterHorsePage({
   const overallRating = Number(
     (
       ratingValue(speedRating, 75) * 0.4 +
-      ratingValue(staminaRating, 75) * 0.3 +
+      ratingValue(staminaRating, 75) * 0.25 +
       ratingValue(formRating, 75) * 0.2 +
-      ratingValue(healthRating, 80) * 0.1
+      ratingValue(healthRating, 80) * 0.15
     ).toFixed(2)
   );
 

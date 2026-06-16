@@ -183,6 +183,19 @@ export interface JockeyTournamentRegistration {
   reviewedAt?: string | null;
 }
 
+export interface HorseTournamentRegistration {
+  id: string;
+  tournamentId: string;
+  horseId: string;
+  ownerUserId: string;
+  jockeyUserId: string;
+  invitationId?: string | null;
+  status: 'pending-jockey' | 'pending-admin' | 'approved' | 'rejected' | 'cancelled';
+  notes?: string;
+  createdAt: string;
+  reviewedAt?: string | null;
+}
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:4000/api';
 const TOKEN_KEY = 'horse-racing-token';
 
@@ -256,6 +269,7 @@ export const getBootstrap = async () =>
     jockeyProfiles: JockeyProfileRecord[];
     jockeyTournamentRegistrations: JockeyTournamentRegistration[];
     jockeyInvitations: JockeyInvitation[];
+    horseTournamentRegistrations: HorseTournamentRegistration[];
     raceEntries: RaceEntryRecord[];
     users: AuthUser[];
     notifications: NotificationItem[];
@@ -326,12 +340,12 @@ export const getRaceRegistration = async (tournamentId: string) =>
     horses: HorseRecord[];
     races: RaceRecord[];
     jockeyProfiles: JockeyProfileRecord[];
+    horseTournamentRegistrations: HorseTournamentRegistration[];
     raceEntries: RaceEntryRecord[];
   }>(`/owner/race-registration?tournamentId=${encodeURIComponent(tournamentId)}`);
 
 export const createRaceEntry = async (entry: {
   tournamentId: string;
-  raceId: string;
   horseId: string;
   jockeyUserId: string;
   notes?: string;
@@ -409,6 +423,7 @@ export const getJockeyPortal = async () =>
   request<{
     profile: JockeyProfileRecord | null;
     horses: HorseRecord[];
+    tournaments: TournamentRecord[];
     races: RaceRecord[];
     raceEntries: RaceEntryRecord[];
     invitations: JockeyInvitation[];

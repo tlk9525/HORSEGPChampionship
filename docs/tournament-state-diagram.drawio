@@ -1,0 +1,122 @@
+<mxfile host="app.diagrams.net" agent="Codex" version="24.7.17">
+  <diagram id="tournament-state-diagram" name="Tournament State Diagram">
+    <mxGraphModel dx="1300" dy="950" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1000" pageHeight="920" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="title" value="Tournament State Diagram" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="70" y="20" width="860" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="initial" value="" style="ellipse;html=1;shape=ellipse;fillColor=#000000;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="328" y="80" width="24" height="24" as="geometry" />
+        </mxCell>
+
+        <mxCell id="draft" value="Draft" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#d9d9d9;strokeColor=#000000;strokeWidth=2;fontSize=18;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="240" y="130" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="open_registration" value="Open Registration" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#d9d9d9;strokeColor=#000000;strokeWidth=2;fontSize=18;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="240" y="240" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="registration_closed" value="Registration Closed" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#d9d9d9;strokeColor=#000000;strokeWidth=2;fontSize=18;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="240" y="350" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="scheduled" value="Scheduled" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#d9d9d9;strokeColor=#000000;strokeWidth=2;fontSize=18;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="240" y="460" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="ongoing" value="Ongoing" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#d9d9d9;strokeColor=#000000;strokeWidth=2;fontSize=18;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="240" y="570" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="completed" value="Completed" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#d9d9d9;strokeColor=#000000;strokeWidth=2;fontSize=18;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="240" y="680" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="archived" value="Archived" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#d9d9d9;strokeColor=#000000;strokeWidth=2;fontSize=18;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="240" y="790" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cancelled" value="Cancelled" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#d9d9d9;strokeColor=#000000;strokeWidth=2;fontSize=18;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="690" y="270" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="suspended" value="Suspended" style="rounded=1;arcSize=14;whiteSpace=wrap;html=1;fillColor=#d9d9d9;strokeColor=#000000;strokeWidth=2;fontSize=18;fontColor=#000000;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="690" y="570" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="final_outer" value="" style="ellipse;html=1;shape=ellipse;fillColor=none;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="322" y="875" width="36" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="final_inner" value="" style="ellipse;html=1;shape=ellipse;fillColor=#000000;strokeColor=#000000;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="331" y="884" width="18" height="18" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_initial_draft" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="initial" target="draft">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_draft_open" value="Admin publishes tournament" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="draft" target="open_registration">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_open_closed" value="Registration deadline reached" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="open_registration" target="registration_closed">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_closed_scheduled" value="Admin creates race schedule" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="registration_closed" target="scheduled">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_scheduled_ongoing" value="First race starts" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="scheduled" target="ongoing">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_ongoing_completed" value="All races completed" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="ongoing" target="completed">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_completed_archived" value="Archive tournament" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="completed" target="archived">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_archived_final" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="archived" target="final_outer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e_draft_cancelled" value="Admin cancels tournament" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="draft" target="cancelled">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="560" y="160" />
+              <mxPoint x="560" y="300" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_open_cancelled" value="Insufficient participants" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="open_registration" target="cancelled">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_closed_cancelled" value="Organizer cancels event" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="registration_closed" target="cancelled">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="560" y="380" />
+              <mxPoint x="560" y="300" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_scheduled_cancelled" value="Weather issue / Emergency" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="scheduled" target="cancelled">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="610" y="490" />
+              <mxPoint x="610" y="300" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ongoing_suspended" value="Tournament suspended" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="ongoing" target="suspended">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_suspended_ongoing" value="Resume tournament" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="suspended" target="ongoing">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="790" y="665" />
+              <mxPoint x="540" y="665" />
+              <mxPoint x="540" y="600" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_suspended_cancelled" value="Event terminated" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="suspended" target="cancelled">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

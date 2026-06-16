@@ -32,11 +32,10 @@ const value = (input: string | number | null | undefined, suffix = '') =>
 const overall = (horse: HorseRecord) =>
   Number(
     (
-      Number(horse.overallRating || 0) ||
       Number(horse.speedRating || 75) * 0.4 +
-        Number(horse.staminaRating || 75) * 0.3 +
+        Number(horse.staminaRating || 75) * 0.25 +
         Number(horse.formRating || 75) * 0.2 +
-        Number(horse.healthRating || 80) * 0.1
+        Number(horse.healthRating || 80) * 0.15
     ).toFixed(2)
   );
 

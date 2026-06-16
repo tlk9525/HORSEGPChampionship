@@ -26,7 +26,6 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
   const [message, setMessage] = useState('');
   const [form, setForm] = useState({
     horseId: '',
-    raceId: '',
     jockeyUserId: '',
     notes: '',
   });
@@ -48,7 +47,6 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
         setForm((current) => ({
           ...current,
           horseId: current.horseId || data.horses[0]?.id || '',
-          raceId: current.raceId || data.races[0]?.id || '',
           jockeyUserId: current.jockeyUserId || data.jockeyProfiles[0]?.userId || '',
         }));
       })
@@ -64,20 +62,19 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
   const submitRegistration = () => {
     setMessage('');
 
-    if (!form.horseId || !form.raceId || !form.jockeyUserId) {
-      setMessage('Horse, race and jockey are required.');
+    if (!form.horseId || !form.jockeyUserId) {
+      setMessage('Horse and jockey are required.');
       return;
     }
 
     createRaceEntry({
       tournamentId,
       horseId: form.horseId,
-      raceId: form.raceId,
       jockeyUserId: form.jockeyUserId,
       notes: form.notes,
     })
       .then(() => {
-        setMessage('Jockey request sent. Admin approval will start after the jockey accepts.');
+        setMessage('Tournament request sent. This pair will run every race after Jockey and Admin approval.');
         setTimeout(() => onNavigate('tournaments'), 1200);
       })
       .catch((error) =>
@@ -99,7 +96,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
         <div className="bg-[#12304f] border border-white/10 rounded-3xl p-8">
           <div className="mb-8">
             <p className="text-[#d4af37] text-sm uppercase tracking-widest">
-              Race Registration
+              Tournament Horse Registration
             </p>
 
             <h1 className="text-4xl font-black text-white mt-2">
@@ -107,7 +104,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
             </h1>
 
             <p className="text-gray-400 mt-3">
-              Select an owned horse, an open race and a jockey approved for this tournament. The jockey must accept before Admin can approve the race entry.
+              Select one approved horse and one approved jockey for this tournament. After Jockey and Admin approval, this fixed pair runs the full race schedule.
             </p>
           </div>
 
@@ -139,26 +136,6 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
             </div>
 
             <div>
-              <label className="block text-gray-300 mb-2">Race</label>
-              <select
-                value={form.raceId}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    raceId: event.target.value,
-                  })
-                }
-                className={fieldClass}
-              >
-                {races.map((race) => (
-                  <option key={race.id} value={race.id}>
-                    {race.name} - {race.date} {race.time}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="md:col-span-2">
               <label className="block text-gray-300 mb-2">Approved Jockey</label>
               <select
                 value={form.jockeyUserId}
@@ -195,12 +172,41 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
             </div>
           </div>
 
+          <div className="mt-6 rounded-2xl border border-white/10 bg-[#071a2f] p-5">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-white font-bold">Tournament Race Schedule</h2>
+              <span className="text-[#d4af37] font-bold">
+                {races.length} races
+              </span>
+            </div>
+
+            <div className="mt-4 grid md:grid-cols-2 gap-3">
+              {races.length === 0 && (
+                <div className="md:col-span-2 text-gray-500">
+                  Admin has not created races for this tournament yet. The pair will be assigned automatically when races are created.
+                </div>
+              )}
+
+              {races.map((race) => (
+                <div
+                  key={race.id}
+                  className="rounded-xl bg-[#12304f] border border-white/10 px-4 py-3"
+                >
+                  <div className="text-white font-bold">{race.name}</div>
+                  <div className="text-gray-400 text-sm mt-1">
+                    {race.date} {race.time} • {statusLabel(race.status)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <button
             onClick={submitRegistration}
             className="mt-8 flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-[#d4af37] hover:bg-[#b8892d] text-white font-bold transition-all"
           >
             <Send className="w-5 h-5" />
-            Send Jockey Request
+            Register Pair for Tournament
           </button>
         </div>
       </div>

@@ -12,10 +12,24 @@ export const horseName = (db, horseId) =>
 export const raceName = (db, raceId) =>
   db.races.find((race) => race.id === raceId)?.name || 'Unassigned race';
 
+export const tournamentName = (db, tournamentId) =>
+  db.tournaments.find((tournament) => tournament.id === tournamentId)?.name ||
+  'Tournament';
+
 export const activeTournament = (db) =>
   db.tournaments.find((tournament) =>
     ACTIVE_TOURNAMENT_STATUSES.includes(tournament.status)
   ) || null;
+
+export const tournamentRaces = (db, tournamentId) =>
+  (db.races || []).filter((race) => race.tournamentId === tournamentId);
+
+export const activeHorseTournamentRegistrations = (db, tournamentId) =>
+  (db.horseTournamentRegistrations || []).filter(
+    (registration) =>
+      registration.tournamentId === tournamentId &&
+      !['rejected', 'cancelled'].includes(registration.status)
+  );
 
 export const defaultRaceForTournament = (db, tournamentId) =>
   db.races.find(
@@ -165,11 +179,16 @@ export const formatApprovals = (db) => [
     .map((invitation) => ({
       id: invitation.id,
       entityType: 'pairing',
-      type: 'Race Entry Registration',
+      type: invitation.tournamentId
+        ? 'Tournament Horse Registration'
+        : 'Race Entry Registration',
       name: `${horseName(db, invitation.horseId)} + ${jockeyName(db, invitation.jockeyUserId)}`,
-      detail: `Race: ${raceName(db, invitation.raceId)} • Owner: ${ownerName(db, invitation.ownerUserId)}`,
+      detail: invitation.tournamentId
+        ? `Tournament: ${tournamentName(db, invitation.tournamentId)} • Owner: ${ownerName(db, invitation.ownerUserId)}`
+        : `Race: ${raceName(db, invitation.raceId)} • Owner: ${ownerName(db, invitation.ownerUserId)}`,
       date:
         db.races.find((race) => race.id === invitation.raceId)?.date ||
+        db.tournaments.find((tournament) => tournament.id === invitation.tournamentId)?.startDate ||
         activeTournament(db)?.startDate ||
         'Race schedule',
       targetUserId: invitation.ownerUserId,

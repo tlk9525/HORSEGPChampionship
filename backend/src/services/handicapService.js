@@ -11,31 +11,25 @@ export const clamp = (value, min, max) => {
 };
 
 export const horseOverallRating = (horse = {}) => {
-  if (numeric(horse.overallRating, 0) > 0) {
-    return Number(numeric(horse.overallRating).toFixed(2));
-  }
-
   const speed = numeric(horse.speedRating, 75);
   const stamina = numeric(horse.staminaRating, 75);
   const form = numeric(horse.formRating, 75);
   const health = numeric(horse.healthRating, 80);
 
-  return Number((speed * 0.4 + stamina * 0.3 + form * 0.2 + health * 0.1).toFixed(2));
+  return Number(
+    (speed * 0.4 + stamina * 0.25 + form * 0.2 + health * 0.15).toFixed(2)
+  );
 };
 
-export const ratingHandicapAdjustment = (rating) => {
-  if (rating >= 90) return 2;
-  if (rating >= 80) return 1;
-  if (rating >= 70) return 0;
-  return -1;
-};
+export const ratingHandicapAdjustment = (rating) =>
+  Number(((numeric(rating, 75) - 75) * 0.2).toFixed(2));
 
 export const computeRaceHandicap = (horse, jockeyProfile, race) => {
   const rating = horseOverallRating(horse);
   const base = numeric(horse?.baseHandicap, 0);
   const jockeyWeight = numeric(jockeyProfile?.weight, 0);
   const jockeyWeightAdjustment = jockeyWeight
-    ? Number(((58 - jockeyWeight) / 2).toFixed(1))
+    ? Number(((jockeyWeight - 54) * 0.1).toFixed(2))
     : 0;
   const rawHandicap =
     base + ratingHandicapAdjustment(rating) + jockeyWeightAdjustment;

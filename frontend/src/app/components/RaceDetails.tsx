@@ -15,6 +15,7 @@ import {
 } from 'react-router-dom';
 import {
   HorseRecord,
+  JockeyProfileRecord,
   RaceEntryRecord,
   RaceRecord,
   TournamentRecord,
@@ -32,9 +33,9 @@ const ratingForHorse = (horse?: HorseRecord) =>
     (
       Number(horse?.overallRating || 0) ||
       Number(horse?.speedRating || 75) * 0.4 +
-        Number(horse?.staminaRating || 75) * 0.3 +
+        Number(horse?.staminaRating || 75) * 0.25 +
         Number(horse?.formRating || 75) * 0.2 +
-        Number(horse?.healthRating || 80) * 0.1
+        Number(horse?.healthRating || 80) * 0.15
     ).toFixed(2)
   );
 
@@ -60,6 +61,7 @@ export default function RaceDetails() {
   const [races, setRaces] = useState<RaceRecord[]>([]);
   const [entries, setEntries] = useState<RaceEntryRecord[]>([]);
   const [horses, setHorses] = useState<HorseRecord[]>([]);
+  const [jockeyProfiles, setJockeyProfiles] = useState<JockeyProfileRecord[]>([]);
   const [maxRaceFieldSize, setMaxRaceFieldSize] = useState(10);
   const [selectedRaceId, setSelectedRaceId] = useState(
     raceId || sessionStorage.getItem('selectedRaceId') || ''
@@ -78,6 +80,7 @@ export default function RaceDetails() {
         setRaces(sortedRaces);
         setEntries(data.raceEntries || []);
         setHorses(data.horses || []);
+        setJockeyProfiles(data.jockeyProfiles || []);
         setMaxRaceFieldSize(data.limits?.maxRaceFieldSize || 10);
         setSelectedRaceId((current) => {
           const next = raceId || current;
@@ -133,6 +136,9 @@ export default function RaceDetails() {
 
   const rows = selectedEntries.map((entry, index) => {
     const horse = horses.find((item) => item.id === entry.horseId);
+    const jockeyProfile = jockeyProfiles.find(
+      (profile) => profile.userId === entry.jockeyUserId
+    );
     const rating = Number(entry.ratingSnapshot || 0) || ratingForHorse(horse);
 
     return {
@@ -145,6 +151,9 @@ export default function RaceDetails() {
       age: horse?.age || '-',
       weightKg: Number(entry.handicap || horse?.baseHandicap || 0).toFixed(1),
       jockey: entry.jockeyName || 'Jockey pending',
+      jockeyWeightKg: jockeyProfile?.weight
+        ? Number(jockeyProfile.weight).toFixed(1)
+        : '-',
       draw: entry.lane || 'TBD',
       owner: entry.ownerName || 'Owner pending',
       rating,
@@ -358,7 +367,7 @@ export default function RaceDetails() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1500px]">
+                <table className="w-full min-w-[1600px]">
                   <thead className="bg-[#071a2f] border-b border-white/10">
                     <tr>
                       <th className="py-4 px-3 text-left text-gray-400 uppercase text-xs">Horse No.</th>
@@ -367,6 +376,7 @@ export default function RaceDetails() {
                       <th className="py-4 px-3 text-left text-gray-400 uppercase text-xs">Horse</th>
                       <th className="py-4 px-3 text-center text-gray-400 uppercase text-xs">Wt. (kg)</th>
                       <th className="py-4 px-3 text-left text-gray-400 uppercase text-xs">Jockey</th>
+                      <th className="py-4 px-3 text-center text-gray-400 uppercase text-xs">Jockey Wt. (kg)</th>
                       <th className="py-4 px-3 text-center text-gray-400 uppercase text-xs">Draw</th>
                       <th className="py-4 px-3 text-left text-gray-400 uppercase text-xs">Owner</th>
                       <th className="py-4 px-3 text-center text-gray-400 uppercase text-xs">Rtg.</th>
@@ -418,6 +428,10 @@ export default function RaceDetails() {
 
                         <td className="py-5 px-3 text-gray-300 font-semibold">
                           {row.jockey}
+                        </td>
+
+                        <td className="py-5 px-3 text-center text-white font-semibold">
+                          {row.jockeyWeightKg === '-' ? '-' : `${row.jockeyWeightKg}kg`}
                         </td>
 
                         <td className="py-5 px-3 text-center">

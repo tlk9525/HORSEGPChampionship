@@ -32,6 +32,38 @@ interface AdminPanelProps {
   onNavigate: (page: string) => void;
 }
 
+const formatDateInput = (value: string) => {
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (isoMatch) {
+    return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+  }
+
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  const parts = [
+    digits.slice(0, 2),
+    digits.slice(2, 4),
+    digits.slice(4, 8),
+  ].filter(Boolean);
+
+  return parts.join('/');
+};
+
+const dateInputToIso = (value: string) => {
+  const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+
+  if (!match) return '';
+
+  const [, day, month, year] = match;
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  const isValidDate =
+    date.getUTCFullYear() === Number(year) &&
+    date.getUTCMonth() === Number(month) - 1 &&
+    date.getUTCDate() === Number(day);
+
+  return isValidDate ? `${year}-${month}-${day}` : '';
+};
+
 export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   const [pendingApprovals, setPendingApprovals] = useState<ApprovalItem[]>([]);
@@ -149,10 +181,17 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   const updateRace = () => {
     if (!editRace) return;
 
+    const raceDate = editRace.date ? dateInputToIso(editRace.date) : '';
+
+    if (editRace.date && !raceDate) {
+      setApprovalMessage('Race date must use dd/MM/yyyy format.');
+      return;
+    }
+
     setRaces((prev) =>
       prev.map((race) =>
         race.id === editRace.id
-          ? editRace
+          ? { ...editRace, date: raceDate }
           : race
       )
     );
@@ -184,13 +223,26 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   const handleCreateTournament = () => {
     setTournamentMessage('');
+    const startDate = dateInputToIso(tournamentForm.startDate);
+    const finalDate = tournamentForm.finalDate
+      ? dateInputToIso(tournamentForm.finalDate)
+      : '';
 
     if (!tournamentForm.name || !tournamentForm.startDate || !tournamentForm.location) {
       setTournamentMessage('Tournament name, start date and location are required.');
       return;
     }
 
-    createTournament(tournamentForm)
+    if (!startDate || (tournamentForm.finalDate && !finalDate)) {
+      setTournamentMessage('Dates must use dd/MM/yyyy format.');
+      return;
+    }
+
+    createTournament({
+      ...tournamentForm,
+      startDate,
+      finalDate,
+    })
       .then((result) => {
         setTournaments(result.tournaments);
         setTournamentMessage('Tournament created and registration opened.');
@@ -539,7 +591,10 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
                         <button
                           onClick={() =>
-                            setEditRace(race)
+                            setEditRace({
+                              ...race,
+                              date: formatDateInput(race.date || ''),
+                            })
                           }
                           className="flex items-center gap-2 px-4 py-2 bg-[#d4af37]/10 text-[#d4af37] rounded-xl hover:bg-[#d4af37] hover:text-white transition-all border border-[#d4af37]/30"
                         >
@@ -699,15 +754,18 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                 />
 
                 <input
-                  type="date"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Race date (dd/MM/yyyy)"
                   value={editRace.date}
                   onChange={(e) =>
                     setEditRace({
                       ...editRace,
                       date:
-                        e.target.value,
+                        formatDateInput(e.target.value),
                     })
                   }
+                  maxLength={10}
                   className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
                 />
 
@@ -795,26 +853,32 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                 />
 
                 <input
-                  type="date"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Start date (dd/MM/yyyy)"
                   value={tournamentForm.startDate}
                   onChange={(event) =>
                     setTournamentForm({
                       ...tournamentForm,
-                      startDate: event.target.value,
+                      startDate: formatDateInput(event.target.value),
                     })
                   }
+                  maxLength={10}
                   className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
                 />
 
                 <input
-                  type="date"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Final date (dd/MM/yyyy)"
                   value={tournamentForm.finalDate}
                   onChange={(event) =>
                     setTournamentForm({
                       ...tournamentForm,
-                      finalDate: event.target.value,
+                      finalDate: formatDateInput(event.target.value),
                     })
                   }
+                  maxLength={10}
                   className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
                 />
 

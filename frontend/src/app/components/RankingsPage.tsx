@@ -227,9 +227,6 @@ export default function RankingsPage() {
               </h1>
             </div>
 
-            <p className="text-gray-300 max-w-3xl">
-              Rankings are calculated from official race results. Scores are accumulated race by race, then sorted by score, wins, runner-up count, and total finish time.
-            </p>
           </div>
 
           <div className="min-w-full sm:min-w-[360px]">

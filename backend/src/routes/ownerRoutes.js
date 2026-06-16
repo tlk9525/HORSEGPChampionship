@@ -1,12 +1,17 @@
 import { randomUUID } from 'node:crypto';
-import { MAX_OWNER_HORSES } from '../config/constants.js';
+import {
+  MAX_OWNER_HORSES,
+  TOURNAMENT_REGISTRATION_STATUSES,
+} from '../config/constants.js';
 import { requireRole } from '../services/authService.js';
 import {
+  activeHorseTournamentRegistrations,
   activeTournament,
   defaultRaceForTournament,
   jockeyName,
   publicRaceEntries,
   publicTournamentJockeyProfiles,
+  tournamentRaces,
 } from '../services/domainService.js';
 import {
   createNotification,
@@ -67,17 +72,29 @@ export const handleOwnerRoutes = async ({
       return true;
     }
 
+    const activeRegistrations = activeHorseTournamentRegistrations(db, tournament.id);
+    const registeredHorseIds = new Set(
+      activeRegistrations.map((registration) => registration.horseId)
+    );
+    const registeredJockeyIds = new Set(
+      activeRegistrations.map((registration) => registration.jockeyUserId)
+    );
+
     send(res, 200, {
       tournament,
       horses: db.horses.filter(
-        (horse) => horse.ownerUserId === user.id && horse.status === 'approved'
+        (horse) =>
+          horse.ownerUserId === user.id &&
+          horse.status === 'approved' &&
+          !registeredHorseIds.has(horse.id)
       ),
-      races: db.races.filter(
-        (race) =>
-          race.tournamentId === tournament.id &&
-          race.status === 'registration-open'
+      races: tournamentRaces(db, tournament.id),
+      jockeyProfiles: publicTournamentJockeyProfiles(db, tournament.id).filter(
+        (profile) => !registeredJockeyIds.has(profile.userId)
       ),
-      jockeyProfiles: publicTournamentJockeyProfiles(db, tournament.id),
+      horseTournamentRegistrations: activeRegistrations.filter(
+        (registration) => registration.ownerUserId === user.id
+      ),
       raceEntries: publicRaceEntries(db).filter((entry) => {
         const horse = db.horses.find((item) => item.id === entry.horseId);
         return horse?.ownerUserId === user.id;
@@ -124,7 +141,6 @@ export const handleOwnerRoutes = async ({
       staminaRating,
       formRating,
       healthRating,
-      overallRating,
       healthStatus,
       profileNotes,
       veterinaryCertificateUrl,
@@ -151,9 +167,12 @@ export const handleOwnerRoutes = async ({
       staminaRating: numeric(staminaRating, 75),
       formRating: numeric(formRating, 75),
       healthRating: numeric(healthRating, 80),
-      overallRating:
-        numeric(overallRating, 0) ||
-        horseOverallRating({ speedRating, staminaRating, formRating, healthRating }),
+      overallRating: horseOverallRating({
+        speedRating,
+        staminaRating,
+        formRating,
+        healthRating,
+      }),
       healthStatus: healthStatus || '',
       profileNotes: profileNotes || '',
       ownerUserId: user.id,
@@ -221,7 +240,6 @@ export const handleOwnerRoutes = async ({
       staminaRating,
       formRating,
       healthRating,
-      overallRating,
       healthStatus,
       profileNotes,
       veterinaryCertificateUrl,
@@ -245,14 +263,12 @@ export const handleOwnerRoutes = async ({
     horse.staminaRating = numeric(staminaRating, 75);
     horse.formRating = numeric(formRating, 75);
     horse.healthRating = numeric(healthRating, 80);
-    horse.overallRating =
-      numeric(overallRating, 0) ||
-      horseOverallRating({
-        speedRating,
-        staminaRating,
-        formRating,
-        healthRating,
-      });
+    horse.overallRating = horseOverallRating({
+      speedRating,
+      staminaRating,
+      formRating,
+      healthRating,
+    });
     horse.healthStatus = healthStatus || '';
     horse.profileNotes = profileNotes || '';
     horse.veterinaryCertificateUrl = veterinaryCertificateUrl || '';
@@ -363,18 +379,17 @@ export const handleOwnerRoutes = async ({
       return true;
     }
 
-    const { tournamentId, raceId, horseId, jockeyUserId, notes } = await readBody(req);
+    const { tournamentId, horseId, jockeyUserId, notes } = await readBody(req);
+    const tournament = db.tournaments.find(
+      (item) =>
+        item.id === tournamentId &&
+        TOURNAMENT_REGISTRATION_STATUSES.includes(item.status)
+    );
     const horse = db.horses.find(
       (item) =>
         item.id === horseId &&
         item.ownerUserId === user.id &&
         item.status === 'approved'
-    );
-    const race = db.races.find(
-      (item) =>
-        item.id === raceId &&
-        item.tournamentId === tournamentId &&
-        item.status === 'registration-open'
     );
     const jockeyApproved = (db.jockeyTournamentRegistrations || []).some(
       (registration) =>
@@ -388,8 +403,8 @@ export const handleOwnerRoutes = async ({
       return true;
     }
 
-    if (!race) {
-      send(res, 400, { message: 'Race registration is not open' });
+    if (!tournament) {
+      send(res, 400, { message: 'Tournament registration is not open' });
       return true;
     }
 
@@ -400,79 +415,88 @@ export const handleOwnerRoutes = async ({
 
     db.raceEntries = db.raceEntries || [];
     db.jockeyInvitations = db.jockeyInvitations || [];
+    db.horseTournamentRegistrations = db.horseTournamentRegistrations || [];
 
-    const duplicateEntry = db.raceEntries.some(
-      (entry) =>
-        entry.raceId === race.id &&
-        entry.horseId === horse.id &&
-        entry.status !== 'rejected'
+    const activeRegistrations = activeHorseTournamentRegistrations(db, tournamentId);
+    const duplicateRegistration = activeRegistrations.some(
+      (registration) => registration.horseId === horse.id
     );
     const duplicateInvitation = db.jockeyInvitations.some(
       (invitation) =>
-        invitation.raceId === race.id &&
+        invitation.tournamentId === tournamentId &&
         invitation.horseId === horse.id &&
         !['rejected', 'cancelled'].includes(invitation.status) &&
         invitation.adminStatus !== 'rejected'
     );
 
-    if (duplicateEntry || duplicateInvitation) {
+    if (duplicateRegistration || duplicateInvitation) {
       send(res, 409, {
-        message: 'This horse already has a pending or approved registration for this race',
+        message: 'This horse already has a pending or approved registration for this tournament',
       });
       return true;
     }
 
-    const jockeyAlreadyAssignedToEntry = db.raceEntries.some(
-      (entry) =>
-        entry.raceId === race.id &&
-        entry.jockeyUserId === jockeyUserId &&
-        entry.status !== 'rejected'
+    const jockeyAlreadyRegistered = activeRegistrations.some(
+      (registration) => registration.jockeyUserId === jockeyUserId
     );
     const jockeyAlreadyInvited = db.jockeyInvitations.some(
       (invitation) =>
-        invitation.raceId === race.id &&
+        invitation.tournamentId === tournamentId &&
         invitation.jockeyUserId === jockeyUserId &&
         !['rejected', 'cancelled'].includes(invitation.status) &&
         invitation.adminStatus !== 'rejected'
     );
 
-    if (jockeyAlreadyAssignedToEntry || jockeyAlreadyInvited) {
+    if (jockeyAlreadyRegistered || jockeyAlreadyInvited) {
       send(res, 409, {
-        message: 'This jockey already has a pending or approved assignment in the same race',
+        message: 'This jockey already has a pending or approved assignment in the same tournament',
       });
       return true;
     }
 
+    const createdAt = new Date().toISOString();
     const invitation = {
       id: randomUUID(),
       horseId: horse.id,
       ownerUserId: user.id,
       jockeyUserId,
       tournamentId,
-      raceId: race.id,
+      raceId: null,
       status: 'pending',
       adminStatus: null,
       notes: notes || '',
-      createdAt: new Date().toISOString(),
+      createdAt,
       respondedAt: null,
     };
 
     db.jockeyInvitations.unshift(invitation);
+    db.horseTournamentRegistrations.unshift({
+      id: randomUUID(),
+      tournamentId,
+      horseId: horse.id,
+      ownerUserId: user.id,
+      jockeyUserId,
+      invitationId: invitation.id,
+      status: 'pending-jockey',
+      notes: notes || '',
+      createdAt,
+      reviewedAt: null,
+    });
     horse.jockeyConfirmation = 'pending-jockey';
     horse.updatedAt = new Date().toISOString();
 
     createNotification(
       db,
       jockeyUserId,
-      'Race participation request',
-      `${user.name} invited you to ride ${horse.name} in ${race.name}. Accept the request before Admin can approve the race entry.`
+      'Tournament riding request',
+      `${user.name} invited you to ride ${horse.name} for ${tournament.name}. This pair will run every race in the tournament after Admin approval.`
     );
 
     createNotification(
       db,
       user.id,
       'Jockey request sent',
-      `${horse.name} is waiting for ${jockeyName(db, jockeyUserId)} to accept ${race.name}. Admin approval starts after the jockey accepts.`
+      `${horse.name} is waiting for ${jockeyName(db, jockeyUserId)} to accept ${tournament.name}. Admin approval starts after the jockey accepts.`
     );
 
     await writeDb(db);

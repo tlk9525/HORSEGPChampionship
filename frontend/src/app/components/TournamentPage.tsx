@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import {
   AuthUser,
+  HorseRecord,
+  HorseTournamentRegistration,
   JockeyTournamentRegistration,
   RaceEntryRecord,
   RaceRecord,
@@ -36,9 +38,12 @@ export default function TournamentPage({
   onNavigate,
 }: TournamentPageProps) {
   const [tournaments, setTournaments] = useState<TournamentRecord[]>([]);
+  const [horses, setHorses] = useState<HorseRecord[]>([]);
   const [races, setRaces] = useState<RaceRecord[]>([]);
   const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
   const [registrations, setRegistrations] = useState<JockeyTournamentRegistration[]>([]);
+  const [horseTournamentRegistrations, setHorseTournamentRegistrations] =
+    useState<HorseTournamentRegistration[]>([]);
   const [maxRaceFieldSize, setMaxRaceFieldSize] = useState(10);
   const [selectedTournamentId, setSelectedTournamentId] = useState(
     sessionStorage.getItem('selectedTournamentId') || ''
@@ -51,9 +56,11 @@ export default function TournamentPage({
     getBootstrap()
       .then((data) => {
         setTournaments(data.tournaments);
+        setHorses(data.horses || []);
         setRaces(data.races);
         setRaceEntries(data.raceEntries || []);
         setRegistrations(data.jockeyTournamentRegistrations || []);
+        setHorseTournamentRegistrations(data.horseTournamentRegistrations || []);
         setMaxRaceFieldSize(data.limits?.maxRaceFieldSize || 10);
         setSelectedTournamentId((current) => {
           const stored = sessionStorage.getItem('selectedTournamentId');
@@ -224,9 +231,35 @@ export default function TournamentPage({
             ).length;
             const jockeyRegistration = jockeyRegistrationByTournament.get(tournament.id);
             const isCompletedTournament = tournament.status === 'completed';
-            const shouldShowViewRaces =
-              isCompletedTournament || currentUser?.role === 'spectator';
             const hasTournamentRaces = tournamentRaces.length > 0;
+            const activeHorseRegistrations = horseTournamentRegistrations.filter(
+              (registration) =>
+                registration.tournamentId === tournament.id &&
+                !['rejected', 'cancelled'].includes(registration.status)
+            );
+            const registeredHorseIds = new Set(
+              activeHorseRegistrations.map((registration) => registration.horseId)
+            );
+            const registeredJockeyIds = new Set(
+              activeHorseRegistrations.map((registration) => registration.jockeyUserId)
+            );
+            const availableOwnerHorseCount = horses.filter(
+              (horse) =>
+                horse.ownerUserId === currentUser?.id &&
+                horse.status === 'approved' &&
+                !registeredHorseIds.has(horse.id)
+            ).length;
+            const availableApprovedJockeyCount = registrations.filter(
+              (registration) =>
+                registration.tournamentId === tournament.id &&
+                registration.status === 'approved' &&
+                !registeredJockeyIds.has(registration.jockeyUserId)
+            ).length;
+            const canRegisterTournamentHorse =
+              currentUser?.role === 'owner' &&
+              !isCompletedTournament &&
+              availableOwnerHorseCount > 0 &&
+              availableApprovedJockeyCount > 0;
 
             return (
               <div
@@ -306,18 +339,16 @@ export default function TournamentPage({
                       View Details
                     </button>
 
-                    {shouldShowViewRaces && (
-                      <button
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openTournamentRaces(tournament.id);
-                        }}
-                        disabled={!hasTournamentRaces}
-                        className="py-4 bg-[#d4af37] hover:bg-[#b8892d] disabled:bg-white/10 disabled:text-gray-500 disabled:cursor-not-allowed text-white rounded-xl transition-all font-bold"
-                      >
-                        View Races
-                      </button>
-                    )}
+                    <button
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openTournamentRaces(tournament.id);
+                      }}
+                      disabled={!hasTournamentRaces}
+                      className="py-4 bg-[#d4af37] hover:bg-[#b8892d] disabled:bg-white/10 disabled:text-gray-500 disabled:cursor-not-allowed text-white rounded-xl transition-all font-bold"
+                    >
+                      View Races
+                    </button>
 
                     {!isCompletedTournament && currentUser?.role === 'jockey' && (
                       <button
@@ -335,12 +366,12 @@ export default function TournamentPage({
                       </button>
                     )}
 
-                    {!isCompletedTournament && currentUser?.role === 'owner' && (
+                    {canRegisterTournamentHorse && (
                       <button
                         onClick={(event) => {
                           event.stopPropagation();
                           selectTournament(tournament.id);
-                          onNavigate('register-horse');
+                          onNavigate('tournament-registration');
                         }}
                         className="py-4 bg-[#d4af37] hover:bg-[#b8892d] text-white rounded-xl transition-all font-bold"
                       >
