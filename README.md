@@ -73,9 +73,12 @@ Horse Racing Tournament Website/
 │       │   ├── services/
 │       │   │   └── api.ts           # Tất cả hàm gọi API tới backend
 │       │   └── utils/
-│       │       ├── domain.ts        # Hàm tiện ích domain
-│       │       └── messageTone.ts   # Phân loại điệu cảm thông báo
-│       └── styles/                  # CSS toàn cục
+│       │       ├── domain.ts        # Hàm tiện ích chuyển đổi status label
+│       │       └── messageTone.ts   # Phân loại điệu cảm thông báo UI
+│       └── styles/
+│           ├── index.css            # Entry point CSS (import Tailwind)
+│           ├── tailwind.css         # Cấu hình Tailwind v4
+│           └── theme.css            # Design tokens màu sắc chủ đề
 │
 ├── backend/                         # API server (Node.js)
 │   └── src/
@@ -84,7 +87,7 @@ Horse Racing Tournament Website/
 │       ├── config/
 │       │   └── constants.js         # Hằng số cấu hình hệ thống
 │       ├── http/
-│       │   └── respond.js           # Hàm tiện ích gửi HTTP response
+│       │   └── respond.js           # Hàm tiện ích gửi HTTP response & đọc body
 │       ├── routes/
 │       │   ├── adminRoutes.js       # Routes quản trị viên
 │       │   ├── authRoutes.js        # Đăng nhập, đăng ký, đăng xuất
@@ -107,10 +110,21 @@ Horse Racing Tournament Website/
 │       └── migrations/
 │           └── 001_upgrade_existing_database.sql
 │
+├── docs/                            # Tài liệu thiết kế hệ thống
+│   ├── erd.drawio                   # Sơ đồ ERD
+│   ├── STD.drawio                   # State transition diagram
+│   ├── race-state-diagram.drawio    # Sơ đồ trạng thái cuộc đua
+│   ├── tournament-state-diagram.drawio
+│   ├── schema-erd.md                # Mô tả ERD dạng markdown
+│   ├── horse-racing-erd-explanation.xlsx
+│   └── horse-racing-status-reference.docx
+│
 ├── scripts/
 │   └── run-postgres-file.mjs        # Script chạy file SQL lên PostgreSQL
 │
+├── ATTRIBUTIONS.md                  # Ghi nhận bản quyền thư viện bên thứ ba
 ├── .env.example                     # Mẫu cấu hình biến môi trường
+├── .gitignore
 └── package.json
 ```
 
