@@ -1,7 +1,7 @@
 
   # Horse Racing Tournament Website
 
-  This is a code bundle for Horse Racing Tournament Website. The original project is available at https://www.figma.com/design/VS4yo8hfGX3xA9xB8KAJCX/Horse-Racing-Tournament-Website.
+
 
   ## Project structure
 
