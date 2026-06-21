@@ -564,7 +564,7 @@ export const markRaceEntryReadiness = async (
   readiness: 'ready' | 'absent'
 ) =>
   request<{ entry: RaceEntryRecord; entries: RaceEntryRecord[] }>(
-    `/referee/race-entries/${entryId}/readiness/${readiness}`,
+    `/referee/race-entries/${encodeURIComponent(entryId)}/readiness/${readiness}`,
     { method: 'POST' }
   );
 

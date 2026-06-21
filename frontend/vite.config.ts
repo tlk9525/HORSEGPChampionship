@@ -17,6 +17,7 @@ function figmaAssetResolver() {
 
 export default defineConfig({
   root: __dirname,
+  envDir: path.resolve(__dirname, '..'),
 
   plugins: [
     figmaAssetResolver(),
