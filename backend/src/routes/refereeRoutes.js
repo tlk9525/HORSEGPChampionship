@@ -185,7 +185,10 @@ export const createRefereeRoutes = (getDb, writeDb) => {
 
     await writeDb(db);
     broadcastRaceUpdate(race.id);
-    return c.json({ race });
+    return c.json({
+      race,
+      entries: publicRaceEntries(db).filter((item) => item.raceId === race.id),
+    });
   });
 
   // Đánh dấu một thí sinh là sẵn sàng thi đấu hoặc vắng mặt

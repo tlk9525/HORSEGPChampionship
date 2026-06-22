@@ -227,7 +227,19 @@ export default function LiveRace() {
     if (!selectedRace) return;
 
     submitRaceResults(selectedRace.id)
-      .then(() => {
+      .then(({ race, entries: updatedEntries }) => {
+        setRaces((current) =>
+          current.map((item) => (item.id === race.id ? race : item))
+        );
+        setEntries((current) => {
+          const updatedEntryIds = new Set(updatedEntries.map((entry) => entry.id));
+
+          return [
+            ...current.filter((entry) => !updatedEntryIds.has(entry.id)),
+            ...updatedEntries,
+          ];
+        });
+        setResultDrafts({});
         setMessage('Official results published successfully.');
         loadRaceOps();
       })
