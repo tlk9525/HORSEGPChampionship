@@ -209,11 +209,17 @@ export default function LiveRace() {
   };
 
   const submitResult = (entry: RaceEntryRecord) => {
-    const draft = resultDrafts[entry.id] || {
+    const rawDraft = {
       position: entry.position ? String(entry.position) : '',
-      finishTime: '',
-      notes: '',
-      violationNotes: '',
+      finishTime: entry.finishTime || '',
+      notes: entry.notes || '',
+      violationNotes: entry.violationNotes || '',
+      ...resultDrafts[entry.id],
+    };
+    const draft = {
+      ...rawDraft,
+      position: rawDraft.position || (entry.position ? String(entry.position) : ''),
+      finishTime: rawDraft.finishTime || entry.finishTime || '',
     };
 
     if (!draft.position) {
@@ -461,7 +467,7 @@ export default function LiveRace() {
 
                             <input
                               placeholder="Finish time"
-                              value={resultDrafts[entry.id]?.finishTime || ''}
+                              value={resultDrafts[entry.id]?.finishTime || entry.finishTime || ''}
                               onChange={(event) =>
                                 updateDraft(entry.id, { finishTime: event.target.value })
                               }
@@ -470,7 +476,7 @@ export default function LiveRace() {
 
                             <input
                               placeholder="Notes"
-                              value={resultDrafts[entry.id]?.notes || ''}
+                              value={resultDrafts[entry.id]?.notes || entry.notes || ''}
                               onChange={(event) =>
                                 updateDraft(entry.id, { notes: event.target.value })
                               }
@@ -479,7 +485,7 @@ export default function LiveRace() {
 
                             <input
                               placeholder="Violations"
-                              value={resultDrafts[entry.id]?.violationNotes || ''}
+                              value={resultDrafts[entry.id]?.violationNotes || entry.violationNotes || ''}
                               onChange={(event) =>
                                 updateDraft(entry.id, { violationNotes: event.target.value })
                               }
