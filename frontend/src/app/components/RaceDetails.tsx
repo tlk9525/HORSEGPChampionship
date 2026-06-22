@@ -296,7 +296,6 @@ export default function RaceDetails() {
               <div className="flex flex-wrap items-center gap-5 text-sm text-gray-400">
                 <span>{selectedRace.distance || '-'} {selectedRace.surface || ''}</span>
                 <span>Track condition not recorded</span>
-                <span>{selectedRace.round || selectedRace.raceClass || 'Round pending'}</span>
                 <span>{selectedEntries.length}/{maxRaceFieldSize} Horses</span>
               </div>
 

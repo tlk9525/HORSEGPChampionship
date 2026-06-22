@@ -257,7 +257,7 @@ export const createAdminRoutes = (getDb, writeDb) => {
 
     const race = {
       id: randomUUID(), tournamentId: tournament.id, raceNumber: raceNumber || '',
-      name, round: round || 'Qualifier', date, time, venue,
+      name, round: round || '', date, time, venue,
       distance: `${distanceMeters}m`, surface, raceClass,
       handicapMin: minHandicap, handicapMax: maxHandicap,
       totalPrize: Number(totalPrize) || 0, status: 'registration-open',
