@@ -18,7 +18,12 @@ const finishTimeMs = (value) => {
   return Number(minutes) * 60000 + Number(seconds) * 1000 + Number(fraction.padEnd(3, '0'));
 };
 
-export const createRefereeRoutes = (getDb, writeDb, persistOfficialResults) => {
+export const createRefereeRoutes = (
+  getDb,
+  writeDb,
+  persistOfficialResults,
+  persistEntryResult
+) => {
   const app = new Hono();
 
   // Chỉ trọng tài được phân công mới có quyền điều hành và công bố kết quả.
@@ -305,6 +310,8 @@ export const createRefereeRoutes = (getDb, writeDb, persistOfficialResults) => {
     entry.violationNotes = violationNotes || '';
     entry.resultStatus = 'draft';
 
+    let reportToPersist = null;
+
     if (String(violationNotes || '').trim()) {
       db.refereeReports = db.refereeReports || [];
       const existingReport = db.refereeReports.find(
@@ -314,8 +321,10 @@ export const createRefereeRoutes = (getDb, writeDb, persistOfficialResults) => {
         existingReport.description = violationNotes;
         existingReport.violation = violationNotes;
         existingReport.status = 'submitted';
+        existingReport.reviewedAt = null;
+        reportToPersist = existingReport;
       } else {
-        db.refereeReports.unshift({
+        reportToPersist = {
           id: randomUUID(),
           raceId: race.id,
           raceEntryId: entry.id,
@@ -326,11 +335,16 @@ export const createRefereeRoutes = (getDb, writeDb, persistOfficialResults) => {
           status: 'submitted',
           createdAt: new Date().toISOString(),
           reviewedAt: null,
-        });
+        };
+        db.refereeReports.unshift(reportToPersist);
       }
     }
 
-    await writeDb(db);
+    if (persistEntryResult) {
+      await persistEntryResult(entry, reportToPersist);
+    } else {
+      await writeDb(db);
+    }
     broadcastRaceUpdate(race.id);
     return c.json({
       entry,

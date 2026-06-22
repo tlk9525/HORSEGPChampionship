@@ -32,6 +32,7 @@ export default function LiveRace() {
   const [resultDrafts, setResultDrafts] = useState<
     Record<string, { position: string; finishTime: string; notes: string; violationNotes: string }>
   >({});
+  const [recordingEntryId, setRecordingEntryId] = useState('');
   const loadRequestIdRef = useRef(0);
 
   const selectedRace = useMemo(
@@ -204,6 +205,9 @@ export default function LiveRace() {
       return;
     }
 
+    setRecordingEntryId(entry.id);
+    setMessage(`Recording result for ${entry.horseName}...`);
+
     recordRaceResult(entry.id, draft)
       .then(() => {
         setMessage(`Result recorded for ${entry.horseName}.`);
@@ -211,7 +215,8 @@ export default function LiveRace() {
       })
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : 'Unable to record result')
-      );
+      )
+      .finally(() => setRecordingEntryId(''));
   };
 
   const markReadiness = (entry: RaceEntryRecord, readiness: 'ready' | 'absent') => {
@@ -458,9 +463,10 @@ export default function LiveRace() {
 
                             <button
                               onClick={() => submitResult(entry)}
-                              className="col-span-2 py-3 bg-[#d4af37] hover:bg-[#b8892d] rounded-xl text-white font-bold"
+                              disabled={recordingEntryId === entry.id}
+                              className="col-span-2 py-3 bg-[#d4af37] hover:bg-[#b8892d] disabled:cursor-not-allowed disabled:opacity-60 rounded-xl text-white font-bold"
                             >
-                              Record Result
+                              {recordingEntryId === entry.id ? 'Recording...' : 'Record Result'}
                             </button>
                           </div>
                         )}

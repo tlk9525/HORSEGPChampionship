@@ -714,3 +714,73 @@ export const persistOfficialRaceResults = async (raceId, updatedAt = nowIso()) =
     client.release();
   }
 };
+
+// Cập nhật một kết quả race entry bằng row-level update để tránh writeDb ghi lại toàn bộ database.
+export const persistRaceEntryResult = async (entry, report = null) => {
+  await ensureRuntimeSchema();
+
+  const client = await getPool().connect();
+
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE "raceEntries"
+       SET "position" = $2,
+           "finishTime" = $3,
+           "notes" = $4,
+           "violationNotes" = $5,
+           "resultStatus" = $6
+       WHERE "id" = $1`,
+      [
+        entry.id,
+        entry.position ?? null,
+        entry.finishTime || '',
+        entry.notes || '',
+        entry.violationNotes || '',
+        entry.resultStatus || 'draft',
+      ]
+    );
+
+    if (report) {
+      await client.query(
+        `INSERT INTO "refereeReports" (
+          "id",
+          "raceId",
+          "raceEntryId",
+          "refereeUserId",
+          "reportType",
+          "description",
+          "violation",
+          "status",
+          "createdAt",
+          "reviewedAt"
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ON CONFLICT ("id") DO UPDATE
+        SET "description" = EXCLUDED."description",
+            "violation" = EXCLUDED."violation",
+            "status" = EXCLUDED."status",
+            "reviewedAt" = EXCLUDED."reviewedAt"`,
+        [
+          report.id,
+          report.raceId,
+          report.raceEntryId || null,
+          report.refereeUserId,
+          report.reportType || 'violation',
+          report.description || '',
+          report.violation || '',
+          report.status || 'submitted',
+          report.createdAt || nowIso(),
+          report.reviewedAt || null,
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};

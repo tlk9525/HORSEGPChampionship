@@ -2,7 +2,12 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { API_HOST, API_PORT, FRONTEND_URL } from './config/constants.js';
-import { persistOfficialRaceResults, readDb, writeDb } from './sqlDb.js';
+import {
+  persistOfficialRaceResults,
+  persistRaceEntryResult,
+  readDb,
+  writeDb,
+} from './sqlDb.js';
 import { createAdminRoutes } from './routes/adminRoutes.js';
 import { createAuthRoutes } from './routes/authRoutes.js';
 import { createJockeyRoutes } from './routes/jockeyRoutes.js';
@@ -32,7 +37,10 @@ app.route('/api', createAuthRoutes(getDb, writeDb));
 app.route('/api/owner', createOwnerRoutes(getDb, writeDb));
 app.route('/api/jockey', createJockeyRoutes(getDb, writeDb));
 app.route('/api/admin', createAdminRoutes(getDb, writeDb));
-app.route('/api/referee', createRefereeRoutes(getDb, writeDb, persistOfficialRaceResults));
+app.route(
+  '/api/referee',
+  createRefereeRoutes(getDb, writeDb, persistOfficialRaceResults, persistRaceEntryResult)
+);
 app.route('/api/notifications', createNotificationRoutes(getDb, writeDb));
 
 // Bắt đầu lắng nghe kết nối tại host và port đã cấu hình
