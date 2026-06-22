@@ -48,16 +48,6 @@ export default function LiveRace() {
     (_, index) => String(index + 1)
   );
 
-  const isPositionUsedByOtherEntry = (position: string, entryId: string) =>
-    selectedEntries.some((entry) => {
-      if (entry.id === entryId) return false;
-
-      const selectedPosition =
-        resultDrafts[entry.id]?.position || (entry.position ? String(entry.position) : '');
-
-      return selectedPosition === position;
-    });
-
   const readyEntries = selectedEntries.filter(
     (entry) => entry.preRaceStatus === 'ready' && !entry.disqualified
   );
@@ -192,17 +182,17 @@ export default function LiveRace() {
   };
 
   const updateDraft = (
-    entryId: string,
+    entry: RaceEntryRecord,
     patch: Partial<{ position: string; finishTime: string; notes: string; violationNotes: string }>
   ) => {
     setResultDrafts((current) => ({
       ...current,
-      [entryId]: {
-        position: '',
-        finishTime: '',
-        notes: '',
-        violationNotes: '',
-        ...current[entryId],
+      [entry.id]: {
+        position: entry.position ? String(entry.position) : '',
+        finishTime: entry.finishTime || '',
+        notes: entry.notes || '',
+        violationNotes: entry.violationNotes || '',
+        ...current[entry.id],
         ...patch,
       },
     }));
@@ -449,7 +439,7 @@ export default function LiveRace() {
                                 (entry.position ? String(entry.position) : '')
                               }
                               onChange={(event) =>
-                                updateDraft(entry.id, { position: event.target.value })
+                                updateDraft(entry, { position: event.target.value })
                               }
                               className="bg-[#111] border border-white/10 rounded-xl px-3 py-2 text-white"
                             >
@@ -458,7 +448,6 @@ export default function LiveRace() {
                                 <option
                                   key={position}
                                   value={position}
-                                  disabled={isPositionUsedByOtherEntry(position, entry.id)}
                                 >
                                   Position {position}
                                 </option>
@@ -469,7 +458,7 @@ export default function LiveRace() {
                               placeholder="Finish time"
                               value={resultDrafts[entry.id]?.finishTime || entry.finishTime || ''}
                               onChange={(event) =>
-                                updateDraft(entry.id, { finishTime: event.target.value })
+                                updateDraft(entry, { finishTime: event.target.value })
                               }
                               className="bg-[#111] border border-white/10 rounded-xl px-3 py-2 text-white"
                             />
@@ -478,7 +467,7 @@ export default function LiveRace() {
                               placeholder="Notes"
                               value={resultDrafts[entry.id]?.notes || entry.notes || ''}
                               onChange={(event) =>
-                                updateDraft(entry.id, { notes: event.target.value })
+                                updateDraft(entry, { notes: event.target.value })
                               }
                               className="bg-[#111] border border-white/10 rounded-xl px-3 py-2 text-white"
                             />
@@ -487,7 +476,7 @@ export default function LiveRace() {
                               placeholder="Violations"
                               value={resultDrafts[entry.id]?.violationNotes || entry.violationNotes || ''}
                               onChange={(event) =>
-                                updateDraft(entry.id, { violationNotes: event.target.value })
+                                updateDraft(entry, { violationNotes: event.target.value })
                               }
                               className="bg-[#111] border border-white/10 rounded-xl px-3 py-2 text-white"
                             />
