@@ -22,7 +22,9 @@ export const createRefereeRoutes = (
   getDb,
   writeDb,
   persistOfficialResults,
-  persistEntryResult
+  persistEntryResult,
+  persistEntryReadiness,
+  persistRaceAction
 ) => {
   const app = new Hono();
 
@@ -52,6 +54,15 @@ export const createRefereeRoutes = (
       return c.json({ message: 'Assigned race not found' }, 404);
     }
 
+    const existingNotificationIds = new Set(
+      (db.notifications || []).map((notification) => notification.id)
+    );
+    const existingActionLogIds = new Set(
+      (db.raceActionLogs || []).map((log) => log.id)
+    );
+    let affectedEntries = [];
+    let affectedTournament = null;
+
     if (action === 'start') {
       if (race.status !== 'published') {
         return c.json({ message: 'Race must be published before it can start' }, 400);
@@ -64,6 +75,7 @@ export const createRefereeRoutes = (
       const raceEntries = (db.raceEntries || []).filter(
         (entry) => entry.raceId === race.id && entry.status === 'approved'
       );
+      affectedEntries = raceEntries;
       const readyEntries = raceEntries.filter(
         (entry) => entry.preRaceStatus === 'ready' && !entry.disqualified
       );
@@ -83,6 +95,7 @@ export const createRefereeRoutes = (
       race.updatedAt = new Date().toISOString();
       raceEntries.forEach((entry) => { if (entry.preRaceStatus === 'absent') entry.disqualified = true; });
       const tournament = db.tournaments.find((item) => item.id === race.tournamentId);
+      affectedTournament = tournament || null;
       if (tournament && tournament.status !== 'completed') {
         tournament.status = 'active';
         tournament.updatedAt = new Date().toISOString();
@@ -111,6 +124,7 @@ export const createRefereeRoutes = (
       const raceEntries = (db.raceEntries || []).filter(
         (entry) => entry.raceId === race.id && entry.status === 'approved'
       );
+      affectedEntries = raceEntries;
       const competingEntries = raceEntries.filter(
         (entry) => entry.preRaceStatus !== 'absent' && !entry.disqualified
       );
@@ -175,6 +189,7 @@ export const createRefereeRoutes = (
       });
 
       const tournament = db.tournaments.find((item) => item.id === race.tournamentId);
+      affectedTournament = tournament || null;
       const racesInTournament = (db.races || []).filter(
         (item) => item.tournamentId === race.tournamentId
       );
@@ -188,8 +203,22 @@ export const createRefereeRoutes = (
       }
     }
 
-    await writeDb(db);
-    if (action === 'submit-results' && persistOfficialResults) {
+    if (persistRaceAction) {
+      await persistRaceAction({
+        race,
+        raceEntries: affectedEntries,
+        tournament: affectedTournament,
+        notifications: (db.notifications || []).filter(
+          (notification) => !existingNotificationIds.has(notification.id)
+        ),
+        actionLogs: (db.raceActionLogs || []).filter(
+          (log) => !existingActionLogIds.has(log.id)
+        ),
+      });
+    } else {
+      await writeDb(db);
+    }
+    if (action === 'submit-results' && persistOfficialResults && !persistRaceAction) {
       await persistOfficialResults(race.id, race.updatedAt);
     }
     broadcastRaceUpdate(race.id);
@@ -246,7 +275,11 @@ export const createRefereeRoutes = (
     entry.preRaceStatus = readiness === 'ready' ? 'ready' : 'absent';
     entry.disqualified = readiness === 'absent';
 
-    await writeDb(db);
+    if (persistEntryReadiness) {
+      await persistEntryReadiness(entry);
+    } else {
+      await writeDb(db);
+    }
     broadcastRaceUpdate(race.id);
     return c.json({
       entry,

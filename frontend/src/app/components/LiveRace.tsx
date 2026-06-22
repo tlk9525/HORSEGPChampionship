@@ -33,6 +33,9 @@ export default function LiveRace() {
     Record<string, { position: string; finishTime: string; notes: string; violationNotes: string }>
   >({});
   const [recordingEntryId, setRecordingEntryId] = useState('');
+  const [readinessEntryId, setReadinessEntryId] = useState('');
+  const [startingRace, setStartingRace] = useState(false);
+  const [publishingResults, setPublishingResults] = useState(false);
   const loadRequestIdRef = useRef(0);
 
   const selectedRace = useMemo(
@@ -44,8 +47,12 @@ export default function LiveRace() {
     (entry) => entry.raceId === selectedRace?.id
   );
 
+  const competingEntries = selectedEntries.filter(
+    (entry) => entry.preRaceStatus !== 'absent' && !entry.disqualified
+  );
+
   const positionOptions = Array.from(
-    { length: selectedEntries.length },
+    { length: competingEntries.length },
     (_, index) => String(index + 1)
   );
 
@@ -117,7 +124,7 @@ export default function LiveRace() {
 
   useEffect(() => {
     loadRaceOps();
-    const timer = window.setInterval(loadRaceOps, 3000);
+    const timer = window.setInterval(loadRaceOps, 15000);
 
     return () => window.clearInterval(timer);
   }, [raceId]);
@@ -154,6 +161,9 @@ export default function LiveRace() {
       return;
     }
 
+    setStartingRace(true);
+    setMessage('Starting race...');
+
     startRace(selectedRace.id)
       .then(() => {
         setMessage('Race started. Status is now In Progress.');
@@ -161,7 +171,8 @@ export default function LiveRace() {
       })
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : 'Unable to start race')
-      );
+      )
+      .finally(() => setStartingRace(false));
   };
 
   const updateDraft = (
@@ -191,8 +202,8 @@ export default function LiveRace() {
     };
     const draft = {
       ...rawDraft,
-      position: rawDraft.position || (entry.position ? String(entry.position) : ''),
-      finishTime: rawDraft.finishTime || entry.finishTime || '',
+      position: rawDraft.position,
+      finishTime: rawDraft.finishTime,
     };
 
     if (!draft.position) {
@@ -220,6 +231,9 @@ export default function LiveRace() {
   };
 
   const markReadiness = (entry: RaceEntryRecord, readiness: 'ready' | 'absent') => {
+    setReadinessEntryId(entry.id);
+    setMessage(`Marking ${entry.horseName} ${readiness}...`);
+
     markRaceEntryReadiness(entry.id, readiness)
       .then(() => {
         setMessage(`${entry.horseName} marked ${readiness}.`);
@@ -227,11 +241,15 @@ export default function LiveRace() {
       })
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : 'Unable to update readiness')
-      );
+      )
+      .finally(() => setReadinessEntryId(''));
   };
 
   const submitResults = () => {
     if (!selectedRace) return;
+
+    setPublishingResults(true);
+    setMessage('Publishing official results...');
 
     submitRaceResults(selectedRace.id)
       .then(({ race, entries }) => {
@@ -270,7 +288,8 @@ export default function LiveRace() {
       })
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : 'Unable to submit results')
-      );
+      )
+      .finally(() => setPublishingResults(false));
   };
 
   return (
@@ -396,16 +415,18 @@ export default function LiveRace() {
                           <div className="grid grid-cols-2 gap-3">
                             <button
                               onClick={() => markReadiness(entry, 'ready')}
-                              className="py-3 bg-green-600/20 text-green-400 border border-green-600/30 rounded-xl font-bold"
+                              disabled={readinessEntryId === entry.id}
+                              className="py-3 bg-green-600/20 text-green-400 border border-green-600/30 disabled:cursor-not-allowed disabled:opacity-60 rounded-xl font-bold"
                             >
-                              Ready
+                              {readinessEntryId === entry.id ? 'Saving...' : 'Ready'}
                             </button>
 
                             <button
                               onClick={() => markReadiness(entry, 'absent')}
-                              className="py-3 bg-red-600/20 text-red-400 border border-red-600/30 rounded-xl font-bold"
+                              disabled={readinessEntryId === entry.id}
+                              className="py-3 bg-red-600/20 text-red-400 border border-red-600/30 disabled:cursor-not-allowed disabled:opacity-60 rounded-xl font-bold"
                             >
-                              Absent
+                              {readinessEntryId === entry.id ? 'Saving...' : 'Absent'}
                             </button>
                           </div>
                         )}
@@ -415,7 +436,7 @@ export default function LiveRace() {
                             <select
                               aria-label={`Position for ${entry.horseName}`}
                               value={
-                                resultDrafts[entry.id]?.position ||
+                                resultDrafts[entry.id]?.position ??
                                 (entry.position ? String(entry.position) : '')
                               }
                               onChange={(event) =>
@@ -436,7 +457,7 @@ export default function LiveRace() {
 
                             <input
                               placeholder="Finish time"
-                              value={resultDrafts[entry.id]?.finishTime || entry.finishTime || ''}
+                              value={resultDrafts[entry.id]?.finishTime ?? entry.finishTime ?? ''}
                               onChange={(event) =>
                                 updateDraft(entry, { finishTime: event.target.value })
                               }
@@ -445,7 +466,7 @@ export default function LiveRace() {
 
                             <input
                               placeholder="Notes"
-                              value={resultDrafts[entry.id]?.notes || entry.notes || ''}
+                              value={resultDrafts[entry.id]?.notes ?? entry.notes ?? ''}
                               onChange={(event) =>
                                 updateDraft(entry, { notes: event.target.value })
                               }
@@ -454,7 +475,7 @@ export default function LiveRace() {
 
                             <input
                               placeholder="Violations"
-                              value={resultDrafts[entry.id]?.violationNotes || entry.violationNotes || ''}
+                              value={resultDrafts[entry.id]?.violationNotes ?? entry.violationNotes ?? ''}
                               onChange={(event) =>
                                 updateDraft(entry, { violationNotes: event.target.value })
                               }
@@ -519,6 +540,7 @@ export default function LiveRace() {
                   onClick={handleStart}
                   disabled={
                     !canOperate ||
+                    startingRace ||
                     selectedRace.status !== 'published' ||
                     readyEntries.length === 0 ||
                     uncheckedEntries.length > 0
@@ -526,7 +548,7 @@ export default function LiveRace() {
                   className="w-full flex items-center justify-center gap-2 py-4 bg-[#d4af37] hover:bg-[#b8892d] disabled:bg-white/10 disabled:text-gray-500 rounded-xl text-white font-bold transition-all"
                 >
                   <Flag className="w-5 h-5" />
-                  Start Race
+                  {startingRace ? 'Starting...' : 'Start Race'}
                 </button>
 
                 {selectedRace.status === 'published' && (
@@ -537,10 +559,10 @@ export default function LiveRace() {
 
                 <button
                   onClick={submitResults}
-                  disabled={!canOperate || selectedRace.status !== 'in-progress'}
+                  disabled={!canOperate || publishingResults || selectedRace.status !== 'in-progress'}
                   className="w-full mt-3 flex items-center justify-center gap-2 py-4 bg-white/10 hover:bg-white/15 disabled:text-gray-500 rounded-xl text-white font-bold transition-all"
                 >
-                  Confirm & Publish Results
+                  {publishingResults ? 'Publishing...' : 'Confirm & Publish Results'}
                 </button>
 
                 <div className="mt-5 rounded-xl bg-[#071a2f] border border-white/10 p-4 text-gray-400">

@@ -4,6 +4,8 @@ import { serve } from '@hono/node-server';
 import { API_HOST, API_PORT, FRONTEND_URL } from './config/constants.js';
 import {
   persistOfficialRaceResults,
+  persistRefereeRaceAction,
+  persistRaceEntryReadiness,
   persistRaceEntryResult,
   readDb,
   writeDb,
@@ -39,7 +41,14 @@ app.route('/api/jockey', createJockeyRoutes(getDb, writeDb));
 app.route('/api/admin', createAdminRoutes(getDb, writeDb));
 app.route(
   '/api/referee',
-  createRefereeRoutes(getDb, writeDb, persistOfficialRaceResults, persistRaceEntryResult)
+  createRefereeRoutes(
+    getDb,
+    writeDb,
+    persistOfficialRaceResults,
+    persistRaceEntryResult,
+    persistRaceEntryReadiness,
+    persistRefereeRaceAction
+  )
 );
 app.route('/api/notifications', createNotificationRoutes(getDb, writeDb));
 

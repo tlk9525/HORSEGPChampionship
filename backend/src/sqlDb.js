@@ -774,6 +774,149 @@ export const persistRaceEntryResult = async (entry, report = null) => {
           report.reviewedAt || null,
         ]
       );
+    } else if (!String(entry.violationNotes || '').trim()) {
+      await client.query(
+        `UPDATE "refereeReports"
+         SET "status" = 'dismissed',
+             "reviewedAt" = NOW()
+         WHERE "raceEntryId" = $1
+           AND "reportType" = 'violation'
+           AND "status" IN ('draft', 'submitted')`,
+        [entry.id]
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+// Cập nhật readiness của một race entry bằng row-level update cho thao tác Referee nhanh hơn.
+export const persistRaceEntryReadiness = async (entry) => {
+  await ensureRuntimeSchema();
+
+  await getPool().query(
+    `UPDATE "raceEntries"
+     SET "preRaceStatus" = $2,
+         "disqualified" = $3
+     WHERE "id" = $1`,
+    [
+      entry.id,
+      entry.preRaceStatus || 'pending',
+      Boolean(entry.disqualified),
+    ]
+  );
+};
+
+// Lưu các thay đổi của Start Race/Publish Results trong một transaction nhỏ, không rewrite toàn DB.
+export const persistRefereeRaceAction = async ({
+  race,
+  raceEntries = [],
+  tournament = null,
+  notifications = [],
+  actionLogs = [],
+}) => {
+  await ensureRuntimeSchema();
+
+  const client = await getPool().connect();
+
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE "races"
+       SET "status" = $2,
+           "resultStatus" = $3,
+           "awardsPublished" = $4,
+           "updatedAt" = $5
+       WHERE "id" = $1`,
+      [
+        race.id,
+        race.status,
+        race.resultStatus || 'draft',
+        Boolean(race.awardsPublished),
+        race.updatedAt || nowIso(),
+      ]
+    );
+
+    if (tournament) {
+      await client.query(
+        `UPDATE "tournaments"
+         SET "status" = $2,
+             "updatedAt" = $3
+         WHERE "id" = $1`,
+        [
+          tournament.id,
+          tournament.status,
+          tournament.updatedAt || nowIso(),
+        ]
+      );
+    }
+
+    for (const entry of raceEntries) {
+      await client.query(
+        `UPDATE "raceEntries"
+         SET "preRaceStatus" = $2,
+             "disqualified" = $3,
+             "resultStatus" = $4,
+             "position" = $5,
+             "finishTime" = $6,
+             "notes" = $7,
+             "violationNotes" = $8
+         WHERE "id" = $1`,
+        [
+          entry.id,
+          entry.preRaceStatus || 'pending',
+          Boolean(entry.disqualified),
+          entry.resultStatus || 'draft',
+          entry.position ?? null,
+          entry.finishTime || '',
+          entry.notes || '',
+          entry.violationNotes || '',
+        ]
+      );
+    }
+
+    for (const notification of notifications) {
+      await client.query(
+        `INSERT INTO "notifications" (
+          "id", "userId", "type", "title", "message", "isRead", "createdAt"
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT ("id") DO NOTHING`,
+        [
+          notification.id,
+          notification.userId,
+          notification.type || 'general',
+          notification.title || '',
+          notification.message || '',
+          Boolean(notification.read),
+          notification.createdAt || nowIso(),
+        ]
+      );
+    }
+
+    for (const log of actionLogs) {
+      await client.query(
+        `INSERT INTO "raceActionLogs" (
+          "id", "raceId", "userId", "action", "fromStatus", "toStatus", "details", "createdAt"
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT ("id") DO NOTHING`,
+        [
+          log.id,
+          log.raceId,
+          log.userId || null,
+          log.action,
+          log.fromStatus || null,
+          log.toStatus || null,
+          log.details || '',
+          log.createdAt || nowIso(),
+        ]
+      );
     }
 
     await client.query('COMMIT');
