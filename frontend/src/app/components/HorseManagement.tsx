@@ -14,21 +14,14 @@ import {
 } from '../services/api';
 import { statusLabel } from '../utils/domain';
 import { messageToneClasses } from '../utils/messageTone';
+import { officialHorseRating } from '../utils/rating';
 
 interface HorseManagementProps {
   onNavigate: (page: string) => void;
   onSelectHorse: (horse: HorseRecord) => void;
 }
 
-const horseRating = (horse: HorseRecord) =>
-  Number(
-    (
-      Number(horse.speedRating || 75) * 0.4 +
-        Number(horse.staminaRating || 75) * 0.25 +
-        Number(horse.formRating || 75) * 0.2 +
-        Number(horse.healthRating || 80) * 0.15
-    ).toFixed(2)
-  );
+const horseRating = officialHorseRating;
 
 export default function HorseManagement({
   onNavigate,
@@ -183,7 +176,7 @@ export default function HorseManagement({
                   </p>
 
                   <p className="text-gray-500 mt-1">
-                    {horse.species || 'Species not set'} • {horse.weightKg || 0}kg • Handicap {horse.baseHandicap || 0} • Rating {horseRating(horse)}
+                    {horse.species || 'Species not set'} • {horse.weightKg || 0}kg • Official Rating {horseRating(horse)}
                   </p>
                 </div>
 

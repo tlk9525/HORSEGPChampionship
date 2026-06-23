@@ -504,10 +504,10 @@ export default function TournamentPage({
                     <div className="border border-white/10 rounded-xl p-4">
                       <div className="flex items-center gap-2 text-gray-500 text-xs uppercase font-bold">
                         <Gauge className="w-4 h-4 text-[#d4af37]" />
-                        Handicap
+                        Assigned Weight
                       </div>
                       <p className="text-white font-semibold mt-2">
-                        {race.handicapMin ?? 0} - {race.handicapMax ?? 0}
+                        {Number(race.handicapMin ?? 115).toFixed(0)} - {Number(race.handicapMax ?? 135).toFixed(0)} lb
                       </p>
                     </div>
                   </div>
@@ -567,7 +567,7 @@ export default function TournamentPage({
                                 key={entry.id}
                                 className="px-3 py-2 rounded-lg bg-[#071a2f]/40 border border-white/10 text-sm text-white"
                               >
-                                Gate {entry.lane || '-'} • {entry.horseName || 'Horse'} • Rating {entry.ratingSnapshot || 'TBD'} • Handicap {entry.handicap || 0}kg
+                                Gate {entry.lane || '-'} • {entry.horseName || 'Horse'} • Rating {entry.ratingSnapshot || 'TBD'} • Assigned weight {Number(entry.handicap || 0).toFixed(0)}lb
                               </span>
                             ))}
                           </div>

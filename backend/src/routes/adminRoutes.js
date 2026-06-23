@@ -17,7 +17,12 @@ import {
   tournamentName,
   tournamentRaces,
 } from '../services/domainService.js';
-import { computeRaceHandicap } from '../services/handicapService.js';
+import {
+  MAX_CARRIED_WEIGHT_LB,
+  MIN_CARRIED_WEIGHT_LB,
+  computeRaceHandicap,
+  officialHorseRating,
+} from '../services/handicapService.js';
 import { broadcastRaceUpdate } from '../services/liveRaceEvents.js';
 import { recordRaceAction } from '../services/raceAuditService.js';
 import {
@@ -236,10 +241,14 @@ export const createAdminRoutes = (getDb, writeDb) => {
     if (
       !Number.isFinite(minHandicap) ||
       !Number.isFinite(maxHandicap) ||
-      minHandicap < 0 ||
+      minHandicap < MIN_CARRIED_WEIGHT_LB ||
+      maxHandicap > MAX_CARRIED_WEIGHT_LB ||
       maxHandicap < minHandicap
     ) {
-      return c.json({ message: 'Handicap range is invalid' }, 400);
+      return c.json(
+        { message: `Assigned weight must be between ${MIN_CARRIED_WEIGHT_LB}lb and ${MAX_CARRIED_WEIGHT_LB}lb` },
+        400
+      );
     }
 
     const duplicateRaceNumber = db.races.some(
@@ -427,10 +436,15 @@ export const createAdminRoutes = (getDb, writeDb) => {
         return String(horseA?.breed || '').localeCompare(String(horseB?.breed || ''));
       });
 
+      const fieldRatings = sortedEntries.map((entry) => {
+        const horse = db.horses.find((item) => item.id === entry.horseId);
+        return officialHorseRating(horse);
+      });
+      const highestFieldRating = Math.max(...fieldRatings);
+
       sortedEntries.forEach((entry, index) => {
         const horse = db.horses.find((item) => item.id === entry.horseId);
-        const profile = (db.jockeyProfiles || []).find((item) => item.userId === entry.jockeyUserId);
-        const prepared = computeRaceHandicap(horse, profile, race);
+        const prepared = computeRaceHandicap(horse, race, highestFieldRating);
         entry.lane = index + 1;
         entry.ratingSnapshot = prepared.rating;
         entry.handicap = prepared.handicap;
@@ -439,7 +453,7 @@ export const createAdminRoutes = (getDb, writeDb) => {
 
       raceRefereeIds(db, race).forEach((refereeId) =>
         createNotification(db, refereeId, 'Race registration closed',
-          `${race.name} is ready for referee review. Starting gates, rating snapshots and handicap have been assigned.`)
+          `${race.name} is ready for referee review. Starting gates, rating snapshots and carried weights have been assigned.`)
       );
     }
 
@@ -454,7 +468,7 @@ export const createAdminRoutes = (getDb, writeDb) => {
       race.updatedAt = new Date().toISOString();
       entries.forEach((entry) => {
         const horse = db.horses.find((item) => item.id === entry.horseId);
-        const msg = `${race.name} has been published. Gate ${entry.lane}, rating ${entry.ratingSnapshot || 'TBD'}, handicap ${entry.handicap}kg.`;
+        const msg = `${race.name} has been published. Gate ${entry.lane}, rating ${entry.ratingSnapshot || 'TBD'}, assigned weight ${entry.handicap}lb.`;
         createNotification(db, horse?.ownerUserId, 'Race published', msg);
         createNotification(db, entry.jockeyUserId, 'Race published', msg);
       });

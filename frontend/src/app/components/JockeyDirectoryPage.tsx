@@ -280,7 +280,7 @@ export default function JockeyDirectoryPage() {
                             </span>
 
                             <span className="rounded-lg border border-white/10 bg-[#071a2f]/30 px-3 py-1 text-sm text-gray-300">
-                              Handicap {entry.handicap || 0}kg
+                              Assigned weight {Number(entry.handicap || 0).toFixed(0)}lb
                             </span>
                           </div>
                         </div>

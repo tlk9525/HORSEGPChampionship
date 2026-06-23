@@ -9,6 +9,7 @@ import {
 import { broadcastRaceUpdate } from '../services/liveRaceEvents.js';
 import { createNotification } from '../services/notificationService.js';
 import { recordRaceAction } from '../services/raceAuditService.js';
+import { computePostRaceRating } from '../services/handicapService.js';
 
 const finishTimeMs = (value) => {
   const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?$/);
@@ -160,6 +161,16 @@ export const createRefereeRoutes = (
         entry.resultStatus = entry.preRaceStatus === 'absent' || entry.disqualified
           ? 'disqualified'
           : 'official';
+      });
+      competingEntries.forEach((entry) => {
+        const result = computePostRaceRating(entry, competingEntries);
+        const horse = db.horses.find((item) => item.id === entry.horseId);
+        entry.ratingChange = result.ratingChange;
+        entry.postRaceRating = result.postRaceRating;
+        if (horse) {
+          horse.overallRating = result.postRaceRating;
+          horse.updatedAt = race.updatedAt;
+        }
       });
 
       const recipientIds = new Set();

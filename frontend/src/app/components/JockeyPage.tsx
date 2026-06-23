@@ -350,9 +350,9 @@ export default function JockeyPage({
                             </div>
 
                             <div>
-                              <p className="text-gray-500 text-xs">Handicap</p>
+                              <p className="text-gray-500 text-xs">Assigned Weight</p>
                               <p className="text-white text-2xl font-black">
-                                {entry.handicap || 0}kg
+                                {Number(entry.handicap || 0).toFixed(0)}lb
                               </p>
                             </div>
                           </div>

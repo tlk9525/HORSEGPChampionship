@@ -25,6 +25,13 @@ import {
   numeric,
 } from '../services/handicapService.js';
 
+const validRatingComponents = (values) =>
+  values.every((value) => {
+    if (value === undefined || value === null || value === '') return true;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100;
+  });
+
 export const createOwnerRoutes = (getDb, writeDb) => {
   const app = new Hono();
 
@@ -160,12 +167,15 @@ export const createOwnerRoutes = (getDb, writeDb) => {
 
     const {
       name, breed, species, age, sex, color, weightKg, heightCm,
-      baseHandicap, speedRating, staminaRating, formRating, healthRating,
+      speedRating, staminaRating, formRating, healthRating,
       healthStatus, profileNotes, veterinaryCertificateUrl,
     } = await c.req.json();
 
     if (!name || !breed || !age || Number(age) <= 0) {
       return c.json({ message: 'Horse name, breed and age are required' }, 400);
+    }
+    if (!validRatingComponents([speedRating, staminaRating, formRating, healthRating])) {
+      return c.json({ message: 'All rating components must be between 0 and 100' }, 400);
     }
 
     const createdAt = new Date().toISOString();
@@ -173,7 +183,7 @@ export const createOwnerRoutes = (getDb, writeDb) => {
       id: randomUUID(), name, breed,
       species: species || '', age: Number(age), sex: sex || '',
       color: color || '', weightKg: Number(weightKg) || 0, heightCm: Number(heightCm) || 0,
-      baseHandicap: Number(baseHandicap) || 0,
+      baseHandicap: 0,
       speedRating: numeric(speedRating, 75), staminaRating: numeric(staminaRating, 75),
       formRating: numeric(formRating, 75), healthRating: numeric(healthRating, 80),
       overallRating: horseOverallRating({ speedRating, staminaRating, formRating, healthRating }),
@@ -204,21 +214,25 @@ export const createOwnerRoutes = (getDb, writeDb) => {
 
     const {
       name, breed, species, age, sex, color, weightKg, heightCm,
-      baseHandicap, speedRating, staminaRating, formRating, healthRating,
+      speedRating, staminaRating, formRating, healthRating,
       healthStatus, profileNotes, veterinaryCertificateUrl,
     } = await c.req.json();
 
     if (!name || !breed || !age || Number(age) <= 0) {
       return c.json({ message: 'Horse name, breed and age are required' }, 400);
     }
+    if (!validRatingComponents([speedRating, staminaRating, formRating, healthRating])) {
+      return c.json({ message: 'All rating components must be between 0 and 100' }, 400);
+    }
 
     horse.name = name; horse.breed = breed; horse.species = species || '';
     horse.age = Number(age); horse.sex = sex || ''; horse.color = color || '';
     horse.weightKg = Number(weightKg) || 0; horse.heightCm = Number(heightCm) || 0;
-    horse.baseHandicap = Number(baseHandicap) || 0;
     horse.speedRating = numeric(speedRating, 75); horse.staminaRating = numeric(staminaRating, 75);
     horse.formRating = numeric(formRating, 75); horse.healthRating = numeric(healthRating, 80);
-    horse.overallRating = horseOverallRating({ speedRating, staminaRating, formRating, healthRating });
+    if (!numeric(horse.overallRating, 0)) {
+      horse.overallRating = horseOverallRating({ speedRating, staminaRating, formRating, healthRating });
+    }
     horse.healthStatus = healthStatus || ''; horse.profileNotes = profileNotes || '';
     horse.veterinaryCertificateUrl = veterinaryCertificateUrl || '';
     horse.updatedAt = new Date().toISOString();

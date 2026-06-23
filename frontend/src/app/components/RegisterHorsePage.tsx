@@ -11,6 +11,7 @@ import {
   updateHorse,
 } from '../services/api';
 import { messageToneClasses } from '../utils/messageTone';
+import { initialHorseRating, officialHorseRating } from '../utils/rating';
 
 interface RegisterHorsePageProps {
   onNavigate: (page: string) => void;
@@ -33,11 +34,10 @@ export default function RegisterHorsePage({
   const [color, setColor] = useState('');
   const [weightKg, setWeightKg] = useState('');
   const [heightCm, setHeightCm] = useState('');
-  const [baseHandicap, setBaseHandicap] = useState('');
   const [speedRating, setSpeedRating] = useState('75');
   const [staminaRating, setStaminaRating] = useState('75');
   const [formRating, setFormRating] = useState('75');
-  const [healthRating, setHealthRating] = useState('80');
+  const [healthRating, setHealthRating] = useState('75');
   const [healthStatus, setHealthStatus] = useState('');
   const [profileNotes, setProfileNotes] = useState('');
   const [veterinaryCertificateUrl, setVeterinaryCertificateUrl] = useState('');
@@ -51,14 +51,15 @@ export default function RegisterHorsePage({
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
   };
-  const overallRating = Number(
-    (
-      ratingValue(speedRating, 75) * 0.4 +
-      ratingValue(staminaRating, 75) * 0.25 +
-      ratingValue(formRating, 75) * 0.2 +
-      ratingValue(healthRating, 80) * 0.15
-    ).toFixed(2)
-  );
+  const overallRating = initialHorseRating({
+    speedRating: ratingValue(speedRating, 75),
+    staminaRating: ratingValue(staminaRating, 75),
+    formRating: ratingValue(formRating, 75),
+    healthRating: ratingValue(healthRating, 75),
+  });
+  const displayedRating = isEdit && activeHorse
+    ? officialHorseRating(activeHorse)
+    : overallRating;
 
   useEffect(() => {
     if (horse || mode !== 'edit' || !horseId) return;
@@ -88,11 +89,10 @@ export default function RegisterHorsePage({
     setColor(activeHorse.color || '');
     setWeightKg(activeHorse.weightKg ? String(activeHorse.weightKg) : '');
     setHeightCm(activeHorse.heightCm ? String(activeHorse.heightCm) : '');
-    setBaseHandicap(activeHorse.baseHandicap ? String(activeHorse.baseHandicap) : '');
     setSpeedRating(activeHorse.speedRating ? String(activeHorse.speedRating) : '75');
     setStaminaRating(activeHorse.staminaRating ? String(activeHorse.staminaRating) : '75');
     setFormRating(activeHorse.formRating ? String(activeHorse.formRating) : '75');
-    setHealthRating(activeHorse.healthRating ? String(activeHorse.healthRating) : '80');
+    setHealthRating(activeHorse.healthRating ? String(activeHorse.healthRating) : '75');
     setHealthStatus(activeHorse.healthStatus || '');
     setProfileNotes(activeHorse.profileNotes || '');
     setVeterinaryCertificateUrl(activeHorse.veterinaryCertificateUrl || '');
@@ -117,7 +117,6 @@ export default function RegisterHorsePage({
       color,
       weightKg,
       heightCm,
-      baseHandicap,
       speedRating,
       staminaRating,
       formRating,
@@ -315,22 +314,6 @@ export default function RegisterHorsePage({
               />
             </div>
 
-            <div>
-              <label className="block text-gray-300 mb-2">
-                Base Handicap
-              </label>
-
-              <input
-                type="number"
-                min="0"
-                step="0.5"
-                placeholder="5"
-                value={baseHandicap}
-                onChange={(event) => setBaseHandicap(event.target.value)}
-                className={fieldClass}
-              />
-            </div>
-
             <div className="md:col-span-2 rounded-2xl border border-white/10 bg-[#12304f] p-5">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
                 <div>
@@ -338,16 +321,16 @@ export default function RegisterHorsePage({
                     Performance Rating
                   </h2>
                   <p className="text-gray-400 text-sm mt-1">
-                    Used by Admin when closing registration to prepare handicap and line assignment.
+                    Attribute scores set the initial rating. Race results update the official rating afterward.
                   </p>
                 </div>
 
                 <div className="rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/10 px-4 py-3">
                   <div className="text-[#f6d77a] text-xs uppercase font-bold">
-                    Overall Rating
+                    {isEdit ? 'Official Rating' : 'Initial Rating Estimate'}
                   </div>
                   <div className="text-white text-2xl font-black">
-                    {overallRating}
+                    {displayedRating}
                   </div>
                 </div>
               </div>

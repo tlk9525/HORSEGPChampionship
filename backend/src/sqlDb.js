@@ -88,6 +88,39 @@ const ensureRuntimeSchema = async () => {
           CREATE INDEX IF NOT EXISTS "idx_referee_reports_referee"
           ON "refereeReports" ("refereeUserId", "status")
         `);
+        await client.query(`
+          ALTER TABLE "raceEntries"
+          ADD COLUMN IF NOT EXISTS "ratingChange" NUMERIC(6, 2) NOT NULL DEFAULT 0
+        `);
+        await client.query(`
+          ALTER TABLE "raceEntries"
+          ADD COLUMN IF NOT EXISTS "postRaceRating" NUMERIC(6, 2) NOT NULL DEFAULT 0
+        `);
+        await client.query(`
+          UPDATE "races"
+          SET "handicapMin" = 115, "handicapMax" = 135
+          WHERE "handicapMax" < 100
+        `);
+        await client.query(`
+          WITH "fieldRatings" AS (
+            SELECT "raceId", MAX("ratingSnapshot") AS "topRating"
+            FROM "raceEntries"
+            WHERE "ratingSnapshot" > 0
+            GROUP BY "raceId"
+          )
+          UPDATE "raceEntries" AS "entry"
+          SET "handicap" = GREATEST(
+            "race"."handicapMin",
+            ROUND(
+              "race"."handicapMax" -
+              ("fieldRatings"."topRating" - "entry"."ratingSnapshot")
+            )
+          )
+          FROM "fieldRatings", "races" AS "race"
+          WHERE "entry"."raceId" = "fieldRatings"."raceId"
+            AND "entry"."raceId" = "race"."id"
+            AND "entry"."ratingSnapshot" > 0
+        `);
         await client.query('COMMIT');
       } catch (error) {
         await client.query('ROLLBACK');
@@ -454,8 +487,8 @@ export const writeDb = async (db) => {
         speedRating: horse.speedRating ?? 75,
         staminaRating: horse.staminaRating ?? 75,
         formRating: horse.formRating ?? 75,
-        healthRating: horse.healthRating ?? 80,
-        overallRating: horse.overallRating ?? 76,
+        healthRating: horse.healthRating ?? 75,
+        overallRating: horse.overallRating ?? 75,
         healthStatus: horse.healthStatus || '',
         profileNotes: horse.profileNotes || '',
         createdAt: horse.createdAt || null,
@@ -502,8 +535,8 @@ export const writeDb = async (db) => {
         registrationClosesAt: race.registrationClosesAt || null,
         resultStatus: race.resultStatus || 'draft',
         awardsPublished: race.awardsPublished ?? false,
-        handicapMin: race.handicapMin ?? 0,
-        handicapMax: race.handicapMax ?? 0,
+        handicapMin: race.handicapMin ?? 115,
+        handicapMax: race.handicapMax ?? 135,
         raceNumber: race.raceNumber || '',
         createdAt: race.createdAt || null,
         updatedAt: race.updatedAt || race.createdAt || null,
@@ -626,6 +659,8 @@ export const writeDb = async (db) => {
         'lane',
         'handicap',
         'ratingSnapshot',
+        'ratingChange',
+        'postRaceRating',
         'ownerConfirmed',
         'jockeyConfirmed',
         'preRaceStatus',
@@ -642,6 +677,8 @@ export const writeDb = async (db) => {
         lane: entry.lane ?? null,
         handicap: entry.handicap ?? 0,
         ratingSnapshot: entry.ratingSnapshot ?? 0,
+        ratingChange: entry.ratingChange ?? 0,
+        postRaceRating: entry.postRaceRating ?? 0,
         ownerConfirmed: entry.ownerConfirmed ?? false,
         jockeyConfirmed: entry.jockeyConfirmed ?? false,
         preRaceStatus: entry.preRaceStatus || 'pending',

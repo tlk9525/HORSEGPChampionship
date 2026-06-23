@@ -34,8 +34,8 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
     distance: '',
     surfaceType: '',
     raceClass: '',
-    handicapMin: '',
-    handicapMax: '',
+    handicapMin: '115',
+    handicapMax: '135',
     refereeUserId: '',
     registrationOpenTime: '',
     registrationCloseTime: '',
@@ -144,8 +144,12 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
       setMessage('Race distance must be between 400m and 10,000m.');
       return;
     }
-    if (Number(form.handicapMin) > Number(form.handicapMax)) {
-      setMessage('Handicap minimum cannot exceed handicap maximum.');
+    if (
+      Number(form.handicapMin) < 115 ||
+      Number(form.handicapMax) > 135 ||
+      Number(form.handicapMin) > Number(form.handicapMax)
+    ) {
+      setMessage('Assigned weight must stay between 115lb and 135lb.');
       return;
     }
 
@@ -414,11 +418,12 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
               </div>
 
               <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Handicap Min</label>
+                <label className="block text-gray-300 mb-2">Minimum Weight (lb)</label>
                 <input
                   type="number"
-                  min="0"
-                  step="0.5"
+                  min="115"
+                  max="135"
+                  step="1"
                   className={fieldClass}
                   value={form.handicapMin}
                   onChange={(event) =>
@@ -431,11 +436,12 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
               </div>
 
               <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Handicap Max</label>
+                <label className="block text-gray-300 mb-2">Top Weight (lb)</label>
                 <input
                   type="number"
-                  min="0"
-                  step="0.5"
+                  min="115"
+                  max="135"
+                  step="1"
                   className={fieldClass}
                   value={form.handicapMax}
                   onChange={(event) =>
@@ -517,7 +523,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   </div>
 
                   <div className="flex justify-between gap-3">
-                    <span>Gate + handicap</span>
+                    <span>Gate + assigned weight</span>
                     <span className="text-white font-bold">System</span>
                   </div>
                 </div>

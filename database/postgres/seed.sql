@@ -462,4 +462,26 @@ ON CONFLICT ("raceId", "refereeUserId") DO UPDATE SET
   "status" = EXCLUDED."status",
   "assignedAt" = EXCLUDED."assignedAt";
 
+UPDATE "races"
+SET "handicapMin" = 115, "handicapMax" = 135;
+
+WITH "fieldRatings" AS (
+  SELECT "raceId", MAX("ratingSnapshot") AS "topRating"
+  FROM "raceEntries"
+  WHERE "ratingSnapshot" > 0
+  GROUP BY "raceId"
+)
+UPDATE "raceEntries" AS "entry"
+SET "handicap" = GREATEST(
+  "race"."handicapMin",
+  ROUND(
+    "race"."handicapMax" -
+    ("fieldRatings"."topRating" - "entry"."ratingSnapshot")
+  )
+)
+FROM "fieldRatings", "races" AS "race"
+WHERE "entry"."raceId" = "fieldRatings"."raceId"
+  AND "entry"."raceId" = "race"."id"
+  AND "entry"."ratingSnapshot" > 0;
+
 COMMIT;

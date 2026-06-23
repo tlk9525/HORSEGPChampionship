@@ -12,37 +12,91 @@ export const clamp = (value, min, max) => {
   return Math.max(min, value);
 };
 
-// Tính điểm tổng hợp của ngựa dựa trên tốc độ (40%), sức bền (25%), phong độ (20%), và sức khỏe (15%)
-export const horseOverallRating = (horse = {}) => {
-  const speed = numeric(horse.speedRating, 75);
-  const stamina = numeric(horse.staminaRating, 75);
-  const form = numeric(horse.formRating, 75);
-  const health = numeric(horse.healthRating, 80);
+export const MIN_CARRIED_WEIGHT_LB = 115;
+export const MAX_CARRIED_WEIGHT_LB = 135;
 
-  return Number(
-    (speed * 0.4 + stamina * 0.25 + form * 0.2 + health * 0.15).toFixed(2)
-  );
+const ratingComponent = (value, fallback = 75) =>
+  clamp(numeric(value, fallback), 0, 100);
+
+// Thuộc tính chỉ được dùng để cấp rating ban đầu. Sau khi ngựa đã thi đấu,
+// overallRating là rating chính thức và được điều chỉnh từ kết quả race.
+export const horseOverallRating = (horse = {}) => {
+  const speed = ratingComponent(horse.speedRating);
+  const stamina = ratingComponent(horse.staminaRating);
+  const form = ratingComponent(horse.formRating);
+  const health = ratingComponent(horse.healthRating);
+
+  return Math.round(speed * 0.35 + stamina * 0.25 + form * 0.3 + health * 0.1);
 };
 
-// Tính phần điều chỉnh handicap dựa trên điểm tổng hợp, lấy chuẩn 75 điểm làm gốc
-export const ratingHandicapAdjustment = (rating) =>
-  Number(((numeric(rating, 75) - 75) * 0.2).toFixed(2));
+export const officialHorseRating = (horse = {}) => {
+  const storedRating = numeric(horse.overallRating, 0);
+  return Math.round(clamp(storedRating > 0 ? storedRating : horseOverallRating(horse), 0, 140));
+};
 
-// Tính handicap cuối cùng cho cuộc đua dựa trên điểm ngựa, cân nặng jockey và giới hạn của race
-export const computeRaceHandicap = (horse, jockeyProfile, race) => {
-  const rating = horseOverallRating(horse);
-  const base = numeric(horse?.baseHandicap, 0);
-  const jockeyWeight = numeric(jockeyProfile?.weight, 0);
-  const jockeyWeightAdjustment = jockeyWeight
-    ? Number(((jockeyWeight - 54) * 0.1).toFixed(2))
-    : 0;
-  const rawHandicap =
-    base + ratingHandicapAdjustment(rating) + jockeyWeightAdjustment;
-  const min = numeric(race?.handicapMin, 0);
-  const max = numeric(race?.handicapMax, 0);
+// HKJC-style allocation: top-rated horse receives top weight and every
+// rating point below it removes one pound, subject to the race limits.
+export const computeRaceHandicap = (horse, race, highestFieldRating) => {
+  const rating = officialHorseRating(horse);
+  const min = clamp(
+    numeric(race?.handicapMin, MIN_CARRIED_WEIGHT_LB),
+    MIN_CARRIED_WEIGHT_LB,
+    MAX_CARRIED_WEIGHT_LB
+  );
+  const max = clamp(
+    numeric(race?.handicapMax, MAX_CARRIED_WEIGHT_LB),
+    min,
+    MAX_CARRIED_WEIGHT_LB
+  );
+  const topRating = Math.max(rating, numeric(highestFieldRating, rating));
+  const assignedWeightLb = max - (topRating - rating);
 
   return {
     rating,
-    handicap: Number(clamp(rawHandicap, min, max).toFixed(1)),
+    handicap: Math.round(clamp(assignedWeightLb, min, max)),
   };
+};
+
+const expectedFieldScore = (rating, fieldRatings) => {
+  if (fieldRatings.length <= 1) return 0.5;
+
+  const scores = fieldRatings.map(
+    (opponentRating) => 1 / (1 + 10 ** ((opponentRating - rating) / 16))
+  );
+  return scores.reduce((total, score) => total + score, 0) / scores.length;
+};
+
+// HKJC does not publish a fixed reassessment formula. This deterministic
+// proposal uses performance versus field expectation and enforces its public
+// limits: places 2-5 gain at most 5 points; place 6 or lower cannot gain.
+export const computePostRaceRating = (entry, fieldEntries = []) => {
+  const previousRating = Math.round(clamp(numeric(entry?.ratingSnapshot, 0), 0, 140));
+  const position = Number(entry?.position);
+  const rankedEntries = fieldEntries.filter(
+    (item) => Number.isInteger(Number(item.position)) && numeric(item.ratingSnapshot, 0) > 0
+  );
+  const fieldSize = rankedEntries.length;
+
+  if (!previousRating || !Number.isInteger(position) || fieldSize < 2) {
+    return { previousRating, ratingChange: 0, postRaceRating: previousRating };
+  }
+
+  const opponentRatings = rankedEntries
+    .filter((item) => item.id !== entry.id)
+    .map((item) => numeric(item.ratingSnapshot, previousRating));
+  const expected = expectedFieldScore(previousRating, opponentRatings);
+  const actual = (fieldSize - position) / (fieldSize - 1);
+  const performanceDelta = Math.round(8 * (actual - expected));
+
+  let ratingChange;
+  if (position === 1) {
+    ratingChange = clamp(performanceDelta, 3, 10);
+  } else if (position <= 5) {
+    ratingChange = clamp(performanceDelta, 0, 5);
+  } else {
+    ratingChange = clamp(performanceDelta, -5, 0);
+  }
+
+  const postRaceRating = Math.round(clamp(previousRating + ratingChange, 0, 140));
+  return { previousRating, ratingChange, postRaceRating };
 };

@@ -160,6 +160,8 @@ export interface RaceEntryRecord {
   lane: number | null;
   handicap: number;
   ratingSnapshot?: number;
+  ratingChange?: number;
+  postRaceRating?: number;
   ownerConfirmed: boolean;
   jockeyConfirmed: boolean;
   preRaceStatus: string;

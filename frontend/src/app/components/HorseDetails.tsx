@@ -18,6 +18,7 @@ import {
   getBootstrap,
 } from '../services/api';
 import { statusLabel } from '../utils/domain';
+import { officialHorseRating } from '../utils/rating';
 
 interface HorseDetailsProps {
   horse: HorseRecord | null;
@@ -29,15 +30,7 @@ const value = (input: string | number | null | undefined, suffix = '') =>
     ? 'Not set'
     : `${input}${suffix}`;
 
-const overall = (horse: HorseRecord) =>
-  Number(
-    (
-      Number(horse.speedRating || 75) * 0.4 +
-        Number(horse.staminaRating || 75) * 0.25 +
-        Number(horse.formRating || 75) * 0.2 +
-        Number(horse.healthRating || 80) * 0.15
-    ).toFixed(2)
-  );
+const overall = officialHorseRating;
 
 export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
   const { horseId } = useParams();
@@ -98,7 +91,7 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
     ['Age', `${activeHorse.age} years`, Activity],
     ['Weight', value(activeHorse.weightKg, 'kg'), Scale],
     ['Height', value(activeHorse.heightCm, 'cm'), Ruler],
-    ['Base Handicap', value(activeHorse.baseHandicap), Trophy],
+    ['Official Rating', value(overall(activeHorse)), Trophy],
     ['Speed Rating', value(activeHorse.speedRating), Gauge],
     ['Stamina Rating', value(activeHorse.staminaRating), Activity],
     ['Form Rating', value(activeHorse.formRating), Trophy],
@@ -148,7 +141,7 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
                 </span>
 
                 <span className="px-4 py-2 bg-[#071a2f]/50 border border-white/10 rounded-lg text-white font-semibold text-sm">
-                  Handicap {activeHorse.baseHandicap || 0}
+                  Official Rating {overall(activeHorse)}
                 </span>
 
                 <span className="px-4 py-2 bg-[#071a2f]/50 border border-white/10 rounded-lg text-white font-semibold text-sm">
@@ -301,8 +294,8 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
                 </div>
 
                 <div className="flex justify-between gap-4">
-                  <span className="text-gray-400">Handicap</span>
-                  <span className="text-white font-bold">{activeHorse.baseHandicap || 0}</span>
+                  <span className="text-gray-400">Official Rating</span>
+                  <span className="text-white font-bold">{overall(activeHorse)}</span>
                 </div>
 
                 <div className="flex justify-between gap-4">

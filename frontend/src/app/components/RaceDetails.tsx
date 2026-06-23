@@ -20,22 +20,14 @@ import {
   getBootstrap,
 } from '../services/api';
 import { statusLabel } from '../utils/domain';
+import { officialHorseRating } from '../utils/rating';
 
 const raceSortValue = (race: RaceRecord) => {
   const parsed = Number(String(race.raceNumber || '').replace(/\D/g, ''));
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 999;
 };
 
-const ratingForHorse = (horse?: HorseRecord) =>
-  Number(
-    (
-      Number(horse?.overallRating || 0) ||
-      Number(horse?.speedRating || 75) * 0.4 +
-        Number(horse?.staminaRating || 75) * 0.25 +
-        Number(horse?.formRating || 75) * 0.2 +
-        Number(horse?.healthRating || 80) * 0.15
-    ).toFixed(2)
-  );
+const ratingForHorse = officialHorseRating;
 
 const canShowRaceCardData = (race?: RaceRecord) =>
   Boolean(
@@ -144,7 +136,7 @@ export default function RaceDetails() {
       horse: entry.horseName || horse?.name || 'Horse',
       breed: horse?.breed || 'Breed not set',
       age: horse?.age || '-',
-      weightKg: Number(entry.handicap || horse?.baseHandicap || 0).toFixed(1),
+      assignedWeightLb: Number(entry.handicap || 0).toFixed(0),
       jockey: entry.jockeyName || 'Jockey pending',
       jockeyWeightKg: jockeyProfile?.weight
         ? Number(jockeyProfile.weight).toFixed(1)
@@ -152,7 +144,7 @@ export default function RaceDetails() {
       draw: entry.lane || 'TBD',
       owner: entry.ownerName || 'Owner pending',
       rating,
-      ratingChange: '0',
+      ratingChange: `${Number(entry.ratingChange || 0) > 0 ? '+' : ''}${Number(entry.ratingChange || 0)}`,
       horseWeightKg: Number(horse?.weightKg || 0).toFixed(1),
     };
   });
@@ -365,7 +357,7 @@ export default function RaceDetails() {
                       <th className="py-4 px-3 text-left text-gray-400 uppercase text-xs">Last 6 Runs</th>
                       <th className="py-4 px-3 text-left text-gray-400 uppercase text-xs">Colour</th>
                       <th className="py-4 px-3 text-left text-gray-400 uppercase text-xs">Horse</th>
-                      <th className="py-4 px-3 text-center text-gray-400 uppercase text-xs">Wt. (kg)</th>
+                      <th className="py-4 px-3 text-center text-gray-400 uppercase text-xs">Assigned Wt. (lb)</th>
                       <th className="py-4 px-3 text-left text-gray-400 uppercase text-xs">Jockey</th>
                       <th className="py-4 px-3 text-center text-gray-400 uppercase text-xs">Jockey Wt. (kg)</th>
                       <th className="py-4 px-3 text-center text-gray-400 uppercase text-xs">Draw</th>
@@ -412,7 +404,7 @@ export default function RaceDetails() {
                         </td>
 
                         <td className="py-5 px-3 text-center text-white font-semibold">
-                          {row.weightKg}kg
+                          {row.assignedWeightLb}lb
                         </td>
 
                         <td className="py-5 px-3 text-gray-300 font-semibold">
