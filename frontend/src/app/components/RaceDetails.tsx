@@ -5,6 +5,7 @@ import {
   MapPin,
   Shield,
   Timer,
+  DollarSign,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -233,6 +234,13 @@ export default function RaceDetails() {
                     <Activity className="w-4 h-4 text-[#d4af37]" />
                     {selectedRace.raceClass || selectedRace.surface || 'Class not set'}
                   </div>
+
+                  {selectedRace.totalPrize && (
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-[#d4af37]" />
+                      ${Number(selectedRace.totalPrize).toLocaleString()}
+                    </div>
+                  )}
                 </div>
               </div>
 

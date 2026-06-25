@@ -166,13 +166,7 @@ export default function TournamentDetails({ onNavigate }: TournamentDetailsProps
                 label: 'Location',
                 value: tournament?.location || '-',
               },
-              {
-                icon: Trophy,
-                label: 'Prize Pool',
-                value: tournament?.prizePool
-                  ? `$${Number(tournament.prizePool).toLocaleString()}`
-                  : '-',
-              },
+
               {
                 icon: Users,
                 label: 'Registration',

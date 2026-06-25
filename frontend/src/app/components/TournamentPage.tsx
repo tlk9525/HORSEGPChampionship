@@ -309,16 +309,6 @@ export default function TournamentPage({
                     </div>
 
                     <div className="flex items-start gap-3">
-                      <DollarSign className="w-5 h-5 text-[#d4af37] mt-1" />
-                      <div>
-                        <p className="text-gray-500 text-xs uppercase">Prize Pool</p>
-                        <p className="text-[#d4af37] font-bold mt-1">
-                          {Number(tournament.prizePool || 0).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3">
                       <Users className="w-5 h-5 text-[#d4af37] mt-1" />
                       <div>
                         <p className="text-gray-500 text-xs uppercase">Registration</p>
