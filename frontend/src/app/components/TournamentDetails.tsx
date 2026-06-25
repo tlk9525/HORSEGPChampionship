@@ -21,6 +21,8 @@ type TournamentRecord = {
   name: string;
   status: string;
   registrationWindow?: string;
+  registrationOpensAt?: string;
+  registrationClosesAt?: string;
   startDate?: string;
   finalDate?: string;
   location?: string;
@@ -173,8 +175,10 @@ export default function TournamentDetails({ onNavigate }: TournamentDetailsProps
               },
               {
                 icon: Users,
-                label: 'Field',
-                value: `${uniqueHorseIds.size}/${maxRaceFieldSize} horses • ${uniqueJockeyIds.size}/${maxRaceFieldSize} jockeys`,
+                label: 'Registration',
+                value: tournament?.registrationOpensAt && tournament?.registrationClosesAt
+                  ? `${new Date(tournament.registrationOpensAt).toLocaleString()} - ${new Date(tournament.registrationClosesAt).toLocaleString()}`
+                  : tournament?.registrationWindow || '-',
               },
             ].map((item) => (
               <div

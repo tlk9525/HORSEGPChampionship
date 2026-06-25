@@ -28,7 +28,6 @@ import JockeyDirectoryPage from './app/components/JockeyDirectoryPage';
 
 import LiveRace from './app/components/LiveRace';
 import ResultsPage from './app/components/ResultsPage';
-import RankingsPage from './app/components/RankingsPage';
 import AdminPanel from './app/components/AdminPanel';
 import CreateRacePage from './app/components/CreateRacePage';
 
@@ -51,7 +50,7 @@ const protectedPages: Record<string, string[]> = {
   'create-race': ['admin'],
   horses: ['admin', 'owner'],
   'register-horse': ['owner'],
-  'tournament-registration': ['owner'],
+  'race-registration': ['owner'],
   'edit-horse': ['owner'],
   'horse-details': ['admin', 'owner'],
   'jockey-profiles': ['admin', 'owner', 'jockey', 'referee', 'spectator'],
@@ -67,7 +66,7 @@ const pageFromPath = (pathname: string) => {
   if (path === '/login') return 'login';
   if (path === '/register') return 'register';
   if (path === '/tournaments') return 'tournaments';
-  if (path === '/tournaments/register-horse') return 'tournament-registration';
+  if (/^\/races\/[^/]+\/register$/.test(path)) return 'race-registration';
   if (path.startsWith('/tournaments/')) return 'tournament-details';
   if (path === '/races' || path.startsWith('/races/')) return 'race-details';
   if (path === '/horses') return 'horses';
@@ -117,7 +116,9 @@ export default function App() {
         : '/races',
       horses: '/horses',
       'register-horse': '/horses/new',
-      'tournament-registration': '/tournaments/register-horse',
+      'race-registration': selectedRaceId
+        ? `/races/${selectedRaceId}/register`
+        : '/tournaments',
       'horse-details': selectedHorseId
         ? `/horses/${selectedHorseId}`
         : '/horses',
@@ -256,7 +257,7 @@ export default function App() {
               element={<RegisterHorsePage onNavigate={navigate} />}
             />
             <Route
-              path="/tournaments/register-horse"
+              path="/races/:raceId/register"
               element={<RaceRegistrationPage onNavigate={navigate} />}
             />
             <Route
@@ -292,7 +293,6 @@ export default function App() {
             <Route path="/live-race" element={<LiveRace />} />
             <Route path="/live-race/:raceId" element={<LiveRace />} />
             <Route path="/results" element={<ResultsPage />} />
-            <Route path="/rankings" element={<RankingsPage />} />
             <Route
               path="/admin"
               element={<AdminPanel onNavigate={navigate} />}

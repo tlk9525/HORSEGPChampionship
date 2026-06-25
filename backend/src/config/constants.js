@@ -54,3 +54,12 @@ export const PUBLIC_RACE_STATUSES = [
   'finished',
   'completed',
 ];
+
+export const RACE_CLASSES = {
+  'Class 1': { min: 101, max: 140 },
+  'Class 2': { min: 81, max: 100 },
+  'Class 3': { min: 61, max: 80 },
+  'Class 4': { min: 41, max: 60 },
+  'Class 5': { min: 0, max: 40 },
+  'Open': { min: 0, max: 140 }
+};

@@ -6,12 +6,20 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   HorseRecord,
+  RaceEntryRecord,
+  RaceRecord,
   createHorse,
   getBootstrap,
   updateHorse,
 } from '../services/api';
 import { messageToneClasses } from '../utils/messageTone';
 import { initialHorseRating, officialHorseRating } from '../utils/rating';
+
+const formatRating = (value: number) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return '-';
+  return String(Math.round(parsed));
+};
 
 interface RegisterHorsePageProps {
   onNavigate: (page: string) => void;
@@ -26,13 +34,15 @@ export default function RegisterHorsePage({
 }: RegisterHorsePageProps) {
   const { horseId } = useParams();
   const [loadedHorse, setLoadedHorse] = useState<HorseRecord | null>(null);
+  const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
+  const [races, setRaces] = useState<RaceRecord[]>([]);
   const [name, setName] = useState('');
   const [breed, setBreed] = useState('');
   const [species, setSpecies] = useState('');
   const [age, setAge] = useState('');
   const [sex, setSex] = useState('');
   const [color, setColor] = useState('');
-  const [weightKg, setWeightKg] = useState('');
+  const [weightLb, setWeightKg] = useState('');
   const [heightCm, setHeightCm] = useState('');
   const [speedRating, setSpeedRating] = useState('75');
   const [staminaRating, setStaminaRating] = useState('75');
@@ -60,17 +70,53 @@ export default function RegisterHorsePage({
   const displayedRating = isEdit && activeHorse
     ? officialHorseRating(activeHorse)
     : overallRating;
+  const latestAdjustment = activeHorse
+    ? raceEntries
+        .filter((entry) => {
+          const postRaceRating = Number(entry.postRaceRating || 0);
+          const ratingChange = Number(entry.ratingChange || 0);
+          return (
+            entry.horseId === activeHorse.id &&
+            entry.resultStatus === 'official' &&
+            (postRaceRating > 0 || ratingChange !== 0)
+          );
+        })
+        .map((entry) => {
+          const race = races.find((item) => item.id === entry.raceId);
+          const ratingSnapshot = Number(entry.ratingSnapshot || 0);
+          const ratingChange = Number(entry.ratingChange || 0);
+          const postRaceRating =
+            Number(entry.postRaceRating || 0) || ratingSnapshot + ratingChange;
+          const sortTime = race
+            ? Date.parse(`${race.raceDate}T${race.raceTime || '00:00'}`)
+            : 0;
+
+          return {
+            raceName: race?.name || entry.raceName || 'Race',
+            ratingSnapshot,
+            ratingChange,
+            postRaceRating,
+            sortTime: Number.isFinite(sortTime) ? sortTime : 0,
+          };
+        })
+        .sort((a, b) => b.sortTime - a.sortTime)[0]
+    : null;
 
   useEffect(() => {
-    if (horse || mode !== 'edit' || !horseId) return;
+    if (mode !== 'edit') return;
 
     getBootstrap()
       .then((data) => {
-        const foundHorse = data.horses.find((item) => item.id === horseId) || null;
-        setLoadedHorse(foundHorse);
+        setRaceEntries(data.raceEntries || []);
+        setRaces(data.races || []);
 
-        if (!foundHorse) {
-          setMessage('Horse not found or not available for this account.');
+        if (!horse && horseId) {
+          const foundHorse = data.horses.find((item) => item.id === horseId) || null;
+          setLoadedHorse(foundHorse);
+
+          if (!foundHorse) {
+            setMessage('Horse not found or not available for this account.');
+          }
         }
       })
       .catch((error) =>
@@ -87,7 +133,7 @@ export default function RegisterHorsePage({
     setAge(activeHorse.age ? String(activeHorse.age) : '');
     setSex(activeHorse.sex || '');
     setColor(activeHorse.color || '');
-    setWeightKg(activeHorse.weightKg ? String(activeHorse.weightKg) : '');
+    setWeightKg(activeHorse.weightLb ? String(activeHorse.weightLb) : '');
     setHeightCm(activeHorse.heightCm ? String(activeHorse.heightCm) : '');
     setSpeedRating(activeHorse.speedRating ? String(activeHorse.speedRating) : '75');
     setStaminaRating(activeHorse.staminaRating ? String(activeHorse.staminaRating) : '75');
@@ -115,13 +161,12 @@ export default function RegisterHorsePage({
       age,
       sex,
       color,
-      weightKg,
+      weightLb,
       heightCm,
       speedRating,
       staminaRating,
       formRating,
       healthRating,
-      overallRating,
       healthStatus,
       profileNotes,
       veterinaryCertificateUrl,
@@ -292,7 +337,7 @@ export default function RegisterHorsePage({
                 min="0"
                 step="0.1"
                 placeholder="485"
-                value={weightKg}
+                value={weightLb}
                 onChange={(event) => setWeightKg(event.target.value)}
                 className={fieldClass}
               />
@@ -330,10 +375,66 @@ export default function RegisterHorsePage({
                     {isEdit ? 'Official Rating' : 'Initial Rating Estimate'}
                   </div>
                   <div className="text-white text-2xl font-black">
-                    {displayedRating}
+                    {formatRating(displayedRating)}
                   </div>
                 </div>
               </div>
+
+              {isEdit && (
+                <div className="grid md:grid-cols-3 gap-4 mb-5">
+                  <div className="rounded-xl border border-white/10 bg-[#071a2f] p-4">
+                    <div className="text-gray-400 text-xs uppercase font-bold">
+                      Current Official
+                    </div>
+                    <div className="text-white text-xl font-black mt-1">
+                      {formatRating(displayedRating)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-[#071a2f] p-4">
+                    <div className="text-gray-400 text-xs uppercase font-bold">
+                      Attribute Estimate
+                    </div>
+                    <div className="text-white text-xl font-black mt-1">
+                      {formatRating(overallRating)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-[#071a2f] p-4">
+                    <div className="text-gray-400 text-xs uppercase font-bold">
+                      Last Race Adjustment
+                    </div>
+                    {latestAdjustment ? (
+                      <>
+                        <div className="text-white text-sm font-bold mt-1 truncate">
+                          {latestAdjustment.raceName}
+                        </div>
+                        <div className="text-gray-300 text-sm mt-1">
+                          {formatRating(latestAdjustment.ratingSnapshot)} to{' '}
+                          {formatRating(latestAdjustment.postRaceRating)}
+                          <span
+                            className={
+                              latestAdjustment.ratingChange > 0
+                                ? 'text-green-400 font-bold'
+                                : latestAdjustment.ratingChange < 0
+                                  ? 'text-red-400 font-bold'
+                                  : 'text-gray-400 font-bold'
+                            }
+                          >
+                            {' '}
+                            ({latestAdjustment.ratingChange > 0 ? '+' : ''}
+                            {formatRating(latestAdjustment.ratingChange)})
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-gray-300 text-sm mt-1">
+                        No race adjustment recorded yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="grid md:grid-cols-4 gap-4">
                 {[

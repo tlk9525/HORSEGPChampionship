@@ -89,7 +89,7 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
     ['Sex', activeHorse.sex || 'Not set', ShieldCheck],
     ['Color', activeHorse.color || 'Not set', FileText],
     ['Age', `${activeHorse.age} years`, Activity],
-    ['Weight', value(activeHorse.weightKg, 'kg'), Scale],
+    ['Weight', value(activeHorse.weightLb, 'kg'), Scale],
     ['Height', value(activeHorse.heightCm, 'cm'), Ruler],
     ['Official Rating', value(overall(activeHorse)), Trophy],
     ['Speed Rating', value(activeHorse.speedRating), Gauge],

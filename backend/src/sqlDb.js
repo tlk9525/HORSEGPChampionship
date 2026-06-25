@@ -97,6 +97,42 @@ const ensureRuntimeSchema = async () => {
           ADD COLUMN IF NOT EXISTS "postRaceRating" NUMERIC(6, 2) NOT NULL DEFAULT 0
         `);
         await client.query(`
+          ALTER TABLE "tournaments"
+          ADD COLUMN IF NOT EXISTS "registrationOpensAt" TIMESTAMPTZ
+        `);
+        await client.query(`
+          ALTER TABLE "tournaments"
+          ADD COLUMN IF NOT EXISTS "registrationClosesAt" TIMESTAMPTZ
+        `);
+        await client.query(`
+          ALTER TABLE "horseTournamentRegistrations"
+          ALTER COLUMN "jockeyUserId" DROP NOT NULL
+        `);
+        await client.query(`
+          ALTER TABLE "horseTournamentRegistrations"
+          ADD COLUMN IF NOT EXISTS "raceId" VARCHAR(64)
+        `);
+        await client.query(`
+          UPDATE "tournaments" AS "tournament"
+          SET
+            "registrationOpensAt" = COALESCE(
+              "tournament"."registrationOpensAt",
+              (
+                SELECT MIN("race"."registrationOpensAt")
+                FROM "races" AS "race"
+                WHERE "race"."tournamentId" = "tournament"."id"
+              )
+            ),
+            "registrationClosesAt" = COALESCE(
+              "tournament"."registrationClosesAt",
+              (
+                SELECT MAX("race"."registrationClosesAt")
+                FROM "races" AS "race"
+                WHERE "race"."tournamentId" = "tournament"."id"
+              )
+            )
+        `);
+        await client.query(`
           UPDATE "races"
           SET "handicapMin" = 115, "handicapMax" = 135
           WHERE "handicapMax" < 100
@@ -443,6 +479,7 @@ export const writeDb = async (db) => {
       ],
       (db.tournaments || []).map((tournament) => ({
         ...tournament,
+        registrationWindow: tournament.registrationWindow || null,
         startDate: tournament.startDate || null,
         finalDate: tournament.finalDate || null,
         ...rowTimestamps(tournament),
@@ -609,6 +646,7 @@ export const writeDb = async (db) => {
       ],
       (db.horseTournamentRegistrations || []).map((registration) => ({
         ...registration,
+        jockeyUserId: registration.jockeyUserId || null,
         invitationId: registration.invitationId || null,
         status: registration.status || 'pending-jockey',
         notes: registration.notes || '',

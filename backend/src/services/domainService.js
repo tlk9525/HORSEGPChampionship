@@ -6,7 +6,9 @@ export const ownerName = (db, userId) =>
 
 // Lấy tên jockey (nửịm) từ userId, trả về 'Unknown Jockey' nếu không tìm thấy
 export const jockeyName = (db, userId) =>
-  db.users.find((user) => user.id === userId)?.name || 'Unknown Jockey';
+  userId
+    ? db.users.find((user) => user.id === userId)?.name || 'Unknown Jockey'
+    : 'Jockey pending';
 
 // Lấy tên ngựa từ horseId, trả về 'Unknown Horse' nếu không tìm thấy
 export const horseName = (db, horseId) =>
@@ -31,14 +33,14 @@ export const activeTournament = (db) =>
 export const tournamentRaces = (db, tournamentId) =>
   (db.races || []).filter((race) => race.tournamentId === tournamentId);
 
-export const isRaceRegistrationOpen = (race, at = Date.now()) => {
-  if (race?.status !== 'registration-open') return false;
+export const isTournamentRegistrationOpen = (tournament, at = Date.now()) => {
+  if (!tournament || !ACTIVE_TOURNAMENT_STATUSES.includes(tournament.status)) return false;
 
-  const opensAt = race.registrationOpensAt
-    ? new Date(race.registrationOpensAt).getTime()
+  const opensAt = tournament.registrationOpensAt
+    ? new Date(tournament.registrationOpensAt).getTime()
     : Number.NEGATIVE_INFINITY;
-  const closesAt = race.registrationClosesAt
-    ? new Date(race.registrationClosesAt).getTime()
+  const closesAt = tournament.registrationClosesAt
+    ? new Date(tournament.registrationClosesAt).getTime()
     : Number.POSITIVE_INFINITY;
 
   return Number.isFinite(at) && at >= opensAt && at < closesAt;
@@ -204,6 +206,22 @@ export const formatApprovals = (db) => [
         targetUserId: horse?.ownerUserId,
       };
     }),
+  ...(db.horseTournamentRegistrations || [])
+    .filter(
+      (registration) =>
+        registration.status === 'pending-admin' &&
+        !registration.invitationId &&
+        !registration.jockeyUserId
+    )
+    .map((registration) => ({
+      id: registration.id,
+      entityType: 'horseTournament',
+      type: 'Horse Race Registration',
+      name: horseName(db, registration.horseId),
+      detail: `Race: ${raceName(db, registration.raceId)} • Owner: ${ownerName(db, registration.ownerUserId)}`,
+      date: registration.createdAt,
+      targetUserId: registration.ownerUserId,
+    })),
   ...(db.jockeyInvitations || [])
     .filter(
       (invitation) =>
@@ -212,17 +230,11 @@ export const formatApprovals = (db) => [
     .map((invitation) => ({
       id: invitation.id,
       entityType: 'pairing',
-      type: invitation.tournamentId
-        ? 'Tournament Horse Registration'
-        : 'Race Entry Registration',
+      type: 'Race Entry Registration',
       name: `${horseName(db, invitation.horseId)} + ${jockeyName(db, invitation.jockeyUserId)}`,
-      detail: invitation.tournamentId
-        ? `Tournament: ${tournamentName(db, invitation.tournamentId)} • Owner: ${ownerName(db, invitation.ownerUserId)}`
-        : `Race: ${raceName(db, invitation.raceId)} • Owner: ${ownerName(db, invitation.ownerUserId)}`,
+      detail: `Race: ${raceName(db, invitation.raceId)} • Owner: ${ownerName(db, invitation.ownerUserId)}`,
       date:
         db.races.find((race) => race.id === invitation.raceId)?.date ||
-        db.tournaments.find((tournament) => tournament.id === invitation.tournamentId)?.startDate ||
-        activeTournament(db)?.startDate ||
         'Race schedule',
       targetUserId: invitation.ownerUserId,
     })),

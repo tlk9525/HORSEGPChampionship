@@ -30,15 +30,16 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
     raceName: '',
     raceDate: '',
     startTime: '',
+    registrationOpensAt: '',
+    registrationClosesAt: '',
     venue: '',
     distance: '',
     surfaceType: '',
     raceClass: '',
     handicapMin: '115',
     handicapMax: '135',
-    refereeUserId: '',
-    registrationOpenTime: '',
-    registrationCloseTime: '',
+    totalPrize: '',
+    refereeUserIds: [] as string[],
   });
 
   const selectedTournament = useMemo(
@@ -86,7 +87,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
           tournamentId: firstTournament?.id || '',
           raceNumber: current.raceNumber || nextRaceNumber,
           venue: current.venue || firstTournament?.location || '',
-          refereeUserId: data.referees[0]?.id || '',
+          refereeUserIds: data.referees[0] ? [data.referees[0].id] : [],
         }));
       })
       .catch((error) =>
@@ -116,27 +117,24 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
       !form.raceClass ||
       form.handicapMin === '' ||
       form.handicapMax === '' ||
-      !form.refereeUserId ||
-      !form.registrationOpenTime ||
-      !form.registrationCloseTime
+      form.refereeUserIds.length === 0
     ) {
-      setMessage('Please complete the race schedule, registration open/close time, venue, distance and referee.');
+      setMessage('Please complete the race schedule, venue, distance and referees.');
       return;
     }
 
-    const registrationOpensAt = new Date(form.registrationOpenTime);
-    const registrationClosesAt = new Date(form.registrationCloseTime);
+    if (!form.registrationOpensAt || !form.registrationClosesAt) {
+      setMessage('Registration open and close times are required.');
+      return;
+    }
+    const regOpens = new Date(form.registrationOpensAt);
+    const regCloses = new Date(form.registrationClosesAt);
     const raceStartsAt = new Date(`${form.raceDate}T${form.startTime}`);
-
-    if (registrationOpensAt >= registrationClosesAt) {
+    if (regOpens >= regCloses) {
       setMessage('Registration close time must be after open time.');
       return;
     }
-    if (registrationClosesAt <= new Date()) {
-      setMessage('Registration close time must be in the future.');
-      return;
-    }
-    if (registrationClosesAt > raceStartsAt) {
+    if (regCloses > raceStartsAt) {
       setMessage('Registration must close before the race starts.');
       return;
     }
@@ -161,15 +159,17 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
       name: form.raceName,
       date: form.raceDate,
       time: form.startTime,
+      registrationOpensAt: new Date(form.registrationOpensAt).toISOString(),
+      registrationClosesAt: new Date(form.registrationClosesAt).toISOString(),
       venue: form.venue,
       distance: form.distance,
       surface: form.surfaceType,
       raceClass: form.raceClass,
       handicapMin: form.handicapMin,
       handicapMax: form.handicapMax,
-      refereeUserId: form.refereeUserId,
-      registrationOpenTime: registrationOpensAt.toISOString(),
-      registrationCloseTime: registrationClosesAt.toISOString(),
+      totalPrize: form.totalPrize,
+      refereeUserIds: form.refereeUserIds,
+      refereeUserId: form.refereeUserIds[0],
     })
       .then(() => {
         setMessage('Race created. Registration is open for Owners/Jockeys.');
@@ -293,36 +293,6 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
               </div>
 
               <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Registration Open Time</label>
-                <input
-                  type="datetime-local"
-                  className={fieldClass}
-                  value={form.registrationOpenTime}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      registrationOpenTime: event.target.value,
-                    })
-                  }
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Registration Close Time</label>
-                <input
-                  type="datetime-local"
-                  className={fieldClass}
-                  value={form.registrationCloseTime}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      registrationCloseTime: event.target.value,
-                    })
-                  }
-                />
-              </div>
-
-              <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Race Date</label>
                 <input
                   type="date"
@@ -348,6 +318,44 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                       ...form,
                       startTime: event.target.value,
                     })
+                  }
+                />
+              </div>
+
+              <div className="min-w-0">
+                <label className="block text-gray-300 mb-2">Registration Opens</label>
+                <input
+                  type="datetime-local"
+                  className={fieldClass}
+                  value={form.registrationOpensAt}
+                  onChange={(event) =>
+                    setForm({ ...form, registrationOpensAt: event.target.value })
+                  }
+                />
+              </div>
+
+              <div className="min-w-0">
+                <label className="block text-gray-300 mb-2">Registration Closes</label>
+                <input
+                  type="datetime-local"
+                  className={fieldClass}
+                  value={form.registrationClosesAt}
+                  onChange={(event) =>
+                    setForm({ ...form, registrationClosesAt: event.target.value })
+                  }
+                />
+              </div>
+
+              <div className="min-w-0">
+                <label className="block text-gray-300 mb-2">Prize Pool (USD)</label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 150000"
+                  className={fieldClass}
+                  value={form.totalPrize}
+                  onChange={(event) =>
+                    setForm({ ...form, totalPrize: event.target.value })
                   }
                 />
               </div>
@@ -404,8 +412,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
 
               <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Race Class</label>
-                <input
-                  placeholder="Open"
+                <select
                   className={fieldClass}
                   value={form.raceClass}
                   onChange={(event) =>
@@ -414,7 +421,15 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                       raceClass: event.target.value,
                     })
                   }
-                />
+                >
+                  <option value="">Select class</option>
+                  <option value="Class 1">Class 1 (101-140)</option>
+                  <option value="Class 2">Class 2 (81-100)</option>
+                  <option value="Class 3">Class 3 (61-80)</option>
+                  <option value="Class 4">Class 4 (41-60)</option>
+                  <option value="Class 5">Class 5 (0-40)</option>
+                  <option value="Open">Open (0-140)</option>
+                </select>
               </div>
 
               <div className="min-w-0">
@@ -454,19 +469,21 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
               </div>
 
               <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Assigned Referee</label>
+                <label className="block text-gray-300 mb-2">Assigned Referees (Hold Cmd/Ctrl to select multiple)</label>
                 <select
-                  className={fieldClass}
-                  value={form.refereeUserId}
-                  onChange={(event) =>
+                  multiple
+                  className={`${fieldClass} min-h-[120px]`}
+                  value={form.refereeUserIds}
+                  onChange={(event) => {
+                    const options = Array.from(event.target.selectedOptions);
                     setForm({
                       ...form,
-                      refereeUserId: event.target.value,
-                    })
-                  }
+                      refereeUserIds: options.map(opt => opt.value),
+                    });
+                  }}
                 >
                   {referees.map((referee) => (
-                    <option key={referee.id} value={referee.id}>
+                    <option key={referee.id} value={referee.id} className="p-1">
                       {referee.name}
                     </option>
                   ))}
@@ -480,29 +497,29 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   <Bell className="w-6 h-6 text-[#d4af37]" />
 
                   <h2 className="text-2xl font-black text-white">
-                    Open Registration
+                    Race Registration Window
                   </h2>
                 </div>
 
                 <p className="text-gray-400 mb-5">
-                  Owner horse registration is tournament-wide; jockey approvals and race publication prepare the full race schedule.
+                  Each race has its own registration window. Owners can register horses once the window opens. Prize is awarded per race.
                 </p>
 
                 <div className="space-y-3 text-sm text-gray-300 mb-6">
                   <div className="flex justify-between gap-3">
-                    <span>Registration opens</span>
+                    <span>Race registration opens</span>
                     <span className="text-white font-bold text-right">
-                      {form.registrationOpenTime
-                        ? new Date(form.registrationOpenTime).toLocaleString()
+                      {selectedTournament?.registrationOpensAt
+                        ? new Date(selectedTournament.registrationOpensAt).toLocaleString()
                         : 'Not set'}
                     </span>
                   </div>
 
                   <div className="flex justify-between gap-3">
-                    <span>Registration closes</span>
+                    <span>Race registration closes</span>
                     <span className="text-white font-bold text-right">
-                      {form.registrationCloseTime
-                        ? new Date(form.registrationCloseTime).toLocaleString()
+                      {selectedTournament?.registrationClosesAt
+                        ? new Date(selectedTournament.registrationClosesAt).toLocaleString()
                         : 'Not set'}
                     </span>
                   </div>
@@ -510,8 +527,8 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   <div className="flex justify-between gap-3">
                     <span>Initial status</span>
                     <span className="text-white font-bold">
-                      {form.registrationOpenTime &&
-                      Date.now() < new Date(form.registrationOpenTime).getTime()
+                      {form.registrationOpensAt &&
+                      Date.now() < new Date(form.registrationOpensAt).getTime()
                         ? 'Registration Scheduled'
                         : 'Registration Open'}
                     </span>

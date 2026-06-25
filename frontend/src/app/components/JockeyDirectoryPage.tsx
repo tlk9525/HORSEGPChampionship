@@ -18,6 +18,11 @@ import {
 } from '../services/api';
 import { statusLabel } from '../utils/domain';
 
+const weightLbToLb = (weight?: number) => {
+  const parsed = Number(weight || 0);
+  return parsed > 0 ? `${(parsed * 2.20462).toFixed(0)}lb` : '-';
+};
+
 export default function JockeyDirectoryPage() {
   const [jockeys, setJockeys] = useState<JockeyProfileRecord[]>([]);
   const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
@@ -173,7 +178,7 @@ export default function JockeyDirectoryPage() {
 
                         <span className="inline-flex items-center gap-2">
                           <Scale className="h-4 w-4" />
-                          {selectedJockey.weight || '-'}kg
+                          {weightLbToLb(selectedJockey.weight)}
                         </span>
                       </div>
                     </div>
@@ -280,7 +285,7 @@ export default function JockeyDirectoryPage() {
                             </span>
 
                             <span className="rounded-lg border border-white/10 bg-[#071a2f]/30 px-3 py-1 text-sm text-gray-300">
-                              Assigned weight {Number(entry.handicap || 0).toFixed(0)}lb
+                              Assigned Wt. {Number(entry.handicap || 0).toFixed(0)}lb
                             </span>
                           </div>
                         </div>

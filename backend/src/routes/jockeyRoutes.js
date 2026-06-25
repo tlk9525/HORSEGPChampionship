@@ -5,6 +5,7 @@ import { requireRole } from '../services/authService.js';
 import {
   activeTournament,
   activeRace,
+  isTournamentRegistrationOpen,
   ownerName,
   publicRaceEntries,
   raceName,
@@ -108,7 +109,9 @@ export const createJockeyRoutes = (getDb, writeDb) => {
         TOURNAMENT_REGISTRATION_STATUSES.includes(item.status)
     );
 
-    if (!tournament) return c.json({ message: 'Tournament registration is not open' }, 400);
+    if (!tournament || !isTournamentRegistrationOpen(tournament)) {
+      return c.json({ message: 'Tournament registration is not open' }, 400);
+    }
 
     db.jockeyTournamentRegistrations = db.jockeyTournamentRegistrations || [];
     const existing = db.jockeyTournamentRegistrations.find(
@@ -168,9 +171,7 @@ export const createJockeyRoutes = (getDb, writeDb) => {
     invitation.respondedAt = new Date().toISOString();
 
     const horse = db.horses.find((item) => item.id === invitation.horseId);
-    const targetLabel = invitation.tournamentId
-      ? tournamentName(db, invitation.tournamentId)
-      : raceName(db, invitation.raceId);
+    const targetLabel = raceName(db, invitation.raceId);
     const horseRegistration = (db.horseTournamentRegistrations || []).find(
       (r) => r.invitationId === invitation.id
     );
@@ -180,13 +181,16 @@ export const createJockeyRoutes = (getDb, writeDb) => {
       if (horseRegistration) horseRegistration.status = 'pending-admin';
       if (horse) { horse.jockeyConfirmation = 'pending-admin'; horse.updatedAt = new Date().toISOString(); }
 
-      createNotification(db, invitation.ownerUserId, 'Jockey accepted tournament participation',
+      createNotification(db, invitation.ownerUserId, 'Jockey accepted race participation',
         `${user.name} accepted riding ${horse?.name || 'your horse'} for ${targetLabel}. Waiting for Admin approval.`);
-      notifyAdmins(db, 'Tournament horse registration needs approval',
+      notifyAdmins(db, 'Race horse registration needs approval',
         `${ownerName(db, invitation.ownerUserId)} registered ${horse?.name || 'Horse'} + ${user.name} for ${targetLabel}.`);
     } else {
       invitation.adminStatus = null;
-      if (horseRegistration) { horseRegistration.status = 'rejected'; horseRegistration.reviewedAt = new Date().toISOString(); }
+      if (horseRegistration) {
+        horseRegistration.status = 'rejected';
+        horseRegistration.reviewedAt = new Date().toISOString();
+      }
       if (horse) { horse.jockeyConfirmation = 'waiting-owner'; horse.updatedAt = new Date().toISOString(); }
 
       createNotification(db, invitation.ownerUserId, 'Jockey rejected request',

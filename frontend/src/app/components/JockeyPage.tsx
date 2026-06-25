@@ -81,7 +81,7 @@ export default function JockeyPage({
     })
       .then(({ profile: updatedProfile }) => {
         setProfile(updatedProfile);
-        setMessage('Profile published. Owners can now select you.');
+        setMessage('Profile published. Join a tournament so owners can select you after Admin approves their horses.');
       })
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : 'Unable to publish profile')
@@ -150,7 +150,7 @@ export default function JockeyPage({
         </h1>
 
         <p className="text-gray-400 mb-8">
-          Publish your jockey profile, certificate and competition level so Horse Owners can send riding requests for active tournament races.
+          Publish your profile, join tournaments, then accept owner requests after their horses are approved by Admin.
         </p>
 
         {message && (
@@ -201,7 +201,7 @@ export default function JockeyPage({
               </div>
 
               <div>
-                <label className="block text-gray-300 mb-2">Weight</label>
+                <label className="block text-gray-300 mb-2">Weight (kg)</label>
 
                 <input
                   type="number"
@@ -256,7 +256,7 @@ export default function JockeyPage({
 
                   {invitation.status === 'pending' && (
                     <div className="text-blue-300 text-sm mt-2 font-semibold">
-                      Owner request: accept to send this tournament pairing to Admin approval.
+                      Owner selected you after Admin approved the horse. Accept to send this pairing to final Admin approval.
                     </div>
                   )}
 
@@ -350,7 +350,7 @@ export default function JockeyPage({
                             </div>
 
                             <div>
-                              <p className="text-gray-500 text-xs">Assigned Weight</p>
+                              <p className="text-gray-500 text-xs">Assigned Wt. (lb)</p>
                               <p className="text-white text-2xl font-black">
                                 {Number(entry.handicap || 0).toFixed(0)}lb
                               </p>

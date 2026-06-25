@@ -10,7 +10,7 @@ export interface AuthUser {
 
 export interface ApprovalItem {
   id: string;
-  entityType: 'horse' | 'account' | 'jockey' | 'jockeyTournament' | 'raceEntry' | 'pairing';
+  entityType: 'horse' | 'account' | 'jockey' | 'jockeyTournament' | 'horseTournament' | 'raceEntry' | 'pairing';
   type: string;
   name: string;
   detail: string;
@@ -36,7 +36,7 @@ export interface HorseRecord {
   age: number;
   sex?: string;
   color?: string;
-  weightKg?: number;
+  weightLb?: number;
   heightCm?: number;
   baseHandicap?: number;
   speedRating?: number;
@@ -136,6 +136,8 @@ export interface TournamentRecord {
   name: string;
   status: string;
   registrationWindow?: string;
+  registrationOpensAt?: string;
+  registrationClosesAt?: string;
   startDate?: string;
   finalDate?: string;
   location?: string;
@@ -191,12 +193,14 @@ export interface HorseTournamentRegistration {
   tournamentId: string;
   horseId: string;
   ownerUserId: string;
-  jockeyUserId: string;
+  jockeyUserId?: string | null;
   invitationId?: string | null;
   status: 'pending-jockey' | 'pending-admin' | 'approved' | 'rejected' | 'cancelled';
   notes?: string;
   createdAt: string;
   reviewedAt?: string | null;
+  horseName?: string;
+  jockeyName?: string;
 }
 
 export interface ActivePairing extends HorseTournamentRegistration {
@@ -313,7 +317,8 @@ export const decideApproval = async (
 // Tạo giải đấu mới (admin)
 export const createTournament = async (tournament: {
   name: string;
-  registrationWindow: string;
+  registrationOpenTime: string;
+  registrationCloseTime: string;
   startDate: string;
   finalDate: string;
   location: string;
@@ -359,24 +364,24 @@ export const getOwnerPortal = async () =>
   }>('/owner/portal');
 
 // Lấy dữ liệu trang đăng ký race cho owner, bao gồm thông tin giải, ngựa, race...
-export const getRaceRegistration = async (tournamentId: string) =>
+export const getRaceRegistration = async (raceId: string) =>
   request<{
     tournament: TournamentRecord;
+    race: RaceRecord;
     horses: HorseRecord[];
-    races: RaceRecord[];
     jockeyProfiles: JockeyProfileRecord[];
     horseTournamentRegistrations: HorseTournamentRegistration[];
     raceEntries: RaceEntryRecord[];
-  }>(`/owner/race-registration?tournamentId=${encodeURIComponent(tournamentId)}`);
+  }>(`/owner/race-registration?raceId=${encodeURIComponent(raceId)}`);
 
 // Tạo một race entry mới (owner đăng ký ngựa vào cuộc đua)
 export const createRaceEntry = async (entry: {
-  tournamentId: string;
+  raceId: string;
   horseId: string;
-  jockeyUserId: string;
+  jockeyUserId?: string;
   notes?: string;
 }) =>
-  request<{ invitation: JockeyInvitation }>('/owner/race-entries', {
+  request<{ invitation?: JockeyInvitation; registration?: HorseTournamentRegistration }>('/owner/race-entries', {
     method: 'POST',
     body: JSON.stringify(entry),
   });
@@ -389,14 +394,13 @@ export const createHorse = async (horse: {
   age: string | number;
   sex?: string;
   color?: string;
-  weightKg?: string | number;
+  weightLb?: string | number;
   heightCm?: string | number;
   baseHandicap?: string | number;
   speedRating?: string | number;
   staminaRating?: string | number;
   formRating?: string | number;
   healthRating?: string | number;
-  overallRating?: string | number;
   healthStatus?: string;
   profileNotes?: string;
   veterinaryCertificateUrl?: string;
@@ -419,14 +423,13 @@ export const updateHorse = async (
     age: string | number;
     sex?: string;
     color?: string;
-    weightKg?: string | number;
+    weightLb?: string | number;
     heightCm?: string | number;
     baseHandicap?: string | number;
     speedRating?: string | number;
     staminaRating?: string | number;
     formRating?: string | number;
     healthRating?: string | number;
-    overallRating?: string | number;
     healthStatus?: string;
     profileNotes?: string;
     veterinaryCertificateUrl?: string;
@@ -507,9 +510,6 @@ export const createRace = async (race: {
   refereeUserId: string;
   refereeUserIds?: string[];
   tournamentId?: string;
-  registrationPeriodMinutes?: string | number;
-  registrationOpenTime?: string;
-  registrationCloseTime?: string;
   entries?: RaceEntryInput[];
 }) =>
   request<{ race: RaceRecord; entries: RaceEntryRecord[]; notifications: NotificationItem[] }>(

@@ -33,14 +33,16 @@ interface TournamentPageProps {
 const raceNumberValue = (raceNumber?: string) =>
   Number(String(raceNumber || '').replace(/\D/g, '')) || 999;
 
-const registrationWindowOpen = (race: RaceRecord) => {
-  if (race.status !== 'registration-open') return false;
+const registrationWindowOpen = (tournament: TournamentRecord) => {
+  if (!['registration', 'registration-open', 'approvals', 'active'].includes(tournament.status)) {
+    return false;
+  }
   const now = Date.now();
-  const opensAt = race.registrationOpensAt
-    ? new Date(race.registrationOpensAt).getTime()
+  const opensAt = tournament.registrationOpensAt
+    ? new Date(tournament.registrationOpensAt).getTime()
     : Number.NEGATIVE_INFINITY;
-  const closesAt = race.registrationClosesAt
-    ? new Date(race.registrationClosesAt).getTime()
+  const closesAt = tournament.registrationClosesAt
+    ? new Date(tournament.registrationClosesAt).getTime()
     : Number.POSITIVE_INFINITY;
   return now >= opensAt && now < closesAt;
 };
@@ -175,24 +177,9 @@ export default function TournamentPage({
   };
 
   const raceAction = (race: RaceRecord) => {
-    const tournament = tournaments.find((item) => item.id === race.tournamentId);
-
-    if (race.status === 'completed' || tournament?.status === 'completed') {
-      return { label: 'View Race', page: 'race-details' };
+    if (['registration-open'].includes(race.status) && currentUser?.role === 'owner') {
+      return { label: 'Register Horse', page: 'race-registration' };
     }
-
-    if (currentUser?.role === 'owner') {
-      return { label: 'View Race', page: 'race-details' };
-    }
-
-    if (currentUser?.role === 'jockey') {
-      return { label: 'View Assignment', page: 'jockeys' };
-    }
-
-    if (currentUser?.role === 'referee') {
-      return { label: 'Inspect / Start', page: 'live-race' };
-    }
-
     if (currentUser?.role === 'admin') {
       return { label: 'Manage Race', page: 'admin' };
     }
@@ -223,7 +210,7 @@ export default function TournamentPage({
           </h1>
 
           <p className="text-gray-400 text-lg">
-            Jockeys join tournaments here. Owners register horses once for a tournament, then approved horses run the full race schedule.
+            Jockeys join tournaments here. Owners register horses first; after Admin approval, owners select a jockey for final approval.
           </p>
         </div>
 
@@ -238,9 +225,7 @@ export default function TournamentPage({
             const tournamentRaces = races.filter(
               (race) => race.tournamentId === tournament.id
             );
-            const openRaceCount = tournamentRaces.filter(
-              registrationWindowOpen
-            ).length;
+            const tournamentRegistrationOpen = registrationWindowOpen(tournament);
             const jockeyRegistration = jockeyRegistrationByTournament.get(tournament.id);
             const isCompletedTournament = tournament.status === 'completed';
             const hasTournamentRaces = tournamentRaces.length > 0;
@@ -252,27 +237,30 @@ export default function TournamentPage({
             const registeredHorseIds = new Set(
               activeHorseRegistrations.map((registration) => registration.horseId)
             );
-            const registeredJockeyIds = new Set(
-              activeHorseRegistrations.map((registration) => registration.jockeyUserId)
-            );
+            raceEntries
+              .filter(
+                (entry) =>
+                  tournamentRaces.some((race) => race.id === entry.raceId) &&
+                  entry.status !== 'rejected'
+              )
+              .forEach((entry) => registeredHorseIds.add(entry.horseId));
             const availableOwnerHorseCount = horses.filter(
               (horse) =>
                 horse.ownerUserId === currentUser?.id &&
                 horse.status === 'approved' &&
                 !registeredHorseIds.has(horse.id)
             ).length;
-            const availableApprovedJockeyCount = registrations.filter(
+            const approvedHorsesAwaitingJockeyCount = activeHorseRegistrations.filter(
               (registration) =>
-                registration.tournamentId === tournament.id &&
+                registration.ownerUserId === currentUser?.id &&
                 registration.status === 'approved' &&
-                !registeredJockeyIds.has(registration.jockeyUserId)
+                !registration.jockeyUserId
             ).length;
             const canRegisterTournamentHorse =
               currentUser?.role === 'owner' &&
               !isCompletedTournament &&
-              openRaceCount > 0 &&
-              availableOwnerHorseCount > 0 &&
-              availableApprovedJockeyCount > 0;
+              (tournamentRegistrationOpen && availableOwnerHorseCount > 0 ||
+                approvedHorsesAwaitingJockeyCount > 0);
 
             return (
               <div
@@ -333,9 +321,9 @@ export default function TournamentPage({
                     <div className="flex items-start gap-3">
                       <Users className="w-5 h-5 text-[#d4af37] mt-1" />
                       <div>
-                        <p className="text-gray-500 text-xs uppercase">Open Races</p>
+                        <p className="text-gray-500 text-xs uppercase">Registration</p>
                         <p className="text-white font-semibold mt-1">
-                          {openRaceCount}
+                          {tournamentRegistrationOpen ? 'Open' : 'Closed'}
                         </p>
                       </div>
                     </div>
@@ -370,7 +358,7 @@ export default function TournamentPage({
                           selectTournament(tournament.id);
                           handleJoinTournament(tournament.id);
                         }}
-                        disabled={Boolean(jockeyRegistration)}
+                        disabled={Boolean(jockeyRegistration) || !tournamentRegistrationOpen}
                         className="py-4 bg-[#d4af37] hover:bg-[#b8892d] disabled:bg-white/10 disabled:text-gray-500 text-white rounded-xl transition-all font-bold"
                       >
                         {jockeyRegistration
@@ -379,18 +367,7 @@ export default function TournamentPage({
                       </button>
                     )}
 
-                    {canRegisterTournamentHorse && (
-                      <button
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          selectTournament(tournament.id);
-                          onNavigate('tournament-registration');
-                        }}
-                        className="py-4 bg-[#d4af37] hover:bg-[#b8892d] text-white rounded-xl transition-all font-bold"
-                      >
-                        Register Tournament Horse
-                      </button>
-                    )}
+
                   </div>
                 </div>
               </div>
@@ -504,7 +481,7 @@ export default function TournamentPage({
                     <div className="border border-white/10 rounded-xl p-4">
                       <div className="flex items-center gap-2 text-gray-500 text-xs uppercase font-bold">
                         <Gauge className="w-4 h-4 text-[#d4af37]" />
-                        Assigned Weight
+                        Assigned Wt. (lb)
                       </div>
                       <p className="text-white font-semibold mt-2">
                         {Number(race.handicapMin ?? 115).toFixed(0)} - {Number(race.handicapMax ?? 135).toFixed(0)} lb
@@ -567,7 +544,7 @@ export default function TournamentPage({
                                 key={entry.id}
                                 className="px-3 py-2 rounded-lg bg-[#071a2f]/40 border border-white/10 text-sm text-white"
                               >
-                                Gate {entry.lane || '-'} • {entry.horseName || 'Horse'} • Rating {entry.ratingSnapshot || 'TBD'} • Assigned weight {Number(entry.handicap || 0).toFixed(0)}lb
+                                Gate {entry.lane || '-'} • {entry.horseName || 'Horse'} • Rating {entry.ratingSnapshot || 'TBD'} • Assigned Wt. {Number(entry.handicap || 0).toFixed(0)}lb
                               </span>
                             ))}
                           </div>

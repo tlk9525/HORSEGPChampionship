@@ -82,14 +82,16 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   const [maxRacesPerTournament, setMaxRacesPerTournament] = useState(10);
   const [showCreateTournament, setShowCreateTournament] = useState(false);
   const [tournamentMessage, setTournamentMessage] = useState('');
-  const [scheduleExpanded, setScheduleExpanded] = useState(false);
+
+  const [expandedTournaments, setExpandedTournaments] = useState<Record<string, boolean>>({});
+  const toggleTournament = (tournamentId: string) => {
+    setExpandedTournaments((prev) => ({ ...prev, [tournamentId]: !prev[tournamentId] }));
+  };
   const [tournamentForm, setTournamentForm] = useState({
     name: '',
-    registrationWindow: '',
     startDate: '',
     finalDate: '',
     location: '',
-    prizePool: '',
   });
 
   const loadApprovals = () => {
@@ -146,6 +148,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   const registeredPairKeys = pairings.filter(
     (pairing) =>
       pairing.status === 'approved' &&
+      Boolean(pairing.jockeyUserId) &&
       activeTournamentIds.has(pairing.tournamentId)
   ).map((pairing) => `${pairing.horseId}:${pairing.jockeyUserId}`);
   const activeRaceIds = new Set(
@@ -195,7 +198,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     },
   ];
 
-  const visibleRaces = scheduleExpanded ? races : races.slice(0, 4);
+
   const canCreateRace = tournaments.some(
     (tournament) =>
       tournament.status !== 'completed' &&
@@ -289,7 +292,11 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       ? dateInputToIso(tournamentForm.finalDate)
       : '';
 
-    if (!tournamentForm.name || !tournamentForm.startDate || !tournamentForm.location) {
+    if (
+      !tournamentForm.name ||
+      !tournamentForm.startDate ||
+      !tournamentForm.location
+    ) {
       setTournamentMessage('Tournament name, start date and location are required.');
       return;
     }
@@ -309,11 +316,9 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
         setTournamentMessage('Tournament created and registration opened.');
         setTournamentForm({
           name: '',
-          registrationWindow: '',
           startDate: '',
           finalDate: '',
           location: '',
-          prizePool: '',
         });
         setTimeout(() => {
           setShowCreateTournament(false);
@@ -491,24 +496,11 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                   </h2>
 
                   <p className="text-gray-400 mt-2">
-                    Showing {visibleRaces.length}/{races.length} races
+                    Showing {tournaments.filter((t) => races.some((r) => r.tournamentId === t.id)).length} tournaments
                   </p>
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  {races.length > 4 && (
-                    <button
-                      onClick={() => setScheduleExpanded((current) => !current)}
-                      className="flex items-center gap-2 px-5 py-3 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/10 text-[#d4af37] font-bold hover:bg-[#d4af37]/20 transition-all"
-                    >
-                      {scheduleExpanded ? 'Show Less' : 'View All'}
-                      {scheduleExpanded ? (
-                        <ChevronUp className="w-5 h-5" />
-                      ) : (
-                        <ChevronDown className="w-5 h-5" />
-                      )}
-                    </button>
-                  )}
 
                   <button
                     onClick={() => canCreateRace && onNavigate('create-race')}
@@ -526,141 +518,165 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                 </div>
               </div>
 
-              <div className="space-y-5">
+              <div className="space-y-6">
+                {tournaments
+                  .filter((tournament) => races.some((r) => r.tournamentId === tournament.id))
+                  .map((tournament) => {
+                    const tournamentRaces = races.filter((r) => r.tournamentId === tournament.id);
+                    const isExpanded = expandedTournaments[tournament.id];
 
-                {visibleRaces.map((race) => (
-
-                  <div
-                    key={race.id}
-                    className="bg-[#071a2f] border border-white/10 rounded-2xl p-5"
-                  >
-
-                    <div className="flex items-center justify-between">
-
-                      <div>
-
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="px-3 py-1 rounded-xl bg-blue-600/15 border border-blue-600/30 text-blue-300 text-xs font-bold">
-                            {race.raceNumber || 'Race'}
-                          </span>
-
-                          <h3 className="text-2xl font-bold text-white">
-                            {race.name}
-                          </h3>
-
-                          <span
-                            className={`px-3 py-1 rounded-xl text-xs font-bold ${
-                              race.status ===
-                              'scheduled'
-                                ? 'bg-green-600/20 border border-green-600/30 text-green-500'
-                                : 'bg-yellow-600/20 border border-yellow-600/30 text-yellow-500'
-                            }`}
-                          >
-                            {statusLabel(race.status)}
-                          </span>
-                        </div>
-
-                        <div className="mb-3 text-sm text-gray-300">
-                          Tournament:{' '}
-                          <span className="text-white font-semibold">
-                            {tournamentNameById(race.tournamentId)}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-4 text-gray-400">
-
-                          <span>
-                            {race.date}
-                          </span>
-
-                          <span>•</span>
-
-                          <span>
-                            {race.time}
-                          </span>
-
-                          <span>•</span>
-
-                          <span>
-                            {race.participants}{' '}
-                            participants
-                          </span>
-
-                          {'referee' in race && (
-                            <>
-                              <span>•</span>
-
-                              <span>
-                                {race.referee}
+                    return (
+                      <div key={tournament.id} className="bg-[#071a2f] border border-white/10 rounded-2xl overflow-hidden">
+                        <button
+                          onClick={() => toggleTournament(tournament.id)}
+                          className="w-full flex items-center justify-between p-5 hover:bg-white/5 transition-colors text-left"
+                        >
+                          <div>
+                            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                              {tournament.name}
+                              <span className="text-xs font-semibold px-2 py-1 bg-[#d4af37]/20 text-[#d4af37] rounded-lg">
+                                {tournamentRaces.length} races
                               </span>
-                            </>
-                          )}
+                            </h3>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                          </div>
+                        </button>
+
+                        {isExpanded && (
+                          <div className="p-5 border-t border-white/10 space-y-4 bg-[#0a1e35]/50">
+                            {tournamentRaces.map((race) => (
+                              <div
+                                key={race.id}
+                                className="bg-[#071a2f] border border-white/10 rounded-xl p-5 hover:border-white/20 transition-all"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="flex items-center gap-3 mb-2">
+                                      <span className="px-3 py-1 rounded-xl bg-blue-600/15 border border-blue-600/30 text-blue-300 text-xs font-bold">
+                                        {race.raceNumber || 'Race'}
+                                      </span>
+
+                                      <h3 className="text-xl font-bold text-white">
+                                        {race.name}
+                                      </h3>
+
+                                      <span
+                                        className={`px-3 py-1 rounded-xl text-xs font-bold ${
+                                          race.status === 'scheduled'
+                                            ? 'bg-green-600/20 border border-green-600/30 text-green-500'
+                                            : 'bg-yellow-600/20 border border-yellow-600/30 text-yellow-500'
+                                        }`}
+                                      >
+                                        {statusLabel(race.status)}
+                                      </span>
+                                    </div>
+
+                                    <div className="flex items-center gap-4 text-gray-400 text-sm mt-3">
+                                      <span>{race.date}</span>
+                                      <span>•</span>
+                                      <span>{race.time}</span>
+                                      <span>•</span>
+                                      <span>{race.participants} participants</span>
+                                      {'referee' in race && (
+                                        <>
+                                          <span>•</span>
+                                          <span>{race.referee}</span>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex gap-3">
+                                    {race.status === 'registration-open' && (
+                                      <button
+                                        onClick={() => handleRaceAction(race.id, 'close-registration')}
+                                        disabled={Boolean(
+                                          race.registrationClosesAt &&
+                                          Date.now() < new Date(race.registrationClosesAt).getTime()
+                                        )}
+                                        title={
+                                          race.registrationClosesAt &&
+                                          Date.now() < new Date(race.registrationClosesAt).getTime()
+                                            ? `Tournament registration closes at ${new Date(race.registrationClosesAt).toLocaleString()}`
+                                            : undefined
+                                        }
+                                        className="flex items-center gap-2 px-4 py-2 bg-yellow-500/10 text-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl hover:bg-yellow-500/20 transition-all border border-yellow-500/30 text-sm font-semibold"
+                                      >
+                                        Close Registration
+                                      </button>
+                                    )}
+
+                                    {race.status === 'registration-closed' && (
+                                      <button
+                                        onClick={() => handleRaceAction(race.id, 'publish')}
+                                        className="flex items-center gap-2 px-4 py-2 bg-green-600/10 text-green-400 rounded-xl hover:bg-green-600/20 transition-all border border-green-600/30 text-sm font-semibold"
+                                      >
+                                        Publish
+                                      </button>
+                                    )}
+
+                                    <button
+                                      onClick={() =>
+                                        setEditRace({
+                                          ...race,
+                                          date: formatDateInput(race.date || ''),
+                                        })
+                                      }
+                                      disabled={!['registration-open', 'registration-closed'].includes(race.status)}
+                                      className="flex items-center gap-2 px-4 py-2 bg-[#d4af37]/10 text-[#d4af37] rounded-xl hover:bg-[#d4af37] hover:text-white transition-all border border-[#d4af37]/30 text-sm font-semibold disabled:opacity-50 disabled:hover:bg-[#d4af37]/10 disabled:hover:text-[#d4af37]"
+                                    >
+                                      <Pencil className="w-4 h-4" />
+                                      Edit
+                                    </button>
+
+                                    <button
+                                      onClick={() => setShowViewModal(race)}
+                                      className="flex items-center gap-2 px-4 py-2 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-all text-sm font-semibold"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                      View
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                
+                {/* Fallback for races without a tournament */}
+                {races.filter((r) => !r.tournamentId || !tournaments.some((t) => t.id === r.tournamentId)).length > 0 && (
+                  <div className="bg-[#071a2f] border border-white/10 rounded-2xl p-5">
+                    <h3 className="text-xl font-bold text-white mb-4">Other Races</h3>
+                    <div className="space-y-4">
+                      {races.filter((r) => !r.tournamentId || !tournaments.some((t) => t.id === r.tournamentId)).map((race) => (
+                        <div key={race.id} className="bg-[#0a1e35]/50 border border-white/10 rounded-xl p-5">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-3 mb-2">
+                                <span className="px-3 py-1 rounded-xl bg-blue-600/15 border border-blue-600/30 text-blue-300 text-xs font-bold">
+                                  {race.raceNumber || 'Race'}
+                                </span>
+                                <h3 className="text-xl font-bold text-white">{race.name}</h3>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => setShowViewModal(race)}
+                              className="flex items-center gap-2 px-4 py-2 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-all text-sm font-semibold"
+                            >
+                              <Eye className="w-4 h-4" />
+                              View
+                            </button>
+                          </div>
                         </div>
-                      </div>
-
-                      <div className="flex gap-3">
-
-                        {race.status === 'registration-open' && (
-                          <button
-                            onClick={() =>
-                              handleRaceAction(race.id, 'close-registration')
-                            }
-                            disabled={Boolean(
-                              race.registrationClosesAt &&
-                              Date.now() < new Date(race.registrationClosesAt).getTime()
-                            )}
-                            title={
-                              race.registrationClosesAt &&
-                              Date.now() < new Date(race.registrationClosesAt).getTime()
-                                ? `Registration closes at ${new Date(race.registrationClosesAt).toLocaleString()}`
-                                : undefined
-                            }
-                            className="flex items-center gap-2 px-4 py-2 bg-yellow-500/10 text-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl hover:bg-yellow-500/20 transition-all border border-yellow-500/30"
-                          >
-                            Close Registration
-                          </button>
-                        )}
-
-                        {race.status === 'registration-closed' && (
-                          <button
-                            onClick={() =>
-                              handleRaceAction(race.id, 'publish')
-                            }
-                            className="flex items-center gap-2 px-4 py-2 bg-green-600/10 text-green-400 rounded-xl hover:bg-green-600/20 transition-all border border-green-600/30"
-                          >
-                            Publish
-                          </button>
-                        )}
-
-                        <button
-                          onClick={() =>
-                            setEditRace({
-                              ...race,
-                              date: formatDateInput(race.date || ''),
-                            })
-                          }
-                          disabled={!['registration-open', 'registration-closed'].includes(race.status)}
-                          className="flex items-center gap-2 px-4 py-2 bg-[#d4af37]/10 text-[#d4af37] rounded-xl hover:bg-[#d4af37] hover:text-white transition-all border border-[#d4af37]/30"
-                        >
-                          <Pencil className="w-4 h-4" />
-                          Edit
-                        </button>
-
-                        <button
-                          onClick={() =>
-                            setShowViewModal(
-                              race
-                            )
-                          }
-                          className="flex items-center gap-2 px-4 py-2 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-all"
-                        >
-                          <Eye className="w-4 h-4" />
-                          View
-                        </button>
-                      </div>
+                      ))}
                     </div>
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </div>
@@ -698,8 +714,8 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
                   {
                     icon: Calendar,
-                    label:
-                      'Open Registration',
+                    label: 'Race Builder',
+                    onClick: () => canCreateRace && onNavigate('create-race'),
                   },
 
                   {
@@ -891,18 +907,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                   className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
                 />
 
-                <input
-                  type="text"
-                  placeholder="Registration window"
-                  value={tournamentForm.registrationWindow}
-                  onChange={(event) =>
-                    setTournamentForm({
-                      ...tournamentForm,
-                      registrationWindow: event.target.value,
-                    })
-                  }
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
+
 
                 <input
                   type="text"
@@ -947,19 +952,6 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                   className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
                 />
 
-                <input
-                  type="number"
-                  min="0"
-                  placeholder="Prize pool"
-                  value={tournamentForm.prizePool}
-                  onChange={(event) =>
-                    setTournamentForm({
-                      ...tournamentForm,
-                      prizePool: event.target.value,
-                    })
-                  }
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
               </div>
 
               <div className="flex gap-4 mt-8">

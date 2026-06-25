@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft, Send } from 'lucide-react';
 import {
   HorseRecord,
+  HorseTournamentRegistration,
   JockeyProfileRecord,
   RaceRecord,
   TournamentRecord,
   createRaceEntry,
   getRaceRegistration,
 } from '../services/api';
+import { useParams } from 'react-router-dom';
 import { statusLabel } from '../utils/domain';
 import { messageToneClasses } from '../utils/messageTone';
 
@@ -15,49 +17,73 @@ interface RaceRegistrationPageProps {
   onNavigate: (page: string) => void;
 }
 
+const weightLbToLb = (weight?: number) => {
+  const parsed = Number(weight || 0);
+  return parsed > 0 ? `${(parsed * 2.20462).toFixed(0)}lb` : '-';
+};
+
 export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPageProps) {
   const fieldClass =
     'w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#d4af37]';
 
+  const { raceId } = useParams<{ raceId: string }>();
   const [tournament, setTournament] = useState<TournamentRecord | null>(null);
+  const [race, setRace] = useState<RaceRecord | null>(null);
   const [horses, setHorses] = useState<HorseRecord[]>([]);
-  const [races, setRaces] = useState<RaceRecord[]>([]);
   const [jockeys, setJockeys] = useState<JockeyProfileRecord[]>([]);
+  const [horseRegistrations, setHorseRegistrations] = useState<HorseTournamentRegistration[]>([]);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState({
     horseId: '',
+    registrationId: '',
     jockeyUserId: '',
     notes: '',
+    jockeyNotes: '',
   });
 
-  const tournamentId = sessionStorage.getItem('selectedTournamentId') || '';
-  const registrationOpen = races.some((race) => {
-    const now = Date.now();
-    const opensAt = race.registrationOpensAt
-      ? new Date(race.registrationOpensAt).getTime()
-      : Number.NEGATIVE_INFINITY;
-    const closesAt = race.registrationClosesAt
-      ? new Date(race.registrationClosesAt).getTime()
-      : Number.POSITIVE_INFINITY;
-    return race.status === 'registration-open' && now >= opensAt && now < closesAt;
-  });
+  const now = Date.now();
+  const registrationOpensAt = tournament?.registrationOpensAt
+    ? new Date(tournament.registrationOpensAt).getTime()
+    : Number.NEGATIVE_INFINITY;
+  const registrationClosesAt = tournament?.registrationClosesAt
+    ? new Date(tournament.registrationClosesAt).getTime()
+    : Number.POSITIVE_INFINITY;
+  const registrationOpen = Boolean(
+    tournament &&
+    race?.status === 'registration-open' &&
+    now >= registrationOpensAt &&
+    now < registrationClosesAt
+  );
 
   const loadRegistrationData = () => {
-    if (!tournamentId) {
-      setMessage('Please select a tournament first.');
+    if (!raceId) {
+      setMessage('Please select a race first.');
       return;
     }
 
-    getRaceRegistration(tournamentId)
+    getRaceRegistration(raceId)
       .then((data) => {
         setTournament(data.tournament);
+        setRace(data.race);
         setHorses(data.horses);
-        setRaces(data.races);
         setJockeys(data.jockeyProfiles);
+        setHorseRegistrations(data.horseTournamentRegistrations);
+        const approvedHorseRegistrations = data.horseTournamentRegistrations.filter(
+          (registration) => registration.status === 'approved' && !registration.jockeyUserId
+        );
         setForm((current) => ({
           ...current,
-          horseId: current.horseId || data.horses[0]?.id || '',
-          jockeyUserId: current.jockeyUserId || data.jockeyProfiles[0]?.userId || '',
+          horseId: data.horses.some((horse) => horse.id === current.horseId)
+            ? current.horseId
+            : data.horses[0]?.id || '',
+          registrationId: approvedHorseRegistrations.some(
+            (registration) => registration.id === current.registrationId
+          )
+            ? current.registrationId
+            : approvedHorseRegistrations[0]?.id || '',
+          jockeyUserId: data.jockeyProfiles.some((jockey) => jockey.userId === current.jockeyUserId)
+            ? current.jockeyUserId
+            : data.jockeyProfiles[0]?.userId || '',
         }));
       })
       .catch((error) =>
@@ -69,30 +95,60 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
     loadRegistrationData();
   }, []);
 
-  const submitRegistration = () => {
+  const approvedHorseRegistrations = horseRegistrations.filter(
+    (registration) => registration.status === 'approved' && !registration.jockeyUserId
+  );
+  const selectedRegistration = approvedHorseRegistrations.find(
+    (registration) => registration.id === form.registrationId
+  );
+
+  const submitHorseRegistration = () => {
     setMessage('');
 
-    if (!form.horseId || !form.jockeyUserId) {
-      setMessage('Horse and jockey are required.');
+    if (!form.horseId) {
+      setMessage('Horse is required.');
       return;
     }
     if (!registrationOpen) {
-      setMessage('No race is currently inside its registration window.');
+      setMessage('This tournament is outside its registration window.');
       return;
     }
 
     createRaceEntry({
-      tournamentId,
       horseId: form.horseId,
-      jockeyUserId: form.jockeyUserId,
+      raceId: raceId!,
+      jockeyUserId: undefined,
       notes: form.notes,
     })
       .then(() => {
-        setMessage('Tournament request sent. This pair will run every race after Jockey and Admin approval.');
-        setTimeout(() => onNavigate('tournaments'), 1200);
+        setMessage('Horse tournament registration submitted. Admin must approve before jockey selection.');
+        loadRegistrationData();
       })
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : 'Unable to submit registration')
+      );
+  };
+
+  const submitJockeySelection = () => {
+    setMessage('');
+
+    if (!selectedRegistration || !form.jockeyUserId) {
+      setMessage('Approved horse registration and jockey are required.');
+      return;
+    }
+
+    createRaceEntry({
+      horseId: selectedRegistration.horseId,
+      raceId: raceId!,
+      jockeyUserId: form.jockeyUserId,
+      notes: form.jockeyNotes,
+    })
+      .then(() => {
+        setMessage('Jockey request sent. Waiting for jockey acceptance before final Admin approval.');
+        loadRegistrationData();
+      })
+      .catch((error) =>
+        setMessage(error instanceof Error ? error.message : 'Unable to select jockey')
       );
   };
 
@@ -110,15 +166,17 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
         <div className="bg-[#12304f] border border-white/10 rounded-3xl p-8">
           <div className="mb-8">
             <p className="text-[#d4af37] text-sm uppercase tracking-widest">
-              Tournament Horse Registration
+              Tournament Registration
             </p>
 
-            <h1 className="text-4xl font-black text-white mt-2">
-              {tournament?.name || 'Tournament'}
+            <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">
+              Register for {race?.name || 'Race'}
             </h1>
-
+            <p className="text-gray-400">
+              {tournament?.name}
+            </p>
             <p className="text-gray-400 mt-3">
-              Select one approved horse and one approved jockey for this tournament. After Jockey and Admin approval, this fixed pair runs the full race schedule.
+              Register a horse first. After Admin approves the horse, select an approved jockey for the tournament; the jockey accepts, then Admin gives final approval.
             </p>
           </div>
 
@@ -130,7 +188,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
 
           <div className="grid md:grid-cols-2 gap-5">
             <div>
-              <label className="block text-gray-300 mb-2">Horse</label>
+              <label className="block text-gray-300 mb-2">Horse for Admin Approval</label>
               <select
                 value={form.horseId}
                 onChange={(event) =>
@@ -141,6 +199,9 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
                 }
                 className={fieldClass}
               >
+                {horses.length === 0 && (
+                  <option value="">No approved horses available for this tournament</option>
+                )}
                 {horses.map((horse) => (
                   <option key={horse.id} value={horse.id}>
                     {horse.name} - {statusLabel(horse.status)}
@@ -149,30 +210,10 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
               </select>
             </div>
 
-            <div>
-              <label className="block text-gray-300 mb-2">Approved Jockey</label>
-              <select
-                value={form.jockeyUserId}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    jockeyUserId: event.target.value,
-                  })
-                }
-                className={fieldClass}
-              >
-                {jockeys.map((jockey) => (
-                  <option key={jockey.id} value={jockey.userId}>
-                    {jockey.jockeyName} - {jockey.competitionLevel} - {jockey.weight}kg
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <div className="md:col-span-2">
-              <label className="block text-gray-300 mb-2">Additional Notes</label>
+              <label className="block text-gray-300 mb-2">Horse Registration Notes</label>
               <textarea
-                rows={4}
+                rows={3}
                 value={form.notes}
                 onChange={(event) =>
                   setForm({
@@ -183,6 +224,100 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
                 className={fieldClass}
                 placeholder="Optional notes for Admin review"
               />
+            </div>
+
+            <button
+              onClick={submitHorseRegistration}
+              disabled={!registrationOpen || !form.horseId}
+              className="md:col-span-2 flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-[#d4af37] hover:bg-[#b8892d] disabled:bg-white/10 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold transition-all"
+            >
+              <Send className="w-5 h-5" />
+              Register Horse for Tournament
+            </button>
+          </div>
+
+          <div className="mt-8 rounded-2xl border border-white/10 bg-[#071a2f] p-5">
+            <div className="flex items-center justify-between gap-3 mb-5">
+              <div>
+                <h2 className="text-white font-bold text-xl">Select Jockey After Admin Approval</h2>
+                <p className="text-gray-400 text-sm mt-1">
+                  Only horses already approved by Admin and still missing a jockey are listed here.
+                </p>
+              </div>
+              <span className="text-[#d4af37] font-bold">
+                {approvedHorseRegistrations.length} ready
+              </span>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-5">
+              <div>
+                <label className="block text-gray-300 mb-2">Approved Horse</label>
+                <select
+                  value={form.registrationId}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      registrationId: event.target.value,
+                    })
+                  }
+                  className={fieldClass}
+                >
+                  {approvedHorseRegistrations.length === 0 && (
+                    <option value="">No approved horse waiting for jockey</option>
+                  )}
+                  {approvedHorseRegistrations.map((registration) => (
+                    <option key={registration.id} value={registration.id}>
+                      {registration.horseName || 'Horse'} - {statusLabel(registration.status)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-gray-300 mb-2">Approved Jockey</label>
+                <select
+                  value={form.jockeyUserId}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      jockeyUserId: event.target.value,
+                    })
+                  }
+                  className={fieldClass}
+                >
+                  {jockeys.length === 0 && <option value="">No approved jockeys yet</option>}
+                  {jockeys.map((jockey) => (
+                    <option key={jockey.id} value={jockey.userId}>
+                      {jockey.jockeyName} - {jockey.competitionLevel} - {weightLbToLb(jockey.weight)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-gray-300 mb-2">Jockey Request Notes</label>
+                <textarea
+                  rows={3}
+                  value={form.jockeyNotes}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      jockeyNotes: event.target.value,
+                    })
+                  }
+                  className={fieldClass}
+                  placeholder="Optional notes for the jockey"
+                />
+              </div>
+
+              <button
+                onClick={submitJockeySelection}
+                disabled={!selectedRegistration || !form.jockeyUserId}
+                className="md:col-span-2 flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-[#d4af37] hover:bg-[#b8892d] disabled:bg-white/10 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold transition-all"
+              >
+                <Send className="w-5 h-5" />
+                Send Jockey Request
+              </button>
             </div>
           </div>
 
@@ -215,14 +350,6 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
             </div>
           </div>
 
-          <button
-            onClick={submitRegistration}
-            disabled={!registrationOpen || !form.horseId || !form.jockeyUserId}
-            className="mt-8 flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-[#d4af37] hover:bg-[#b8892d] disabled:bg-white/10 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold transition-all"
-          >
-            <Send className="w-5 h-5" />
-            Register Pair for Tournament
-          </button>
         </div>
       </div>
     </div>

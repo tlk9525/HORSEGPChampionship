@@ -428,7 +428,7 @@ export default function LiveRace() {
                           </div>
 
                           <div className="text-gray-400 mt-1">
-                            Jockey: {entry.jockeyName} • Rating {entry.ratingSnapshot || 'TBD'} • Assigned weight {Number(entry.handicap || 0).toFixed(0)}lb
+                            Jockey: {entry.jockeyName} • Rating {entry.ratingSnapshot || 'TBD'} • Assigned Wt. {Number(entry.handicap || 0).toFixed(0)}lb
                           </div>
 
                           <div className="text-[#d4af37] font-bold mt-2">

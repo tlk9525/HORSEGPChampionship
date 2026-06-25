@@ -167,6 +167,7 @@ export const createRefereeRoutes = (
         const horse = db.horses.find((item) => item.id === entry.horseId);
         entry.ratingChange = result.ratingChange;
         entry.postRaceRating = result.postRaceRating;
+        entry.ratingLog = result.calcLog;
         if (horse) {
           horse.overallRating = result.postRaceRating;
           horse.updatedAt = race.updatedAt;

@@ -10,8 +10,8 @@ import {
   activeRace,
   activeTournament,
   defaultRaceForTournament,
+  isTournamentRegistrationOpen,
   jockeyName,
-  isRaceRegistrationOpen,
   publicRaceEntries,
   publicTournamentJockeyProfiles,
   tournamentRaces,
@@ -64,6 +64,7 @@ export const createOwnerRoutes = (getDb, writeDb) => {
       (registration) =>
         registration.ownerUserId === user.id &&
         registration.status === 'approved' &&
+        registration.jockeyUserId &&
         activeTournamentIds.has(registration.tournamentId)
     );
     const activePairingMap = new Map(
@@ -117,30 +118,60 @@ export const createOwnerRoutes = (getDb, writeDb) => {
   app.get('/race-registration', (c) => {
     const user = c.get('user');
     const db = c.get('db');
-    const tournamentId = c.req.query('tournamentId') || '';
-    const tournament = db.tournaments.find((item) => item.id === tournamentId);
+    const raceId = c.req.query('raceId') || '';
+    const race = db.races.find((item) => item.id === raceId);
+    if (!race) return c.json({ message: 'Race not found' }, 404);
 
+    const tournament = db.tournaments.find((item) => item.id === race.tournamentId);
     if (!tournament) return c.json({ message: 'Tournament not found' }, 404);
 
     const activeRegistrations = activeHorseTournamentRegistrations(db, tournament.id);
-    const registeredHorseIds = new Set(activeRegistrations.map((r) => r.horseId));
-    const registeredJockeyIds = new Set(activeRegistrations.map((r) => r.jockeyUserId));
+    const registeredHorseIds = new Set([
+      ...activeRegistrations.filter(r => r.raceId === race.id).map((r) => r.horseId),
+      ...(db.raceEntries || [])
+        .filter((entry) => entry.raceId === race.id && entry.status !== 'rejected')
+        .map((entry) => entry.horseId),
+    ]);
+
+    // Horses busy in another non-completed race in the same tournament cannot be registered again
+    const COMPLETED_RACE_STATUSES = ['completed', 'finished'];
+    const busyInOtherRace = new Set([
+      ...(db.raceEntries || []).filter((entry) => {
+        if (entry.raceId === race.id || entry.status === 'rejected') return false;
+        const entryRace = db.races.find((r) => r.id === entry.raceId);
+        return entryRace && entryRace.tournamentId === tournament.id && !COMPLETED_RACE_STATUSES.includes(entryRace.status);
+      }).map((e) => e.horseId),
+      ...(db.horseTournamentRegistrations || []).filter((r) => {
+        if (r.raceId === race.id || r.tournamentId !== tournament.id) return false;
+        if (['rejected', 'cancelled'].includes(r.status)) return false;
+        const regRace = db.races.find((rc) => rc.id === r.raceId);
+        return regRace && !COMPLETED_RACE_STATUSES.includes(regRace.status);
+      }).map((r) => r.horseId),
+    ]);
+    const registeredJockeyIds = new Set(
+      activeRegistrations.map((r) => r.jockeyUserId).filter(Boolean)
+    );
 
     return c.json({
       tournament,
+      race,
       horses: db.horses.filter(
         (horse) =>
           horse.ownerUserId === user.id &&
           horse.status === 'approved' &&
-          !registeredHorseIds.has(horse.id)
+          !registeredHorseIds.has(horse.id) &&
+          !busyInOtherRace.has(horse.id)
       ),
-      races: tournamentRaces(db, tournament.id),
       jockeyProfiles: publicTournamentJockeyProfiles(db, tournament.id).filter(
         (profile) => !registeredJockeyIds.has(profile.userId)
       ),
       horseTournamentRegistrations: activeRegistrations.filter(
         (r) => r.ownerUserId === user.id
-      ),
+      ).map((registration) => ({
+        ...registration,
+        horseName: db.horses.find((horse) => horse.id === registration.horseId)?.name || 'Horse',
+        jockeyName: jockeyName(db, registration.jockeyUserId),
+      })),
       raceEntries: publicRaceEntries(db).filter((entry) => {
         const horse = db.horses.find((item) => item.id === entry.horseId);
         return horse?.ownerUserId === user.id;
@@ -166,7 +197,7 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     }
 
     const {
-      name, breed, species, age, sex, color, weightKg, heightCm,
+      name, breed, species, age, sex, color, weightLb, heightCm,
       speedRating, staminaRating, formRating, healthRating,
       healthStatus, profileNotes, veterinaryCertificateUrl,
     } = await c.req.json();
@@ -182,7 +213,7 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     const horse = {
       id: randomUUID(), name, breed,
       species: species || '', age: Number(age), sex: sex || '',
-      color: color || '', weightKg: Number(weightKg) || 0, heightCm: Number(heightCm) || 0,
+      color: color || '', weightLb: Number(weightLb) || 0, heightCm: Number(heightCm) || 0,
       baseHandicap: 0,
       speedRating: numeric(speedRating, 75), staminaRating: numeric(staminaRating, 75),
       formRating: numeric(formRating, 75), healthRating: numeric(healthRating, 80),
@@ -213,7 +244,7 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     }
 
     const {
-      name, breed, species, age, sex, color, weightKg, heightCm,
+      name, breed, species, age, sex, color, weightLb, heightCm,
       speedRating, staminaRating, formRating, healthRating,
       healthStatus, profileNotes, veterinaryCertificateUrl,
     } = await c.req.json();
@@ -227,7 +258,7 @@ export const createOwnerRoutes = (getDb, writeDb) => {
 
     horse.name = name; horse.breed = breed; horse.species = species || '';
     horse.age = Number(age); horse.sex = sex || ''; horse.color = color || '';
-    horse.weightKg = Number(weightKg) || 0; horse.heightCm = Number(heightCm) || 0;
+    horse.weightLb = Number(weightLb) || 0; horse.heightCm = Number(heightCm) || 0;
     horse.speedRating = numeric(speedRating, 75); horse.staminaRating = numeric(staminaRating, 75);
     horse.formRating = numeric(formRating, 75); horse.healthRating = numeric(healthRating, 80);
     if (!numeric(horse.overallRating, 0)) {
@@ -265,9 +296,9 @@ export const createOwnerRoutes = (getDb, writeDb) => {
       db.races.find((item) => item.id === raceId && item.status === 'registration-open') ||
       (tournament ? defaultRaceForTournament(db, tournament.id) : null);
 
-    if (!race) return c.json({ message: 'Race registration is not open' }, 400);
-    if (!isRaceRegistrationOpen(race)) {
-      return c.json({ message: 'This race is outside its registration window' }, 400);
+    if (!race) return c.json({ message: 'No race is available for this tournament' }, 400);
+    if (!tournament || !isTournamentRegistrationOpen(tournament)) {
+      return c.json({ message: 'This tournament is outside its registration window' }, 400);
     }
 
     const duplicateEntry = (db.jockeyInvitations || []).some(
@@ -295,7 +326,14 @@ export const createOwnerRoutes = (getDb, writeDb) => {
   app.post('/race-entries', async (c) => {
     const user = c.get('user');
     const db = c.get('db');
-    const { tournamentId, horseId, jockeyUserId, notes } = await c.req.json();
+    const { raceId, horseId, jockeyUserId, notes } = await c.req.json();
+
+    const race = db.races.find((item) => item.id === raceId);
+    if (!race) return c.json({ message: 'Race not found' }, 404);
+    if (!['registration-open'].includes(race.status)) {
+      return c.json({ message: 'Race registration is not open' }, 400);
+    }
+    const tournamentId = race.tournamentId;
 
     const tournament = db.tournaments.find(
       (item) => item.id === tournamentId && TOURNAMENT_REGISTRATION_STATUSES.includes(item.status)
@@ -303,50 +341,126 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     const horse = db.horses.find(
       (item) => item.id === horseId && item.ownerUserId === user.id && item.status === 'approved'
     );
-    const jockeyApproved = (db.jockeyTournamentRegistrations || []).some(
-      (r) => r.tournamentId === tournamentId && r.jockeyUserId === jockeyUserId && r.status === 'approved'
-    );
 
     if (!horse) return c.json({ message: 'Owner can only register approved horses they own' }, 400);
     if (!tournament) return c.json({ message: 'Tournament registration is not open' }, 400);
-    const tournamentRaceList = tournamentRaces(db, tournamentId);
-    if (
-      tournamentRaceList.length > 0 &&
-      !tournamentRaceList.some((race) => isRaceRegistrationOpen(race))
-    ) {
-      return c.json({ message: 'No race is currently inside its registration window' }, 400);
+
+    const { RACE_CLASSES } = await import('../config/constants.js');
+    if (race.raceClass && RACE_CLASSES[race.raceClass]) {
+      const { officialHorseRating } = await import('../services/handicapService.js');
+      const rating = officialHorseRating(horse);
+      const { min, max } = RACE_CLASSES[race.raceClass];
+      if (rating < min || rating > max) {
+        return c.json({ message: `${horse.name || 'Horse'} rating (${rating}) is not eligible for ${race.raceClass} (${min}-${max}).` }, 400);
+      }
     }
-    if (!jockeyApproved) return c.json({ message: 'Jockey must be approved for the same tournament' }, 400);
 
     db.raceEntries = db.raceEntries || [];
     db.jockeyInvitations = db.jockeyInvitations || [];
     db.horseTournamentRegistrations = db.horseTournamentRegistrations || [];
 
     const activeRegistrations = activeHorseTournamentRegistrations(db, tournamentId);
-    const duplicateRegistration = activeRegistrations.some((r) => r.horseId === horse.id);
-    const duplicateInvitation = db.jockeyInvitations.some(
-      (inv) =>
-        inv.tournamentId === tournamentId && inv.horseId === horse.id &&
-        !['rejected', 'cancelled'].includes(inv.status) && inv.adminStatus !== 'rejected'
-    );
+    const existingRegistration = activeRegistrations.find((r) => r.horseId === horse.id && r.raceId === race.id);
 
-    if (duplicateRegistration || duplicateInvitation) {
+    if (!jockeyUserId) {
+      if (!isTournamentRegistrationOpen(tournament)) {
+        return c.json({ message: 'This tournament is outside its registration window' }, 400);
+      }
+
+      if (existingRegistration) {
+        return c.json(
+          { message: 'This horse already has a pending or approved registration for this race' },
+          409
+        );
+      }
+
+      // Rule: 1 horse may only be in 1 active (non-completed) race per tournament.
+      // If a previous race is fully completed (results confirmed), allow entering a new one.
+      const COMPLETED_RACE_STATUSES = ['completed', 'finished'];
+      const conflictRaceId = (() => {
+        const entryConflict = (db.raceEntries || []).find((entry) => {
+          if (entry.horseId !== horse.id || entry.raceId === race.id) return false;
+          if (entry.status === 'rejected') return false;
+          const entryRace = db.races.find((r) => r.id === entry.raceId);
+          if (!entryRace || entryRace.tournamentId !== tournamentId) return false;
+          return !COMPLETED_RACE_STATUSES.includes(entryRace.status);
+        });
+        if (entryConflict) return entryConflict.raceId;
+        const regConflict = (db.horseTournamentRegistrations || []).find((r) => {
+          if (r.horseId !== horse.id || r.raceId === race.id || r.tournamentId !== tournamentId) return false;
+          if (['rejected', 'cancelled'].includes(r.status)) return false;
+          const regRace = db.races.find((rc) => rc.id === r.raceId);
+          if (!regRace) return false;
+          return !COMPLETED_RACE_STATUSES.includes(regRace.status);
+        });
+        return regConflict?.raceId || null;
+      })();
+
+      if (conflictRaceId) {
+        const conflictRace = db.races.find((r) => r.id === conflictRaceId);
+        return c.json(
+          { message: `${horse.name} is already registered in "${conflictRace?.name || 'another race'}" of this tournament. A horse may only enter another race after its current race is fully completed.` },
+          409
+        );
+      }
+
+      const createdAt = new Date().toISOString();
+      const registration = {
+        id: randomUUID(),
+        tournamentId,
+        raceId: race.id,
+        horseId: horse.id,
+        ownerUserId: user.id,
+        jockeyUserId: null,
+        invitationId: null,
+        status: 'pending-admin',
+        notes: notes || '',
+        createdAt,
+        reviewedAt: null,
+      };
+
+      db.horseTournamentRegistrations.unshift(registration);
+      horse.jockeyConfirmation = 'pending-admin';
+      horse.updatedAt = createdAt;
+
+      notifyAdmins(
+        db,
+        'Horse tournament registration needs approval',
+        `${user.name} registered ${horse.name} for ${tournament.name}. Approve the horse before the owner can select a jockey.`
+      );
+      createNotification(
+        db,
+        user.id,
+        'Horse tournament registration submitted',
+        `${horse.name} is waiting for Admin approval before jockey selection.`
+      );
+
+      await writeDb(db);
+      return c.json({ registration }, 201);
+    }
+
+    const jockeyApproved = (db.jockeyTournamentRegistrations || []).some(
+      (r) => r.tournamentId === tournamentId && r.jockeyUserId === jockeyUserId && r.status === 'approved'
+    );
+    if (!jockeyApproved) return c.json({ message: 'Jockey must be approved for the same tournament' }, 400);
+
+    if (!existingRegistration || existingRegistration.status !== 'approved' || existingRegistration.jockeyUserId) {
       return c.json(
-        { message: 'This horse already has a pending or approved registration for this tournament' },
-        409
+        { message: 'Admin must approve this horse for the tournament before selecting a jockey' },
+        400
       );
     }
 
-    const jockeyAlreadyRegistered = activeRegistrations.some((r) => r.jockeyUserId === jockeyUserId);
+    const jockeyAlreadyRegistered = activeRegistrations.some((r) => r.jockeyUserId === jockeyUserId && r.raceId === race.id);
     const jockeyAlreadyInvited = db.jockeyInvitations.some(
       (inv) =>
-        inv.tournamentId === tournamentId && inv.jockeyUserId === jockeyUserId &&
+        inv.raceId === race.id && inv.jockeyUserId === jockeyUserId &&
         !['rejected', 'cancelled'].includes(inv.status) && inv.adminStatus !== 'rejected'
     );
 
     if (jockeyAlreadyRegistered || jockeyAlreadyInvited) {
       return c.json(
-        { message: 'This jockey already has a pending or approved assignment in the same tournament' },
+        { message: 'This jockey already has a pending or approved assignment in the same race' },
         409
       );
     }
@@ -354,24 +468,24 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     const createdAt = new Date().toISOString();
     const invitation = {
       id: randomUUID(), horseId: horse.id, ownerUserId: user.id, jockeyUserId,
-      tournamentId, raceId: null, status: 'pending', adminStatus: null,
+      tournamentId, raceId: race.id, status: 'pending-jockey', adminStatus: 'pending',
       notes: notes || '', createdAt, respondedAt: null,
     };
 
     db.jockeyInvitations.unshift(invitation);
-    db.horseTournamentRegistrations.unshift({
-      id: randomUUID(), tournamentId, horseId: horse.id,
-      ownerUserId: user.id, jockeyUserId, invitationId: invitation.id,
-      status: 'pending-jockey', notes: notes || '', createdAt, reviewedAt: null,
-    });
+    existingRegistration.jockeyUserId = jockeyUserId;
+    existingRegistration.invitationId = invitation.id;
+    existingRegistration.status = 'pending-jockey';
+    existingRegistration.notes = notes || existingRegistration.notes || '';
+    existingRegistration.reviewedAt = null;
 
     horse.jockeyConfirmation = 'pending-jockey';
     horse.updatedAt = new Date().toISOString();
 
-    createNotification(db, jockeyUserId, 'Tournament riding request',
-      `${user.name} invited you to ride ${horse.name} for ${tournament.name}. This pair will run every race in the tournament after Admin approval.`);
+    createNotification(db, jockeyUserId, 'Race riding request',
+      `${user.name} invited you to ride ${horse.name} for ${race.name}. Admin approval starts after the jockey accepts.`);
     createNotification(db, user.id, 'Jockey request sent',
-      `${horse.name} is waiting for ${jockeyName(db, jockeyUserId)} to accept ${tournament.name}. Admin approval starts after the jockey accepts.`);
+      `${horse.name} is waiting for ${jockeyName(db, jockeyUserId)} to accept for ${race.name}. Admin approval starts after the jockey accepts.`);
 
     await writeDb(db);
     return c.json({ invitation }, 201);

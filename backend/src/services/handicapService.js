@@ -34,8 +34,7 @@ export const officialHorseRating = (horse = {}) => {
   return Math.round(clamp(storedRating > 0 ? storedRating : horseOverallRating(horse), 0, 140));
 };
 
-// HKJC-style allocation: top-rated horse receives top weight and every
-// rating point below it removes one pound, subject to the race limits.
+
 export const computeRaceHandicap = (horse, race, highestFieldRating) => {
   const rating = officialHorseRating(horse);
   const min = clamp(
@@ -66,37 +65,53 @@ const expectedFieldScore = (rating, fieldRatings) => {
   return scores.reduce((total, score) => total + score, 0) / scores.length;
 };
 
-// HKJC does not publish a fixed reassessment formula. This deterministic
-// proposal uses performance versus field expectation and enforces its public
-// limits: places 2-5 gain at most 5 points; place 6 or lower cannot gain.
+
+
+// Tính điểm rating thay đổi theo chuẩn HKJC:
+// 1st: +5 đến +8 tùy field size
+// 2nd: +2 đến +4
+// 3rd: +1 đến +2
+// 4th-5th: 0 (không đổi)
+// 6th+: âm tùy vị trí
 export const computePostRaceRating = (entry, fieldEntries = []) => {
   const previousRating = Math.round(clamp(numeric(entry?.ratingSnapshot, 0), 0, 140));
   const position = Number(entry?.position);
   const rankedEntries = fieldEntries.filter(
-    (item) => Number.isInteger(Number(item.position)) && numeric(item.ratingSnapshot, 0) > 0
+    (item) => Number.isInteger(Number(item.position)) && Number(item.position) > 0
   );
   const fieldSize = rankedEntries.length;
 
-  if (!previousRating || !Number.isInteger(position) || fieldSize < 2) {
+  if (!previousRating || !Number.isInteger(position) || position < 1 || fieldSize < 2) {
     return { previousRating, ratingChange: 0, postRaceRating: previousRating };
   }
 
-  const opponentRatings = rankedEntries
-    .filter((item) => item.id !== entry.id)
-    .map((item) => numeric(item.ratingSnapshot, previousRating));
-  const expected = expectedFieldScore(previousRating, opponentRatings);
-  const actual = (fieldSize - position) / (fieldSize - 1);
-  const performanceDelta = Math.round(8 * (actual - expected));
-
+  // Scale: bigger field = slightly bigger swings
+  const scale = Math.max(1, Math.round(fieldSize / 2));
   let ratingChange;
+  let positionLabel;
+
   if (position === 1) {
-    ratingChange = clamp(performanceDelta, 3, 10);
-  } else if (position <= 5) {
-    ratingChange = clamp(performanceDelta, 0, 5);
+    ratingChange = Math.min(5 + Math.floor(scale / 2), 8);
+    positionLabel = '1st';
+  } else if (position === 2) {
+    ratingChange = Math.min(2 + Math.floor(scale / 4), 4);
+    positionLabel = '2nd';
+  } else if (position === 3) {
+    ratingChange = fieldSize >= 8 ? 2 : 1;
+    positionLabel = '3rd';
+  } else if (position <= Math.ceil(fieldSize * 0.5)) {
+    ratingChange = 0;
+    positionLabel = 'mid-field';
+  } else if (position < fieldSize) {
+    ratingChange = fieldSize >= 8 ? -2 : -1;
+    positionLabel = 'lower-field';
   } else {
-    ratingChange = clamp(performanceDelta, -5, 0);
+    ratingChange = fieldSize >= 8 ? -5 : (fieldSize >= 6 ? -4 : -3);
+    positionLabel = 'last';
   }
 
   const postRaceRating = Math.round(clamp(previousRating + ratingChange, 0, 140));
-  return { previousRating, ratingChange, postRaceRating };
+  const calcLog = { fieldSize, position, positionLabel, scale, ratingChange, previousRating, postRaceRating };
+
+  return { previousRating, ratingChange, postRaceRating, calcLog };
 };

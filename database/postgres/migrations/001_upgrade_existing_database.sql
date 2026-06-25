@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS "horseTournamentRegistrations" (
   "tournamentId" VARCHAR(64) NOT NULL,
   "horseId" VARCHAR(64) NOT NULL,
   "ownerUserId" VARCHAR(64) NOT NULL,
-  "jockeyUserId" VARCHAR(64) NOT NULL,
+  "jockeyUserId" VARCHAR(64),
   "invitationId" VARCHAR(64),
   "status" VARCHAR(32) NOT NULL DEFAULT 'pending-jockey',
   "notes" TEXT,
@@ -63,6 +63,9 @@ ALTER TABLE "horseTournamentRegistrations"
   ADD COLUMN IF NOT EXISTS "notes" TEXT,
   ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   ADD COLUMN IF NOT EXISTS "reviewedAt" TIMESTAMPTZ;
+
+ALTER TABLE "horseTournamentRegistrations"
+  ALTER COLUMN "jockeyUserId" DROP NOT NULL;
 
 CREATE INDEX IF NOT EXISTS "idx_horse_tournament_registrations_tournament"
   ON "horseTournamentRegistrations" ("tournamentId", "status");
@@ -470,7 +473,7 @@ BEGIN
     ALTER TABLE "horseTournamentRegistrations"
       ADD CONSTRAINT "fk_horse_tournament_registrations_jockey"
       FOREIGN KEY ("jockeyUserId") REFERENCES "users" ("id")
-      ON DELETE CASCADE NOT VALID;
+      ON DELETE SET NULL NOT VALID;
   END IF;
 
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_horse_tournament_registrations_invitation') THEN
