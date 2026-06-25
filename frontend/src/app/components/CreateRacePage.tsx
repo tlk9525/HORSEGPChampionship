@@ -13,6 +13,15 @@ interface CreateRacePageProps {
   onNavigate: (page: string) => void;
 }
 
+const RACE_CLASS_WEIGHT_RANGES: Record<string, { minWeightLb: string; topWeightLb: string }> = {
+  'Class 1': { topWeightLb: '135', minWeightLb: '115' },
+  'Class 2': { topWeightLb: '135', minWeightLb: '115' },
+  'Class 3': { topWeightLb: '133', minWeightLb: '113' },
+  'Class 4': { topWeightLb: '132', minWeightLb: '112' },
+  'Class 5': { topWeightLb: '130', minWeightLb: '110' },
+  Open: { topWeightLb: '135', minWeightLb: '110' },
+};
+
 export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
   const fieldClass =
     'min-h-[54px] w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 outline-none focus:border-[#d4af37]/70 focus:ring-2 focus:ring-[#d4af37]/20';
@@ -36,8 +45,8 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
     distance: '',
     surfaceType: '',
     raceClass: '',
-    handicapMin: '115',
-    handicapMax: '135',
+    handicapMin: '',
+    handicapMax: '',
     totalPrize: '',
     refereeUserIds: [] as string[],
   });
@@ -143,11 +152,11 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
       return;
     }
     if (
-      Number(form.handicapMin) < 115 ||
+      Number(form.handicapMin) < 110 ||
       Number(form.handicapMax) > 135 ||
       Number(form.handicapMin) > Number(form.handicapMax)
     ) {
-      setMessage('Assigned weight must stay between 115lb and 135lb.');
+      setMessage('Assigned weight must stay between 110lb and 135lb.');
       return;
     }
 
@@ -190,6 +199,17 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
       tournamentId,
       raceNumber: nextRaceNumber,
       venue: tournament?.location || current.venue,
+    }));
+  };
+
+  const handleRaceClassChange = (raceClass: string) => {
+    const weightRange = RACE_CLASS_WEIGHT_RANGES[raceClass];
+
+    setForm((current) => ({
+      ...current,
+      raceClass,
+      handicapMin: weightRange?.minWeightLb || current.handicapMin,
+      handicapMax: weightRange?.topWeightLb || current.handicapMax,
     }));
   };
 
@@ -415,12 +435,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 <select
                   className={fieldClass}
                   value={form.raceClass}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      raceClass: event.target.value,
-                    })
-                  }
+                  onChange={(event) => handleRaceClassChange(event.target.value)}
                 >
                   <option value="">Select class</option>
                   <option value="Class 1">Class 1 (101-140)</option>
@@ -436,7 +451,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 <label className="block text-gray-300 mb-2">Minimum Weight (lb)</label>
                 <input
                   type="number"
-                  min="115"
+                  min="110"
                   max="135"
                   step="1"
                   className={fieldClass}
@@ -454,7 +469,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 <label className="block text-gray-300 mb-2">Top Weight (lb)</label>
                 <input
                   type="number"
-                  min="115"
+                  min="110"
                   max="135"
                   step="1"
                   className={fieldClass}

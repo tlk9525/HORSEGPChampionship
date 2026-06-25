@@ -12,7 +12,7 @@ export const clamp = (value, min, max) => {
   return Math.max(min, value);
 };
 
-export const MIN_CARRIED_WEIGHT_LB = 115;
+export const MIN_CARRIED_WEIGHT_LB = 110;
 export const MAX_CARRIED_WEIGHT_LB = 135;
 
 const ratingComponent = (value, fallback = 75) =>

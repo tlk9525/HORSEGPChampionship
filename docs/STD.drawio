@@ -105,7 +105,7 @@
         <mxCell id="r_e_closed_published" value="Admin publishes race card" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="r_registration_closed" target="r_published">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="r_e_published_progress" value="Referee starts race" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="r_published" target="r_in_progress">
+        <mxCell id="r_e_published_progress" value="Admin starts race" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="r_published" target="r_in_progress">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="r_e_progress_submitted" value="Referee submits results" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;strokeColor=#000000;strokeWidth=3;fontSize=13;fontColor=#000000;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="r_in_progress" target="r_results_submitted">

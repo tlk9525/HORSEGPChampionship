@@ -5,6 +5,7 @@ import {
   MAX_RACE_FIELD_SIZE,
   MAX_TOURNAMENT_RACES,
   RACE_CLASSES,
+  RACE_CLASS_WEIGHT_RANGES,
 } from '../config/constants.js';
 import { requireRole } from '../services/authService.js';
 import {
@@ -20,6 +21,7 @@ import {
 import {
   MAX_CARRIED_WEIGHT_LB,
   MIN_CARRIED_WEIGHT_LB,
+  computePostRaceRating,
   computeRaceHandicap,
   officialHorseRating,
 } from '../services/handicapService.js';
@@ -186,7 +188,7 @@ export const createAdminRoutes = (getDb, writeDb) => {
 
     if (
       !name || !date || !time || !venue || !distance || !surface || !raceClass ||
-      handicapMin === undefined || handicapMax === undefined || !refereeUserId
+      !refereeUserId
     ) {
       return c.json({ message: 'Race name, schedule, venue, distance, class, weights and referee are required' }, 400);
     }
@@ -236,8 +238,9 @@ export const createAdminRoutes = (getDb, writeDb) => {
       return c.json({ message: 'Registration must close before the race starts' }, 400);
     }
     const distanceMeters = Number(distance);
-    const minHandicap = Number(handicapMin);
-    const maxHandicap = Number(handicapMax);
+    const classWeightRange = RACE_CLASS_WEIGHT_RANGES[raceClass] || RACE_CLASS_WEIGHT_RANGES.Open;
+    const minHandicap = Number(handicapMin ?? classWeightRange.minWeightLb);
+    const maxHandicap = Number(handicapMax ?? classWeightRange.topWeightLb);
     if (!Number.isFinite(distanceMeters) || distanceMeters < 400 || distanceMeters > 10000) {
       return c.json({ message: 'Race distance must be between 400m and 10,000m' }, 400);
     }
@@ -390,12 +393,18 @@ export const createAdminRoutes = (getDb, writeDb) => {
     return c.json({ ok: true, raceId });
   });
 
-  // Admin chỉ chuẩn bị và publish race; kết quả thuộc trách nhiệm của trọng tài.
+  // Admin chuẩn bị race, publish race và duyệt kết quả cuối cùng.
   app.post('/races/:raceId/:action', async (c) => {
     const db = c.get('db');
     const raceId = c.req.param('raceId');
     const action = c.req.param('action');
-    const validActions = ['close-registration', 'publish'];
+    const validActions = [
+      'close-registration',
+      'publish',
+      'start-race',
+      'finish-race',
+      'complete-results',
+    ];
 
     if (!validActions.includes(action)) return c.json({ message: 'Invalid action' }, 400);
 
@@ -433,11 +442,14 @@ export const createAdminRoutes = (getDb, writeDb) => {
       race.jockeyConfirmed = entries.length;
       race.updatedAt = new Date().toISOString();
 
-      const sortedEntries = [...entries].sort((a, b) => {
-        const horseA = db.horses.find((horse) => horse.id === a.horseId);
-        const horseB = db.horses.find((horse) => horse.id === b.horseId);
-        return String(horseA?.breed || '').localeCompare(String(horseB?.breed || ''));
-      });
+      const sortedEntries = [...entries];
+      for (let index = sortedEntries.length - 1; index > 0; index -= 1) {
+        const swapIndex = Math.floor(Math.random() * (index + 1));
+        [sortedEntries[index], sortedEntries[swapIndex]] = [
+          sortedEntries[swapIndex],
+          sortedEntries[index],
+        ];
+      }
 
       const fieldRatings = sortedEntries.map((entry) => {
         const horse = db.horses.find((item) => item.id === entry.horseId);
@@ -475,6 +487,142 @@ export const createAdminRoutes = (getDb, writeDb) => {
         createNotification(db, horse?.ownerUserId, 'Race published', msg);
         createNotification(db, entry.jockeyUserId, 'Race published', msg);
       });
+    }
+
+    if (action === 'start-race') {
+      if (race.status !== 'published') {
+        return c.json({ message: 'Race must be published before it can start' }, 400);
+      }
+
+      const scheduledStart = new Date(`${race.date}T${race.time}`).getTime();
+      if (Number.isFinite(scheduledStart) && Date.now() < scheduledStart) {
+        return c.json({ message: 'Race cannot start before its scheduled date and time' }, 400);
+      }
+
+      const readyEntries = entries.filter(
+        (entry) => entry.preRaceStatus === 'ready' && !entry.disqualified
+      );
+      const uncheckedEntries = entries.filter(
+        (entry) => !['ready', 'absent'].includes(entry.preRaceStatus) && !entry.disqualified
+      );
+
+      if (readyEntries.length === 0) {
+        return c.json({ message: 'At least one participant must be checked in as Ready before starting the race' }, 400);
+      }
+      if (uncheckedEntries.length > 0) {
+        return c.json({ message: 'Every participant must be marked Ready or Absent before starting the race' }, 400);
+      }
+
+      race.status = 'in-progress';
+      race.updatedAt = new Date().toISOString();
+      entries.forEach((entry) => {
+        if (entry.preRaceStatus === 'absent') entry.disqualified = true;
+      });
+
+      const tournament = db.tournaments.find((item) => item.id === race.tournamentId);
+      if (tournament && tournament.status !== 'completed') {
+        tournament.status = 'active';
+        tournament.updatedAt = race.updatedAt;
+      }
+
+      raceRefereeIds(db, race).forEach((refereeId) =>
+        createNotification(
+          db,
+          refereeId,
+          'Race started',
+          `${race.name} has been started by Admin.`
+        )
+      );
+    }
+
+    if (action === 'finish-race') {
+      if (race.status !== 'in-progress') {
+        return c.json({ message: 'Only an in-progress race can be finished' }, 400);
+      }
+
+      race.status = 'finished';
+      race.resultStatus = 'draft';
+      race.awardsPublished = false;
+      race.updatedAt = new Date().toISOString();
+      entries.forEach((entry) => {
+        entry.resultStatus = entry.preRaceStatus === 'absent' || entry.disqualified
+          ? 'disqualified'
+          : 'draft';
+      });
+
+      raceRefereeIds(db, race).forEach((refereeId) =>
+        createNotification(
+          db,
+          refereeId,
+          'Race finished',
+          `${race.name} has been finished by Admin. Enter and submit the official timing draft.`
+        )
+      );
+    }
+
+    if (action === 'complete-results') {
+      if (race.status !== 'finished' || race.resultStatus !== 'submitted') {
+        return c.json({ message: 'Only submitted race results can be approved by Admin' }, 400);
+      }
+
+      const competingEntries = entries.filter(
+        (entry) => entry.preRaceStatus !== 'absent' && !entry.disqualified
+      );
+      if (competingEntries.length === 0) {
+        return c.json({ message: 'A race needs at least one competing participant before completion' }, 400);
+      }
+
+      race.status = 'completed';
+      race.resultStatus = 'official';
+      race.awardsPublished = true;
+      race.updatedAt = new Date().toISOString();
+      entries.forEach((entry) => {
+        entry.resultStatus = entry.preRaceStatus === 'absent' || entry.disqualified
+          ? 'disqualified'
+          : 'official';
+      });
+      competingEntries.forEach((entry) => {
+        const result = computePostRaceRating(entry, competingEntries);
+        const horse = db.horses.find((item) => item.id === entry.horseId);
+        entry.ratingChange = result.ratingChange;
+        entry.postRaceRating = result.postRaceRating;
+        entry.ratingLog = result.calcLog;
+        if (horse) {
+          horse.overallRating = result.postRaceRating;
+          horse.updatedAt = race.updatedAt;
+        }
+      });
+
+      const recipientIds = new Set();
+      entries.forEach((entry) => {
+        const horse = db.horses.find((item) => item.id === entry.horseId);
+        if (horse?.ownerUserId) recipientIds.add(horse.ownerUserId);
+        if (entry.jockeyUserId) recipientIds.add(entry.jockeyUserId);
+      });
+      db.users
+        .filter((item) => ['admin', 'spectator'].includes(item.role))
+        .forEach((item) => recipientIds.add(item.id));
+      recipientIds.forEach((userId) =>
+        createNotification(
+          db,
+          userId,
+          'Official results published',
+          `${race.name} results were approved by Admin and are now official.`
+        )
+      );
+
+      const tournament = db.tournaments.find((item) => item.id === race.tournamentId);
+      const racesInTournament = (db.races || []).filter(
+        (item) => item.tournamentId === race.tournamentId
+      );
+      if (
+        tournament &&
+        racesInTournament.length > 0 &&
+        racesInTournament.every((item) => item.status === 'completed')
+      ) {
+        tournament.status = 'completed';
+        tournament.updatedAt = race.updatedAt;
+      }
     }
 
     recordRaceAction(db, {

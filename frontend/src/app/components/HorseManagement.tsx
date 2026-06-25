@@ -176,7 +176,7 @@ export default function HorseManagement({
                   </p>
 
                   <p className="text-gray-500 mt-1">
-                    {horse.species || 'Species not set'} • {horse.weightLb || 0}kg • Official Rating {horseRating(horse)}
+                    {horse.species || 'Species not set'} • {horse.weightLb || 0}lb • Official Rating {horseRating(horse)}
                   </p>
                 </div>
 

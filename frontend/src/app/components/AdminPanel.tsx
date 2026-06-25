@@ -269,13 +269,23 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   const handleRaceAction = (
     raceId: string,
-    action: 'close-registration' | 'publish'
+    action: 'close-registration' | 'publish' | 'start-race' | 'finish-race' | 'complete-results'
   ) => {
     adminRaceAction(raceId, action)
       .then((result) => {
         setRaces((current) =>
           current.map((race) => (race.id === result.race.id ? result.race : race))
         );
+        if (Array.isArray(result.entries)) {
+          setRaceEntries((current) => {
+            const updatedEntryIds = new Set(result.entries.map((entry) => entry.id));
+
+            return [
+              ...current.filter((entry) => !updatedEntryIds.has(entry.id)),
+              ...result.entries,
+            ];
+          });
+        }
         setApprovalMessage(`Race status updated to ${statusLabel(result.race.status)}.`);
       })
       .catch((error) =>
@@ -283,6 +293,20 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
           error instanceof Error ? error.message : 'Race action failed'
         )
       );
+  };
+
+  const raceReadiness = (raceId: string) => {
+    const entries = raceEntries.filter(
+      (entry) => entry.raceId === raceId && entry.status === 'approved'
+    );
+    const ready = entries.filter(
+      (entry) => entry.preRaceStatus === 'ready' && !entry.disqualified
+    ).length;
+    const unchecked = entries.filter(
+      (entry) => !['ready', 'absent'].includes(entry.preRaceStatus) && !entry.disqualified
+    ).length;
+
+    return { total: entries.length, ready, unchecked };
   };
 
   const handleCreateTournament = () => {
@@ -614,6 +638,44 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                                         className="flex items-center gap-2 px-4 py-2 bg-green-600/10 text-green-400 rounded-xl hover:bg-green-600/20 transition-all border border-green-600/30 text-sm font-semibold"
                                       >
                                         Publish
+                                      </button>
+                                    )}
+
+                                    {race.status === 'published' && (() => {
+                                      const readiness = raceReadiness(race.id);
+                                      const disabled = readiness.ready === 0 || readiness.unchecked > 0;
+
+                                      return (
+                                        <button
+                                          onClick={() => handleRaceAction(race.id, 'start-race')}
+                                          disabled={disabled}
+                                          title={
+                                            disabled
+                                              ? `Need at least one Ready participant and 0 unchecked. Current: ${readiness.ready} ready, ${readiness.unchecked} unchecked.`
+                                              : undefined
+                                          }
+                                          className="flex items-center gap-2 px-4 py-2 bg-[#d4af37]/10 text-[#d4af37] disabled:opacity-40 disabled:cursor-not-allowed rounded-xl hover:bg-[#d4af37]/20 transition-all border border-[#d4af37]/30 text-sm font-semibold"
+                                        >
+                                          Start Race
+                                        </button>
+                                      );
+                                    })()}
+
+                                    {race.status === 'in-progress' && (
+                                      <button
+                                        onClick={() => handleRaceAction(race.id, 'finish-race')}
+                                        className="flex items-center gap-2 px-4 py-2 bg-purple-600/10 text-purple-300 rounded-xl hover:bg-purple-600/20 transition-all border border-purple-600/30 text-sm font-semibold"
+                                      >
+                                        Finish Race
+                                      </button>
+                                    )}
+
+                                    {race.status === 'finished' && race.resultStatus === 'submitted' && (
+                                      <button
+                                        onClick={() => handleRaceAction(race.id, 'complete-results')}
+                                        className="flex items-center gap-2 px-4 py-2 bg-green-600/10 text-green-400 rounded-xl hover:bg-green-600/20 transition-all border border-green-600/30 text-sm font-semibold"
+                                      >
+                                        Approve Results / Complete Race
                                       </button>
                                     )}
 

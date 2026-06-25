@@ -3,7 +3,7 @@ import {
   useNavigate,
   useParams,
 } from 'react-router-dom';
-import { Circle, Flag, ShieldCheck, Timer } from 'lucide-react';
+import { Circle, ShieldCheck, Timer } from 'lucide-react';
 import {
   AuthUser,
   RaceEntryRecord,
@@ -13,7 +13,6 @@ import {
   getMe,
   markRaceEntryReadiness,
   recordRaceResult,
-  startRace,
   submitRaceResults,
 } from '../services/api';
 import { statusLabel } from '../utils/domain';
@@ -34,7 +33,6 @@ export default function LiveRace() {
   >({});
   const [recordingEntryId, setRecordingEntryId] = useState('');
   const [readinessEntryId, setReadinessEntryId] = useState('');
-  const [startingRace, setStartingRace] = useState(false);
   const [publishingResults, setPublishingResults] = useState(false);
   const loadRequestIdRef = useRef(0);
 
@@ -145,38 +143,6 @@ export default function LiveRace() {
     return () => events.close();
   }, [selectedRace?.id]);
 
-  const handleStart = () => {
-    if (!selectedRace) return;
-
-    if (selectedRace.status !== 'published') {
-      setMessage('Race must be published before Referee can start it.');
-      return;
-    }
-
-    if (readyEntries.length === 0) {
-      setMessage('Mark at least one participant Ready before starting the race.');
-      return;
-    }
-
-    if (uncheckedEntries.length > 0) {
-      setMessage('Check every participant as Ready or Absent before starting the race.');
-      return;
-    }
-
-    setStartingRace(true);
-    setMessage('Starting race...');
-
-    startRace(selectedRace.id)
-      .then(() => {
-        setMessage('Race started. Status is now In Progress.');
-        loadRaceOps();
-      })
-      .catch((error) =>
-        setMessage(error instanceof Error ? error.message : 'Unable to start race')
-      )
-      .finally(() => setStartingRace(false));
-  };
-
   const updateDraft = (
     entry: RaceEntryRecord,
     patch: Partial<{ position: string; finishTime: string; notes: string; violationNotes: string }>
@@ -284,7 +250,7 @@ export default function LiveRace() {
     if (!selectedRace) return;
 
     setPublishingResults(true);
-    setMessage('Publishing official results...');
+    setMessage('Submitting results for Admin review...');
 
     submitRaceResults(selectedRace.id)
       .then(({ race, entries }) => {
@@ -295,10 +261,10 @@ export default function LiveRace() {
         }
         if (
           race.status !== 'finished' ||
-          race.resultStatus !== 'official' ||
-          !race.awardsPublished
+          race.resultStatus !== 'submitted' ||
+          race.awardsPublished
         ) {
-          setMessage('Results were not published by the server. Please retry.');
+          setMessage('Results were not submitted by the server. Please retry.');
           loadRaceOps();
           return;
         }
@@ -318,7 +284,7 @@ export default function LiveRace() {
           });
         }
         setResultDrafts({});
-        setMessage('Official results published successfully.');
+        setMessage('Results submitted. Admin must approve them before the race becomes completed.');
         loadRaceOps();
       })
       .catch((error) =>
@@ -344,7 +310,7 @@ export default function LiveRace() {
             </h1>
 
             <p className="text-gray-400 mt-2">
-              Referee verifies readiness, starts races, records positions, finish times, notes and violations.
+              Referee verifies readiness, records violations, enters positions, finish times and submits results for Admin review.
             </p>
           </div>
 
@@ -391,7 +357,7 @@ export default function LiveRace() {
                     ['Ready', String(readyEntries.length)],
                     ['Absent', String(absentEntries.length)],
                     ['Unchecked', String(uncheckedEntries.length)],
-                    ['Can Start', selectedRace.status === 'published' && readyEntries.length > 0 && uncheckedEntries.length === 0 ? 'Yes' : 'No'],
+                    ['Can Submit Results', selectedRace.status === 'finished' && selectedRace.resultStatus === 'draft' ? 'Yes' : 'No'],
                   ].map(([label, value]) => (
                     <div
                       key={label}
@@ -469,7 +435,10 @@ export default function LiveRace() {
                             </div>
                           )}
 
-                        {canOperate && selectedRace.status === 'in-progress' && entry.preRaceStatus !== 'absent' && (
+                        {canOperate &&
+                          selectedRace.status === 'finished' &&
+                          selectedRace.resultStatus === 'draft' &&
+                          entry.preRaceStatus !== 'absent' && (
                           <div className="grid grid-cols-2 gap-3">
                             <select
                               aria-label={`Position for ${entry.horseName}`}
@@ -569,43 +538,39 @@ export default function LiveRace() {
                   </div>
 
                   <div className="flex justify-between gap-3">
-                    <span>Result publishing</span>
-                    <span className="text-white font-bold">Referee publishes</span>
+                    <span>Result approval</span>
+                    <span className="text-white font-bold">Admin completes</span>
                   </div>
                 </div>
 
-                <button
-                  onClick={handleStart}
-                  disabled={
-                    !canOperate ||
-                    startingRace ||
-                    selectedRace.status !== 'published' ||
-                    readyEntries.length === 0 ||
-                    uncheckedEntries.length > 0
-                  }
-                  className="w-full flex items-center justify-center gap-2 py-4 bg-[#d4af37] hover:bg-[#b8892d] disabled:bg-white/10 disabled:text-gray-500 rounded-xl text-white font-bold transition-all"
-                >
-                  <Flag className="w-5 h-5" />
-                  {startingRace ? 'Starting...' : 'Start Race'}
-                </button>
-
                 {selectedRace.status === 'published' && (
                   <div className="mt-3 rounded-xl border border-white/10 bg-[#071a2f] p-4 text-sm text-gray-400">
-                    Start Race is enabled only after every participant is checked and at least one horse is Ready.
+                    Check in every participant. Admin starts the race after readiness is complete.
+                  </div>
+                )}
+
+                {selectedRace.status === 'in-progress' && (
+                  <div className="mt-3 rounded-xl border border-white/10 bg-[#071a2f] p-4 text-sm text-gray-400">
+                    Race is running. Admin must finish the race before Referee can enter results.
                   </div>
                 )}
 
                 <button
                   onClick={submitResults}
-                  disabled={!canOperate || publishingResults || selectedRace.status !== 'in-progress'}
+                  disabled={
+                    !canOperate ||
+                    publishingResults ||
+                    selectedRace.status !== 'finished' ||
+                    selectedRace.resultStatus !== 'draft'
+                  }
                   className="w-full mt-3 flex items-center justify-center gap-2 py-4 bg-white/10 hover:bg-white/15 disabled:text-gray-500 rounded-xl text-white font-bold transition-all"
                 >
-                  {publishingResults ? 'Publishing...' : 'Confirm & Publish Results'}
+                  {publishingResults ? 'Submitting...' : 'Submit Results for Admin Review'}
                 </button>
 
                 <div className="mt-5 rounded-xl bg-[#071a2f] border border-white/10 p-4 text-gray-400">
                   <Timer className="inline-block w-4 h-4 mr-2 text-[#d4af37]" />
-                  Publishing makes the recorded results official immediately.
+                  Submitting sends recorded results to Admin. They become official only after Admin approval.
                 </div>
               </div>
             </div>

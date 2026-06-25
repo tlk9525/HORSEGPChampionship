@@ -61,7 +61,7 @@ export interface JockeyProfileRecord {
   bio: string;
   certificate: string;
   competitionLevel: string;
-  weight: number;
+  weightLb: number;
   status: string;
 }
 
@@ -88,7 +88,7 @@ export interface RaceBuilderPairing {
   ownerName: string;
   jockeyUserId: string;
   jockeyName: string;
-  jockeyWeight: number;
+  jockeyWeightLb: number;
 }
 
 export interface RaceBuilderReferee {
@@ -176,6 +176,8 @@ export interface RaceEntryRecord {
   horseName?: string;
   jockeyName?: string;
   ownerName?: string;
+  horseWeightLb?: number | null;
+  jockeyWeightLb?: number | null;
   raceName?: string;
 }
 
@@ -467,7 +469,7 @@ export const saveJockeyProfile = async (profile: {
   bio: string;
   certificate: string;
   competitionLevel: string;
-  weight: string | number;
+  weightLb: string | number;
 }) =>
   request<{ profile: JockeyProfileRecord }>('/jockey/profile', {
     method: 'POST',
@@ -535,23 +537,17 @@ export const deleteRace = async (raceId: string) =>
     method: 'DELETE',
   });
 
-// Admin chỉ đóng đăng ký và publish race
+// Admin đóng đăng ký, publish race và duyệt kết quả cuối cùng
 export const adminRaceAction = async (
   raceId: string,
-  action: 'close-registration' | 'publish'
+  action: 'close-registration' | 'publish' | 'start-race' | 'finish-race' | 'complete-results'
 ) =>
   request<{ race: RaceRecord; entries: RaceEntryRecord[]; notifications: NotificationItem[] }>(
     `/admin/races/${raceId}/${action}`,
     { method: 'POST' }
   );
 
-// Bắt đầu một cuộc đua (trọng tài được phân công)
-export const startRace = async (raceId: string) =>
-  request<{ race: RaceRecord }>(`/referee/races/${raceId}/start`, {
-    method: 'POST',
-  });
-
-// Trọng tài xác nhận và công bố kết quả chính thức
+// Trọng tài nộp kết quả để Admin duyệt
 export const submitRaceResults = async (raceId: string) =>
   request<{ race?: RaceRecord; entries?: RaceEntryRecord[] }>(
     `/referee/races/${raceId}/submit-results`,

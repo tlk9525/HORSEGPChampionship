@@ -18,9 +18,9 @@ import {
 } from '../services/api';
 import { statusLabel } from '../utils/domain';
 
-const weightLbToLb = (weight?: number) => {
-  const parsed = Number(weight || 0);
-  return parsed > 0 ? `${(parsed * 2.20462).toFixed(0)}lb` : '-';
+const formatWeightLb = (weightLb?: number) => {
+  const parsed = Number(weightLb || 0);
+  return parsed > 0 ? `${parsed.toFixed(0)}lb` : '-';
 };
 
 export default function JockeyDirectoryPage() {
@@ -178,7 +178,7 @@ export default function JockeyDirectoryPage() {
 
                         <span className="inline-flex items-center gap-2">
                           <Scale className="h-4 w-4" />
-                          {weightLbToLb(selectedJockey.weight)}
+                          {formatWeightLb(selectedJockey.weightLb)}
                         </span>
                       </div>
                     </div>

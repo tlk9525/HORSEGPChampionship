@@ -78,7 +78,7 @@ export const createJockeyRoutes = (getDb, writeDb) => {
       );
     }
 
-    const { bio, certificate, competitionLevel, weight } = await c.req.json();
+    const { bio, certificate, competitionLevel, weightLb, weight } = await c.req.json();
     db.jockeyProfiles = db.jockeyProfiles || [];
 
     let profile = db.jockeyProfiles.find((item) => item.userId === user.id);
@@ -90,7 +90,7 @@ export const createJockeyRoutes = (getDb, writeDb) => {
     profile.bio = bio || '';
     profile.certificate = certificate || '';
     profile.competitionLevel = competitionLevel || '';
-    profile.weight = Number(weight) || 0;
+    profile.weightLb = Number(weightLb ?? weight) || 0;
     profile.status = 'published';
     profile.updatedAt = new Date().toISOString();
 

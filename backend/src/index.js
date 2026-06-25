@@ -5,7 +5,6 @@ import { secureHeaders } from 'hono/secure-headers';
 import { serve } from '@hono/node-server';
 import { API_HOST, API_PORT, FRONTEND_URL } from './config/constants.js';
 import {
-  persistOfficialRaceResults,
   persistRefereeRaceAction,
   persistRaceEntryReadiness,
   persistRaceEntryResult,
@@ -77,7 +76,6 @@ app.route(
   createRefereeRoutes(
     getDb,
     writeDb,
-    persistOfficialRaceResults,
     persistRaceEntryResult,
     persistRaceEntryReadiness,
     persistRefereeRaceAction

@@ -89,6 +89,52 @@ const ensureRuntimeSchema = async () => {
           ON "refereeReports" ("refereeUserId", "status")
         `);
         await client.query(`
+          ALTER TABLE "horses"
+          ADD COLUMN IF NOT EXISTS "weightLb" NUMERIC(7, 2) NOT NULL DEFAULT 0
+        `);
+        await client.query(`
+          DO $$
+          BEGIN
+            IF EXISTS (
+              SELECT 1
+              FROM information_schema.columns
+              WHERE table_name = 'horses'
+                AND column_name = 'weightKg'
+            ) THEN
+              UPDATE "horses"
+              SET "weightLb" = ROUND("weightKg" * 2.20462)
+              WHERE "weightLb" = 0 AND "weightKg" > 0;
+            END IF;
+          END $$;
+        `);
+        await client.query(`
+          ALTER TABLE "horses"
+          DROP COLUMN IF EXISTS "weightKg"
+        `);
+        await client.query(`
+          ALTER TABLE "jockeyProfiles"
+          ADD COLUMN IF NOT EXISTS "weightLb" NUMERIC(6, 2) NOT NULL DEFAULT 0
+        `);
+        await client.query(`
+          DO $$
+          BEGIN
+            IF EXISTS (
+              SELECT 1
+              FROM information_schema.columns
+              WHERE table_name = 'jockeyProfiles'
+                AND column_name = 'weight'
+            ) THEN
+              UPDATE "jockeyProfiles"
+              SET "weightLb" = ROUND("weight" * 2.20462)
+              WHERE "weightLb" = 0 AND "weight" > 0;
+            END IF;
+          END $$;
+        `);
+        await client.query(`
+          ALTER TABLE "jockeyProfiles"
+          DROP COLUMN IF EXISTS "weight"
+        `);
+        await client.query(`
           ALTER TABLE "raceEntries"
           ADD COLUMN IF NOT EXISTS "ratingChange" NUMERIC(6, 2) NOT NULL DEFAULT 0
         `);
@@ -134,8 +180,25 @@ const ensureRuntimeSchema = async () => {
         `);
         await client.query(`
           UPDATE "races"
-          SET "handicapMin" = 115, "handicapMax" = 135
-          WHERE "handicapMax" < 100
+          SET
+            "handicapMin" = CASE "raceClass"
+              WHEN 'Class 1' THEN 115
+              WHEN 'Class 2' THEN 115
+              WHEN 'Class 3' THEN 113
+              WHEN 'Class 4' THEN 112
+              WHEN 'Class 5' THEN 110
+              ELSE 110
+            END,
+            "handicapMax" = CASE "raceClass"
+              WHEN 'Class 1' THEN 135
+              WHEN 'Class 2' THEN 135
+              WHEN 'Class 3' THEN 133
+              WHEN 'Class 4' THEN 132
+              WHEN 'Class 5' THEN 130
+              ELSE 135
+            END
+          WHERE ("handicapMin" = 115 AND "handicapMax" = 135)
+             OR "handicapMax" < 100
         `);
         await client.query(`
           WITH "fieldRatings" AS (
@@ -145,11 +208,14 @@ const ensureRuntimeSchema = async () => {
             GROUP BY "raceId"
           )
           UPDATE "raceEntries" AS "entry"
-          SET "handicap" = GREATEST(
+          SET "handicap" = LEAST(
+            "race"."handicapMax",
+            GREATEST(
             "race"."handicapMin",
             ROUND(
               "race"."handicapMax" -
               ("fieldRatings"."topRating" - "entry"."ratingSnapshot")
+            )
             )
           )
           FROM "fieldRatings", "races" AS "race"
@@ -496,7 +562,7 @@ export const writeDb = async (db) => {
         'age',
         'sex',
         'color',
-        'weightKg',
+        'weightLb',
         'heightCm',
         'baseHandicap',
         'speedRating',
@@ -518,7 +584,7 @@ export const writeDb = async (db) => {
         species: horse.species || '',
         sex: horse.sex || '',
         color: horse.color || '',
-        weightKg: horse.weightKg ?? 0,
+        weightLb: horse.weightLb ?? 0,
         heightCm: horse.heightCm ?? 0,
         baseHandicap: horse.baseHandicap ?? 0,
         speedRating: horse.speedRating ?? 75,
@@ -588,7 +654,7 @@ export const writeDb = async (db) => {
         'bio',
         'certificate',
         'competitionLevel',
-        'weight',
+        'weightLb',
         'status',
         'updatedAt',
       ],
@@ -816,41 +882,6 @@ export const writeDb = async (db) => {
   }
 };
 
-// Cập nhật trực tiếp trạng thái publish kết quả để tránh lệch state sau khi reload trang.
-export const persistOfficialRaceResults = async (raceId, updatedAt = nowIso()) => {
-  await ensureRuntimeSchema();
-
-  const client = await getPool().connect();
-
-  try {
-    await client.query('BEGIN');
-    await client.query(
-      `UPDATE "races"
-       SET "status" = 'finished',
-           "resultStatus" = 'official',
-           "awardsPublished" = TRUE,
-           "updatedAt" = $2
-       WHERE "id" = $1`,
-      [raceId, updatedAt]
-    );
-    await client.query(
-      `UPDATE "raceEntries"
-       SET "resultStatus" = CASE
-         WHEN "preRaceStatus" = 'absent' OR "disqualified" = TRUE THEN 'disqualified'
-         ELSE 'official'
-       END
-       WHERE "raceId" = $1 AND "status" = 'approved'`,
-      [raceId]
-    );
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-};
-
 // Cập nhật một kết quả race entry bằng row-level update để tránh writeDb ghi lại toàn bộ database.
 export const persistRaceEntryResult = async (entry, report = null) => {
   await ensureRuntimeSchema();
@@ -948,7 +979,7 @@ export const persistRaceEntryReadiness = async (entry) => {
   );
 };
 
-// Lưu các thay đổi của Start Race/Publish Results trong một transaction nhỏ, không rewrite toàn DB.
+// Lưu các thay đổi vận hành race trong một transaction nhỏ, không rewrite toàn DB.
 export const persistRefereeRaceAction = async ({
   race,
   raceEntries = [],

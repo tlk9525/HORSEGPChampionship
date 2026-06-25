@@ -18,6 +18,26 @@ export const horseName = (db, horseId) =>
 export const raceName = (db, raceId) =>
   db.races.find((race) => race.id === raceId)?.name || 'Unassigned race';
 
+const asLb = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
+};
+
+const horseWeightLb = (db, horseId) => {
+  const horse = db.horses.find((item) => item.id === horseId);
+  if (!horse) return null;
+
+  return asLb(horse.weightLb);
+};
+
+const jockeyWeightLb = (db, jockeyUserId) => {
+  const profile = (db.jockeyProfiles || []).find(
+    (item) => item.userId === jockeyUserId
+  );
+
+  return asLb(profile?.weightLb);
+};
+
 // Lấy tên giải đấu từ tournamentId, trả về 'Tournament' nếu không tìm thấy
 export const tournamentName = (db, tournamentId) =>
   db.tournaments.find((tournament) => tournament.id === tournamentId)?.name ||
@@ -85,6 +105,8 @@ export const publicRaceEntries = (db) =>
       db,
       db.horses.find((horse) => horse.id === entry.horseId)?.ownerUserId
     ),
+    horseWeightLb: horseWeightLb(db, entry.horseId),
+    jockeyWeightLb: jockeyWeightLb(db, entry.jockeyUserId),
     raceName: raceName(db, entry.raceId),
   }));
 

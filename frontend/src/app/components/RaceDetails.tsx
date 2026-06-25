@@ -36,6 +36,11 @@ const formatRating = (value: number) => {
   return String(Math.round(parsed));
 };
 
+const lbValue = (value?: number | string | null) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? String(Math.round(parsed)) : '-';
+};
+
 const canShowRaceCardData = (race?: RaceRecord) =>
   Boolean(
     race &&
@@ -157,16 +162,20 @@ export default function RaceDetails() {
       age: horse?.age || '-',
       assignedWeightLb: Number(entry.handicap || 0).toFixed(0),
       jockey: entry.jockeyName || 'Jockey pending',
-      jockeyWeightLb: jockeyProfile?.weight
-        ? (Number(jockeyProfile.weight) * 2.20462).toFixed(0)
-        : '-',
+      jockeyWeightLb:
+        lbValue(entry.jockeyWeightLb) !== '-'
+          ? lbValue(entry.jockeyWeightLb)
+          : lbValue(jockeyProfile?.weightLb),
       draw: entry.lane || 'TBD',
       owner: entry.ownerName || 'Owner pending',
       rating: formatRating(rating),
       ratingChange,
       ratingChangeLabel: `${ratingChange > 0 ? '+' : ''}${ratingChange}`,
       postRaceRating: postRaceRating > 0 ? formatRating(postRaceRating) : '-',
-      horseWeightLb: (Number(horse?.weightLb || 0) * 2.20462).toFixed(0),
+      horseWeightLb:
+        lbValue(entry.horseWeightLb) !== '-'
+          ? lbValue(entry.horseWeightLb)
+          : lbValue(horse?.weightLb),
     };
   });
   const visibleRows = entriesExpanded ? rows : rows.slice(0, 4);

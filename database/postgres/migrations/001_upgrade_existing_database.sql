@@ -82,12 +82,71 @@ ALTER TABLE "tournaments"
   ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMPTZ;
 
 ALTER TABLE "horses"
-  ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS "weightLb" NUMERIC(7, 2) NOT NULL DEFAULT 0;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'horses'
+      AND column_name = 'weightKg'
+  ) THEN
+    UPDATE "horses"
+    SET "weightLb" = ROUND("weightKg" * 2.20462)
+    WHERE "weightLb" = 0 AND "weightKg" > 0;
+  END IF;
+END $$;
+
+ALTER TABLE "horses"
+  DROP COLUMN IF EXISTS "weightKg";
+
+ALTER TABLE "jockeyProfiles"
+  ADD COLUMN IF NOT EXISTS "weightLb" NUMERIC(6, 2) NOT NULL DEFAULT 0;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'jockeyProfiles'
+      AND column_name = 'weight'
+  ) THEN
+    UPDATE "jockeyProfiles"
+    SET "weightLb" = ROUND("weight" * 2.20462)
+    WHERE "weightLb" = 0 AND "weight" > 0;
+  END IF;
+END $$;
+
+ALTER TABLE "jockeyProfiles"
+  DROP COLUMN IF EXISTS "weight";
 
 ALTER TABLE "races"
   ADD COLUMN IF NOT EXISTS "raceDate" DATE,
   ADD COLUMN IF NOT EXISTS "raceTime" TIME,
   ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMPTZ;
+
+UPDATE "races"
+SET
+  "handicapMin" = CASE "raceClass"
+    WHEN 'Class 1' THEN 115
+    WHEN 'Class 2' THEN 115
+    WHEN 'Class 3' THEN 113
+    WHEN 'Class 4' THEN 112
+    WHEN 'Class 5' THEN 110
+    ELSE 110
+  END,
+  "handicapMax" = CASE "raceClass"
+    WHEN 'Class 1' THEN 135
+    WHEN 'Class 2' THEN 135
+    WHEN 'Class 3' THEN 133
+    WHEN 'Class 4' THEN 132
+    WHEN 'Class 5' THEN 130
+    ELSE 135
+  END
+WHERE ("handicapMin" = 115 AND "handicapMax" = 135)
+   OR "handicapMax" < 100;
 
 ALTER TABLE "sessions"
   ADD COLUMN IF NOT EXISTS "expiresAt" TIMESTAMPTZ;

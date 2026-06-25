@@ -17,9 +17,9 @@ interface RaceRegistrationPageProps {
   onNavigate: (page: string) => void;
 }
 
-const weightLbToLb = (weight?: number) => {
-  const parsed = Number(weight || 0);
-  return parsed > 0 ? `${(parsed * 2.20462).toFixed(0)}lb` : '-';
+const formatWeightLb = (weightLb?: number) => {
+  const parsed = Number(weightLb || 0);
+  return parsed > 0 ? `${parsed.toFixed(0)}lb` : '-';
 };
 
 export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPageProps) {
@@ -288,7 +288,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
                   {jockeys.length === 0 && <option value="">No approved jockeys yet</option>}
                   {jockeys.map((jockey) => (
                     <option key={jockey.id} value={jockey.userId}>
-                      {jockey.jockeyName} - {jockey.competitionLevel} - {weightLbToLb(jockey.weight)}
+                      {jockey.jockeyName} - {jockey.competitionLevel} - {formatWeightLb(jockey.weightLb)}
                     </option>
                   ))}
                 </select>

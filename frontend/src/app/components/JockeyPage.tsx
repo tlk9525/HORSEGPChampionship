@@ -42,7 +42,7 @@ export default function JockeyPage({
   const [bio, setBio] = useState('');
   const [certificate, setCertificate] = useState('');
   const [competitionLevel, setCompetitionLevel] = useState('');
-  const [weight, setWeight] = useState('');
+  const [weightLb, setWeightLb] = useState('');
   const [message, setMessage] = useState('');
   const [assignedExpanded, setAssignedExpanded] = useState(false);
 
@@ -59,7 +59,7 @@ export default function JockeyPage({
         setBio(data.profile?.bio || '');
         setCertificate(data.profile?.certificate || '');
         setCompetitionLevel(data.profile?.competitionLevel || '');
-        setWeight(data.profile?.weight ? String(data.profile.weight) : '');
+        setWeightLb(data.profile?.weightLb ? String(data.profile.weightLb) : '');
       })
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : 'Unable to load jockey portal')
@@ -77,7 +77,7 @@ export default function JockeyPage({
       bio,
       certificate,
       competitionLevel,
-      weight,
+      weightLb,
     })
       .then(({ profile: updatedProfile }) => {
         setProfile(updatedProfile);
@@ -201,14 +201,14 @@ export default function JockeyPage({
               </div>
 
               <div>
-                <label className="block text-gray-300 mb-2">Weight (kg)</label>
+                <label className="block text-gray-300 mb-2">Weight (lb)</label>
 
                 <input
                   type="number"
-                  value={weight}
-                  onChange={(event) => setWeight(event.target.value)}
+                  value={weightLb}
+                  onChange={(event) => setWeightLb(event.target.value)}
                   className="w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#d4af37]"
-                  placeholder="54"
+                  placeholder="120"
                 />
               </div>
             </div>

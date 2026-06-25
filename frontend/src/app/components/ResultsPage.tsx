@@ -43,7 +43,7 @@ export default function ResultsPage() {
   const completedRaces = useMemo(
     () =>
       tournamentRaces.filter((race) =>
-        ['finished', 'completed'].includes(race.status)
+        race.status === 'completed' && race.resultStatus === 'official'
       ),
     [tournamentRaces]
   );

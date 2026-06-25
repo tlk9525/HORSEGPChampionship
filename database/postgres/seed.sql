@@ -1,5 +1,12 @@
 BEGIN;
-TRUNCATE "raceEntries", "races", "tournaments", "horses", "users" RESTART IDENTITY CASCADE;
+TRUNCATE
+  "raceEntries",
+  "races",
+  "tournaments",
+  "horses",
+  "jockeyProfiles",
+  "users"
+RESTART IDENTITY CASCADE;
 
 INSERT INTO "users" ("id", "name", "email", "password", "role", "status") VALUES
   ('u_admin', 'Admin User', 'admin@test.com', 'password123', 'admin', 'active'),
@@ -45,11 +52,26 @@ INSERT INTO "users" ("id", "name", "email", "password", "role", "status") VALUES
   ('u_jockey_30', 'Jockey 30', 'jockey30@test.com', 'password123', 'jockey', 'active'),
   ('u_referee_1', 'Referee 1', 'referee1@test.com', 'password123', 'referee', 'active'),
   ('u_referee_2', 'Referee 2', 'referee2@test.com', 'password123', 'referee', 'active'),
-  ('u_referee_3', 'Referee 3', 'referee3@test.com', 'password123', 'referee', 'active'),
+  ('u_referee_3', 'Referee 3', '  ', 'password123', 'referee', 'active'),
   ('u_referee_4', 'Referee 4', 'referee4@test.com', 'password123', 'referee', 'active'),
   ('u_referee_5', 'Referee 5', 'referee5@test.com', 'password123', 'referee', 'active');
 
-INSERT INTO "horses" ("id", "name", "breed", "color", "age", "weightKg", "overallRating", "sex", "ownerUserId", "status", "createdAt", "updatedAt") VALUES
+INSERT INTO "jockeyProfiles" (
+  "id", "userId", "bio", "certificate", "competitionLevel", "weightLb", "status", "updatedAt"
+)
+SELECT
+  'jp_' || regexp_replace("id", '^u_jockey_', ''),
+  "id",
+  'Seed jockey profile',
+  'Licensed jockey certificate',
+  'Professional',
+  110 + ((regexp_replace("id", '^u_jockey_', '')::INTEGER % 8) * 2),
+  'published',
+  NOW()
+FROM "users"
+WHERE "role" = 'jockey';
+
+INSERT INTO "horses" ("id", "name", "breed", "color", "age", "weightLb", "overallRating", "sex", "ownerUserId", "status", "createdAt", "updatedAt") VALUES
   ('h_001', 'Horse 1', 'Thoroughbred', 'Black', 3, 480, 40, 'Stallion', 'u_owner_1', 'approved', NOW(), NOW()),
   ('h_002', 'Horse 2', 'Arabian', 'Bay', 4, 483, 41, 'Mare', 'u_owner_2', 'approved', NOW(), NOW()),
   ('h_003', 'Horse 3', 'Quarter Horse', 'Grey', 5, 486, 42, 'Gelding', 'u_owner_3', 'approved', NOW(), NOW()),
@@ -111,6 +133,10 @@ INSERT INTO "horses" ("id", "name", "breed", "color", "age", "weightKg", "overal
   ('h_059', 'Horse 59', 'Arabian', 'Chestnut', 6, 534, 58, 'Mare', 'u_owner_9', 'approved', NOW(), NOW()),
   ('h_060', 'Horse 60', 'Quarter Horse', 'Palomino', 7, 537, 59, 'Gelding', 'u_owner_10', 'approved', NOW(), NOW());
 
+UPDATE "horses"
+SET "weightLb" = ROUND("weightLb" * 2.20462)
+WHERE "weightLb" > 0 AND "weightLb" < 700;
+
 INSERT INTO "tournaments" ("id", "name", "status", "startDate", "finalDate", "location", "createdAt") VALUES
   ('t_past_1', 'Winter Cup 2024', 'completed', '2024-11-01', '2024-11-28', 'Grand Arena', NOW()),
   ('t_past_2', 'Spring Classic 2025', 'completed', '2025-03-01', '2025-03-28', 'Grand Arena', NOW()),
@@ -149,6 +175,25 @@ INSERT INTO "races" ("id", "tournamentId", "raceNumber", "name", "raceDate", "ra
   ('r_28', 't_active', 'R4', 'Race 4 - Class 1', '2026-03-14', '14:00', 'Track 2', '1800m', 'Turf', 'Class 1', 115, 135, 'registration-open', '2026-03-01', '2026-03-05', NOW()),
   ('r_29', 't_upcoming', 'R1', 'Race 1 - Class 4', '2026-07-11', '14:00', 'Track 2', '1200m', 'Turf', 'Class 4', 115, 135, 'draft', '2026-07-01', '2026-07-05', NOW()),
   ('r_30', 't_upcoming', 'R2', 'Race 2 - Class 3', '2026-07-12', '14:00', 'Track 3', '1400m', 'Turf', 'Class 3', 115, 135, 'draft', '2026-07-01', '2026-07-05', NOW());
+
+UPDATE "races"
+SET
+  "handicapMin" = CASE "raceClass"
+    WHEN 'Class 1' THEN 115
+    WHEN 'Class 2' THEN 115
+    WHEN 'Class 3' THEN 113
+    WHEN 'Class 4' THEN 112
+    WHEN 'Class 5' THEN 110
+    ELSE 110
+  END,
+  "handicapMax" = CASE "raceClass"
+    WHEN 'Class 1' THEN 135
+    WHEN 'Class 2' THEN 135
+    WHEN 'Class 3' THEN 133
+    WHEN 'Class 4' THEN 132
+    WHEN 'Class 5' THEN 130
+    ELSE 135
+  END;
 
 INSERT INTO "raceEntries" ("id", "raceId", "horseId", "jockeyUserId", "status", "lane", "handicap", "ratingSnapshot", "ratingChange", "postRaceRating", "resultStatus", "position", "finishTime", "createdAt") VALUES
   ('re_1', 'r_1', 'h_033', 'u_jockey_15', 'approved', 1, 115, 72, 5, 77, 'official', 1, '01:66.00', '2024-11-11 15:00:00'),
@@ -487,5 +532,24 @@ INSERT INTO "raceEntries" ("id", "raceId", "horseId", "jockeyUserId", "status", 
   ('re_334', 'r_28', 'h_049', 'u_jockey_10', 'approved', 10, 124, 36, 0, 0, 'draft', NULL, NULL, NOW()),
   ('re_335', 'r_28', 'h_060', 'u_jockey_7', 'approved', 11, 125, 57, 0, 0, 'draft', NULL, NULL, NOW()),
   ('re_336', 'r_28', 'h_048', 'u_jockey_20', 'approved', 12, 126, 43, 0, 0, 'draft', NULL, NULL, NOW());
+
+WITH "fieldRatings" AS (
+  SELECT "raceId", MAX("ratingSnapshot") AS "topRating"
+  FROM "raceEntries"
+  WHERE "ratingSnapshot" > 0
+  GROUP BY "raceId"
+)
+UPDATE "raceEntries" AS "entry"
+SET "handicap" = LEAST(
+  "race"."handicapMax",
+  GREATEST(
+    "race"."handicapMin",
+    ROUND("race"."handicapMax" - ("fieldRatings"."topRating" - "entry"."ratingSnapshot"))
+  )
+)
+FROM "fieldRatings", "races" AS "race"
+WHERE "entry"."raceId" = "fieldRatings"."raceId"
+  AND "entry"."raceId" = "race"."id"
+  AND "entry"."ratingSnapshot" > 0;
 
 COMMIT;

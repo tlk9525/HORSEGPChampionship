@@ -42,7 +42,7 @@ export default function RegisterHorsePage({
   const [age, setAge] = useState('');
   const [sex, setSex] = useState('');
   const [color, setColor] = useState('');
-  const [weightLb, setWeightKg] = useState('');
+  const [weightLb, setWeightLb] = useState('');
   const [heightCm, setHeightCm] = useState('');
   const [speedRating, setSpeedRating] = useState('75');
   const [staminaRating, setStaminaRating] = useState('75');
@@ -133,7 +133,7 @@ export default function RegisterHorsePage({
     setAge(activeHorse.age ? String(activeHorse.age) : '');
     setSex(activeHorse.sex || '');
     setColor(activeHorse.color || '');
-    setWeightKg(activeHorse.weightLb ? String(activeHorse.weightLb) : '');
+    setWeightLb(activeHorse.weightLb ? String(activeHorse.weightLb) : '');
     setHeightCm(activeHorse.heightCm ? String(activeHorse.heightCm) : '');
     setSpeedRating(activeHorse.speedRating ? String(activeHorse.speedRating) : '75');
     setStaminaRating(activeHorse.staminaRating ? String(activeHorse.staminaRating) : '75');
@@ -329,16 +329,16 @@ export default function RegisterHorsePage({
 
             <div>
               <label className="block text-gray-300 mb-2">
-                Weight (kg)
+                Weight (lb)
               </label>
 
               <input
                 type="number"
                 min="0"
                 step="0.1"
-                placeholder="485"
+                placeholder="1100"
                 value={weightLb}
-                onChange={(event) => setWeightKg(event.target.value)}
+                onChange={(event) => setWeightLb(event.target.value)}
                 className={fieldClass}
               />
             </div>
