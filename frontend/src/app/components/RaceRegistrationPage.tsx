@@ -43,11 +43,11 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
   });
 
   const now = Date.now();
-  const registrationOpensAt = tournament?.registrationOpensAt
-    ? new Date(tournament.registrationOpensAt).getTime()
+  const registrationOpensAt = race?.registrationOpensAt
+    ? new Date(race.registrationOpensAt).getTime()
     : Number.NEGATIVE_INFINITY;
-  const registrationClosesAt = tournament?.registrationClosesAt
-    ? new Date(tournament.registrationClosesAt).getTime()
+  const registrationClosesAt = race?.registrationClosesAt
+    ? new Date(race.registrationClosesAt).getTime()
     : Number.POSITIVE_INFINITY;
   const registrationOpen = Boolean(
     tournament &&
@@ -239,7 +239,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
               className="md:col-span-2 flex items-center justify-center gap-2 w-full py-4 rounded-xl bg-[#d4af37] hover:bg-[#b8892d] disabled:bg-white/10 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-bold transition-all"
             >
               <Send className="w-5 h-5" />
-              Register Horse for Tournament
+              Register Horse for Race
             </button>
           </div>
 

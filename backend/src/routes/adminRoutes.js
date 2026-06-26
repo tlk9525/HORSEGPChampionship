@@ -506,8 +506,8 @@ export const createAdminRoutes = (getDb, writeDb) => {
         (entry) => !['ready', 'absent'].includes(entry.preRaceStatus) && !entry.disqualified
       );
 
-      if (readyEntries.length === 0) {
-        return c.json({ message: 'At least one participant must be checked in as Ready before starting the race' }, 400);
+      if (readyEntries.length !== 10) {
+        return c.json({ message: 'Exactly 10 participants must be checked in as Ready before starting the race' }, 400);
       }
       if (uncheckedEntries.length > 0) {
         return c.json({ message: 'Every participant must be marked Ready or Absent before starting the race' }, 400);

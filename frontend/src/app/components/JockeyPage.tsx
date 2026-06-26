@@ -93,7 +93,7 @@ export default function JockeyPage({
       .then(() => {
         setMessage(
           decision === 'accepted'
-            ? 'Invitation accepted. Admin has been notified to approve your tournament assignment.'
+            ? 'Invitation accepted. Admin has been notified to approve your race assignment.'
             : 'Invitation rejected. Owner has been notified.'
         );
         loadPortal();
@@ -107,6 +107,8 @@ export default function JockeyPage({
     races.find((race) => race.id === raceId);
   const tournamentById = (tournamentId?: string | null) =>
     tournaments.find((tournament) => tournament.id === tournamentId);
+  const needsJockeyResponse = (invitation: JockeyInvitation) =>
+    ['pending', 'pending-jockey'].includes(invitation.status);
 
   const visibleAssignedEntries = assignedExpanded
     ? raceEntries
@@ -150,7 +152,7 @@ export default function JockeyPage({
         </h1>
 
         <p className="text-gray-400 mb-8">
-          Publish your profile, join tournaments, then accept owner requests after their horses are approved by Admin.
+          Publish your profile, join races, then accept owner requests after their horses are approved by Admin.
         </p>
 
         {message && (
@@ -254,7 +256,7 @@ export default function JockeyPage({
                     • Status: {statusLabel(invitation.status)}
                   </div>
 
-                  {invitation.status === 'pending' && (
+                  {needsJockeyResponse(invitation) && (
                     <div className="text-blue-300 text-sm mt-2 font-semibold">
                       Owner selected you after Admin approved the horse. Accept to send this pairing to final Admin approval.
                     </div>
@@ -267,7 +269,7 @@ export default function JockeyPage({
                     </div>
                   )}
 
-                  {invitation.status === 'pending' && (
+                  {needsJockeyResponse(invitation) && (
                     <div className="grid grid-cols-2 gap-3 mt-4">
                       <button
                         onClick={() => respond(invitation.id, 'accepted')}

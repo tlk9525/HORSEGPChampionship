@@ -616,17 +616,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                                     {race.status === 'registration-open' && (
                                       <button
                                         onClick={() => handleRaceAction(race.id, 'close-registration')}
-                                        disabled={Boolean(
-                                          race.registrationClosesAt &&
-                                          Date.now() < new Date(race.registrationClosesAt).getTime()
-                                        )}
-                                        title={
-                                          race.registrationClosesAt &&
-                                          Date.now() < new Date(race.registrationClosesAt).getTime()
-                                            ? `Tournament registration closes at ${new Date(race.registrationClosesAt).toLocaleString()}`
-                                            : undefined
-                                        }
-                                        className="flex items-center gap-2 px-4 py-2 bg-yellow-500/10 text-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl hover:bg-yellow-500/20 transition-all border border-yellow-500/30 text-sm font-semibold"
+                                        className="flex items-center gap-2 px-4 py-2 bg-yellow-500/10 text-yellow-400 rounded-xl hover:bg-yellow-500/20 transition-all border border-yellow-500/30 text-sm font-semibold"
                                       >
                                         Close Registration
                                       </button>
@@ -643,7 +633,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
                                     {race.status === 'published' && (() => {
                                       const readiness = raceReadiness(race.id);
-                                      const disabled = readiness.ready === 0 || readiness.unchecked > 0;
+                                      const disabled = readiness.ready !== 10 || readiness.unchecked > 0;
 
                                       return (
                                         <button
@@ -651,7 +641,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                                           disabled={disabled}
                                           title={
                                             disabled
-                                              ? `Need at least one Ready participant and 0 unchecked. Current: ${readiness.ready} ready, ${readiness.unchecked} unchecked.`
+                                              ? `Need exactly 10 Ready participants and 0 unchecked. Current: ${readiness.ready} ready, ${readiness.unchecked} unchecked.`
                                               : undefined
                                           }
                                           className="flex items-center gap-2 px-4 py-2 bg-[#d4af37]/10 text-[#d4af37] disabled:opacity-40 disabled:cursor-not-allowed rounded-xl hover:bg-[#d4af37]/20 transition-all border border-[#d4af37]/30 text-sm font-semibold"

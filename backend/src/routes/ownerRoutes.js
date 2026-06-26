@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import {
   MAX_OWNER_HORSES,
   TOURNAMENT_REGISTRATION_STATUSES,
+  RACE_CLASSES,
 } from '../config/constants.js';
 import { requireRole } from '../services/authService.js';
 import {
@@ -23,6 +24,7 @@ import {
 import {
   horseOverallRating,
   numeric,
+  officialHorseRating,
 } from '../services/handicapService.js';
 
 const validRatingComponents = (values) =>
@@ -157,11 +159,24 @@ export const createOwnerRoutes = (getDb, writeDb) => {
       race,
       races: tournamentRaces(db, tournament.id),
       horses: db.horses.filter(
-        (horse) =>
-          horse.ownerUserId === user.id &&
-          horse.status === 'approved' &&
-          !registeredHorseIds.has(horse.id) &&
-          !busyInOtherRace.has(horse.id)
+        (horse) => {
+          if (
+            horse.ownerUserId !== user.id ||
+            horse.status !== 'approved' ||
+            registeredHorseIds.has(horse.id) ||
+            busyInOtherRace.has(horse.id)
+          ) {
+            return false;
+          }
+          if (race.raceClass && RACE_CLASSES[race.raceClass]) {
+            const rating = officialHorseRating(horse);
+            const { min, max } = RACE_CLASSES[race.raceClass];
+            if (rating < min || rating > max) {
+              return false;
+            }
+          }
+          return true;
+        }
       ),
       jockeyProfiles: publicTournamentJockeyProfiles(db, tournament.id).filter(
         (profile) => !registeredJockeyIds.has(profile.userId)
