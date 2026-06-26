@@ -9,7 +9,7 @@ DROP TABLE IF EXISTS "refereeReports";
 DROP TABLE IF EXISTS "raceEntries";
 DROP TABLE IF EXISTS "horseTournamentRegistrations";
 DROP TABLE IF EXISTS "jockeyInvitations";
-DROP TABLE IF EXISTS "jockeyTournamentRegistrations";
+DROP TABLE IF EXISTS "jockeyRaceRegistrations";
 DROP TABLE IF EXISTS "jockeyProfiles";
 DROP TABLE IF EXISTS "raceRefereeAssignments";
 DROP TABLE IF EXISTS "races";
@@ -166,24 +166,24 @@ CREATE TABLE "jockeyProfiles" (
     ON DELETE CASCADE
 );
 
-CREATE TABLE "jockeyTournamentRegistrations" (
+CREATE TABLE "jockeyRaceRegistrations" (
   "id" VARCHAR(64) PRIMARY KEY,
-  "tournamentId" VARCHAR(64) NOT NULL,
+  "raceId" VARCHAR(64) NOT NULL,
   "jockeyUserId" VARCHAR(64) NOT NULL,
   "status" VARCHAR(32) NOT NULL DEFAULT 'pending' CHECK ("status" IN ('pending', 'approved', 'rejected')),
   "createdAt" TIMESTAMPTZ NOT NULL,
   "reviewedAt" TIMESTAMPTZ,
-  CONSTRAINT "uq_jockey_tournament_registration" UNIQUE ("tournamentId", "jockeyUserId"),
-  CONSTRAINT "fk_jockey_tournament_registrations_tournament"
-    FOREIGN KEY ("tournamentId") REFERENCES "tournaments" ("id")
+  CONSTRAINT "uq_jockey_race_registration" UNIQUE ("raceId", "jockeyUserId"),
+  CONSTRAINT "fk_jockey_race_registrations_race"
+    FOREIGN KEY ("raceId") REFERENCES "races" ("id")
     ON DELETE CASCADE,
-  CONSTRAINT "fk_jockey_tournament_registrations_jockey"
+  CONSTRAINT "fk_jockey_race_registrations_jockey"
     FOREIGN KEY ("jockeyUserId") REFERENCES "users" ("id")
     ON DELETE CASCADE
 );
 
-CREATE INDEX "idx_jockey_tournament_registrations_tournament"
-  ON "jockeyTournamentRegistrations" ("tournamentId", "status");
+CREATE INDEX "idx_jockey_race_registrations_race_status" 
+  ON "jockeyRaceRegistrations" ("raceId", "status");
 
 CREATE TABLE "jockeyInvitations" (
   "id" VARCHAR(64) PRIMARY KEY,

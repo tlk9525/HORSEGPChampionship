@@ -155,6 +155,7 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     return c.json({
       tournament,
       race,
+      races: tournamentRaces(db, tournament.id),
       horses: db.horses.filter(
         (horse) =>
           horse.ownerUserId === user.id &&
@@ -439,10 +440,10 @@ export const createOwnerRoutes = (getDb, writeDb) => {
       return c.json({ registration }, 201);
     }
 
-    const jockeyApproved = (db.jockeyTournamentRegistrations || []).some(
-      (r) => r.tournamentId === tournamentId && r.jockeyUserId === jockeyUserId && r.status === 'approved'
+    const jockeyApproved = (db.jockeyRaceRegistrations || []).some(
+      (r) => r.raceId === race.id && r.jockeyUserId === jockeyUserId && r.status === 'approved'
     );
-    if (!jockeyApproved) return c.json({ message: 'Jockey must be approved for the same tournament' }, 400);
+    if (!jockeyApproved) return c.json({ message: 'Jockey must be approved for the same race' }, 400);
 
     if (!existingRegistration || existingRegistration.status !== 'approved' || existingRegistration.jockeyUserId) {
       return c.json(

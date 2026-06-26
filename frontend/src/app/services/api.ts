@@ -10,7 +10,7 @@ export interface AuthUser {
 
 export interface ApprovalItem {
   id: string;
-  entityType: 'horse' | 'account' | 'jockey' | 'jockeyTournament' | 'horseTournament' | 'raceEntry' | 'pairing';
+  entityType: 'horse' | 'account' | 'jockey' | 'jockeyRace' | 'horseTournament' | 'raceEntry' | 'pairing';
   type: string;
   name: string;
   detail: string;
@@ -181,9 +181,9 @@ export interface RaceEntryRecord {
   raceName?: string;
 }
 
-export interface JockeyTournamentRegistration {
+export interface JockeyRaceRegistration {
   id: string;
-  tournamentId: string;
+  raceId: string;
   jockeyUserId: string;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
@@ -289,7 +289,7 @@ export const getBootstrap = async () =>
     horses: HorseRecord[];
     races: RaceRecord[];
     jockeyProfiles: JockeyProfileRecord[];
-    jockeyTournamentRegistrations: JockeyTournamentRegistration[];
+    jockeyRaceRegistrations: JockeyRaceRegistration[];
     jockeyInvitations: JockeyInvitation[];
     horseTournamentRegistrations: HorseTournamentRegistration[];
     raceEntries: RaceEntryRecord[];
@@ -344,14 +344,14 @@ export const markNotificationRead = async (id: string) =>
     method: 'POST',
   });
 
-// Jockey đăng ký tham gia một giải đấu (cần admin phê duyệt)
-export const joinTournamentAsJockey = async (tournamentId: string) =>
+// Jockey đăng ký tham gia một cuộc đua (cần admin phê duyệt)
+export const joinRaceAsJockey = async (raceId: string) =>
   request<{
-    registration: JockeyTournamentRegistration;
-    jockeyTournamentRegistrations: JockeyTournamentRegistration[];
-  }>('/jockey/tournament-registrations', {
+    registration: JockeyRaceRegistration;
+    jockeyRaceRegistrations: JockeyRaceRegistration[];
+  }>('/jockey/race-registrations', {
     method: 'POST',
-    body: JSON.stringify({ tournamentId }),
+    body: JSON.stringify({ raceId }),
   });
 
 // Lấy dữ liệu portal của owner: danh sách ngựa, race entries, jockeys, lời mời
@@ -370,6 +370,7 @@ export const getRaceRegistration = async (raceId: string) =>
   request<{
     tournament: TournamentRecord;
     race: RaceRecord;
+    races?: RaceRecord[];
     horses: HorseRecord[];
     jockeyProfiles: JockeyProfileRecord[];
     horseTournamentRegistrations: HorseTournamentRegistration[];

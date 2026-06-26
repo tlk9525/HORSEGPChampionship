@@ -687,17 +687,17 @@ export const createAdminRoutes = (getDb, writeDb) => {
         decision === 'approved' ? 'Admin approved your account. You can now log in.' : 'Admin rejected your account request.');
     }
 
-    if (entityType === 'jockeyTournament') {
-      const registration = (db.jockeyTournamentRegistrations || []).find(
+    if (entityType === 'jockeyRace') {
+      const registration = (db.jockeyRaceRegistrations || []).find(
         (item) => item.id === id && item.status === 'pending'
       );
-      if (!registration) return c.json({ message: 'Jockey tournament registration not found' }, 404);
+      if (!registration) return c.json({ message: 'Jockey race registration not found' }, 404);
       registration.status = decision;
       registration.reviewedAt = new Date().toISOString();
-      const tournament = db.tournaments.find((item) => item.id === registration.tournamentId);
+      const race = db.races.find((item) => item.id === registration.raceId);
       createNotification(db, registration.jockeyUserId,
-        decision === 'approved' ? 'Tournament participation approved' : 'Tournament participation rejected',
-        `${tournament?.name || 'Tournament'} participation has been ${decision}.`);
+        decision === 'approved' ? 'Race participation approved' : 'Race participation rejected',
+        `${race?.name || 'Race'} participation has been ${decision}.`);
     }
 
     if (entityType === 'horseTournament') {

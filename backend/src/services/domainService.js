@@ -132,10 +132,10 @@ export const publicJockeyProfiles = (db) =>
 // Lấy danh sách jockey công khai đã được phê duyệt tham gia một giải đấu cụ thể
 export const publicTournamentJockeyProfiles = (db, tournamentId) => {
   const approvedJockeyIds = new Set(
-    (db.jockeyTournamentRegistrations || [])
+    (db.jockeyRaceRegistrations || [])
       .filter(
         (registration) =>
-          registration.tournamentId === tournamentId &&
+          db.races.some(r => r.id === registration.raceId && r.tournamentId === tournamentId) &&
           registration.status === 'approved'
       )
       .map((registration) => registration.jockeyUserId)
@@ -199,17 +199,14 @@ export const formatApprovals = (db) => [
       date: db.tournaments[0]?.registrationWindow || 'Registration window',
       targetUserId: user.id,
     })),
-  ...(db.jockeyTournamentRegistrations || [])
+  ...(db.jockeyRaceRegistrations || [])
     .filter((registration) => registration.status === 'pending')
     .map((registration) => ({
       id: registration.id,
-      entityType: 'jockeyTournament',
-      type: 'Jockey Tournament Registration',
+      entityType: 'jockeyRace',
+      type: 'Jockey Race Registration',
       name: jockeyName(db, registration.jockeyUserId),
-      detail: `Tournament: ${
-        db.tournaments.find((tournament) => tournament.id === registration.tournamentId)?.name ||
-        'Tournament'
-      }`,
+      detail: `Race: ${raceName(db, registration.raceId)}`,
       date: registration.createdAt,
       targetUserId: registration.jockeyUserId,
     })),

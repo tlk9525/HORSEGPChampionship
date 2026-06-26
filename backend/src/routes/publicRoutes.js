@@ -71,11 +71,11 @@ const visibleUsers = (db, user) => {
 
 // Lấy danh sách đăng ký jockey mà người dùng được xem
 const visibleJockeyRegistrations = (db, user) => {
-  if (user?.role === USER_ROLES.ADMIN) return db.jockeyTournamentRegistrations || [];
+  if (user?.role === USER_ROLES.ADMIN) return db.jockeyRaceRegistrations || [];
   if (user?.role === USER_ROLES.OWNER)
-    return (db.jockeyTournamentRegistrations || []).filter((r) => r.status === 'approved');
+    return (db.jockeyRaceRegistrations || []).filter((r) => r.status === 'approved');
   if (user?.role === USER_ROLES.JOCKEY)
-    return (db.jockeyTournamentRegistrations || []).filter((r) => r.jockeyUserId === user.id);
+    return (db.jockeyRaceRegistrations || []).filter((r) => r.jockeyUserId === user.id);
   return [];
 };
 
@@ -127,7 +127,7 @@ export const createPublicRoutes = (getDb) => {
       horses: visibleHorses(db, user, raceEntries),
       races: visibleRaces(db, user),
       jockeyProfiles: publicJockeyProfiles(db),
-      jockeyTournamentRegistrations: visibleJockeyRegistrations(db, user),
+      jockeyRaceRegistrations: visibleJockeyRegistrations(db, user),
       jockeyInvitations: visibleJockeyInvitations(db, user),
       horseTournamentRegistrations: visibleHorseTournamentRegistrations(db, user),
       raceEntries,

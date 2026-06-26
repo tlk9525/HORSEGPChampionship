@@ -303,7 +303,7 @@ export const readDb = async () => {
     horses,
     races,
     jockeyProfiles,
-    jockeyTournamentRegistrations,
+    jockeyRaceRegistrations,
     jockeyInvitations,
     horseTournamentRegistrations,
     raceEntries,
@@ -324,7 +324,7 @@ export const readDb = async () => {
       { column: 'id' },
     ]),
     selectAll('jockeyProfiles', [{ column: 'id' }]),
-    selectAll('jockeyTournamentRegistrations', [
+    selectAll('jockeyRaceRegistrations', [
       { column: 'createdAt', direction: 'DESC' },
       { column: 'id' },
     ]),
@@ -398,7 +398,7 @@ export const readDb = async () => {
     horses,
     races: racesWithAssignments,
     jockeyProfiles,
-    jockeyTournamentRegistrations,
+    jockeyRaceRegistrations,
     jockeyInvitations,
     horseTournamentRegistrations,
     raceEntries: raceEntries.map((entry) => ({
@@ -489,7 +489,7 @@ const tableDeleteOrder = [
   'raceEntries',
   'horseTournamentRegistrations',
   'jockeyInvitations',
-  'jockeyTournamentRegistrations',
+  'jockeyRaceRegistrations',
   'jockeyProfiles',
   'raceRefereeAssignments',
   'races',
@@ -665,9 +665,9 @@ export const writeDb = async (db) => {
     );
 
     await writeRows(
-      'jockeyTournamentRegistrations',
-      ['id', 'tournamentId', 'jockeyUserId', 'status', 'createdAt', 'reviewedAt'],
-      (db.jockeyTournamentRegistrations || []).map((registration) => ({
+      'jockeyRaceRegistrations',
+      ['id', 'raceId', 'jockeyUserId', 'status', 'createdAt', 'reviewedAt'],
+      (db.jockeyRaceRegistrations || []).map((registration) => ({
         ...registration,
         reviewedAt: registration.reviewedAt || null,
       }))

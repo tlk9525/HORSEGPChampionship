@@ -29,6 +29,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
   const { raceId } = useParams<{ raceId: string }>();
   const [tournament, setTournament] = useState<TournamentRecord | null>(null);
   const [race, setRace] = useState<RaceRecord | null>(null);
+  const [tournamentRaces, setTournamentRaces] = useState<RaceRecord[]>([]);
   const [horses, setHorses] = useState<HorseRecord[]>([]);
   const [jockeys, setJockeys] = useState<JockeyProfileRecord[]>([]);
   const [horseRegistrations, setHorseRegistrations] = useState<HorseTournamentRegistration[]>([]);
@@ -63,27 +64,33 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
 
     getRaceRegistration(raceId)
       .then((data) => {
+        const availableHorses = data.horses || [];
+        const availableJockeys = data.jockeyProfiles || [];
+        const availableRegistrations = data.horseTournamentRegistrations || [];
+        const scheduleRaces = data.races?.length ? data.races : data.race ? [data.race] : [];
+
         setTournament(data.tournament);
         setRace(data.race);
-        setHorses(data.horses);
-        setJockeys(data.jockeyProfiles);
-        setHorseRegistrations(data.horseTournamentRegistrations);
-        const approvedHorseRegistrations = data.horseTournamentRegistrations.filter(
+        setTournamentRaces(scheduleRaces);
+        setHorses(availableHorses);
+        setJockeys(availableJockeys);
+        setHorseRegistrations(availableRegistrations);
+        const approvedHorseRegistrations = availableRegistrations.filter(
           (registration) => registration.status === 'approved' && !registration.jockeyUserId
         );
         setForm((current) => ({
           ...current,
-          horseId: data.horses.some((horse) => horse.id === current.horseId)
+          horseId: availableHorses.some((horse) => horse.id === current.horseId)
             ? current.horseId
-            : data.horses[0]?.id || '',
+            : availableHorses[0]?.id || '',
           registrationId: approvedHorseRegistrations.some(
             (registration) => registration.id === current.registrationId
           )
             ? current.registrationId
             : approvedHorseRegistrations[0]?.id || '',
-          jockeyUserId: data.jockeyProfiles.some((jockey) => jockey.userId === current.jockeyUserId)
+          jockeyUserId: availableJockeys.some((jockey) => jockey.userId === current.jockeyUserId)
             ? current.jockeyUserId
-            : data.jockeyProfiles[0]?.userId || '',
+            : availableJockeys[0]?.userId || '',
         }));
       })
       .catch((error) =>
@@ -325,18 +332,18 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-white font-bold">Tournament Race Schedule</h2>
               <span className="text-[#d4af37] font-bold">
-                {races.length} races
+                {tournamentRaces.length} races
               </span>
             </div>
 
             <div className="mt-4 grid md:grid-cols-2 gap-3">
-              {races.length === 0 && (
+              {tournamentRaces.length === 0 && (
                 <div className="md:col-span-2 text-gray-500">
                   Admin has not created races for this tournament yet. The pair will be assigned automatically when races are created.
                 </div>
               )}
 
-              {races.map((race) => (
+              {tournamentRaces.map((race) => (
                 <div
                   key={race.id}
                   className="rounded-xl bg-[#12304f] border border-white/10 px-4 py-3"

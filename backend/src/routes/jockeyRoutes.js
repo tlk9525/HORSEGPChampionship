@@ -98,48 +98,48 @@ export const createJockeyRoutes = (getDb, writeDb) => {
     return c.json({ profile });
   });
 
-  // Jockey đăng ký tham gia một giải đấu (cần admin phê duyệt)
-  app.post('/tournament-registrations', async (c) => {
+  // Jockey đăng ký tham gia một cuộc đua (cần admin phê duyệt)
+  app.post('/race-registrations', async (c) => {
     const user = c.get('user');
     const db = c.get('db');
-    const { tournamentId } = await c.req.json();
-    const tournament = db.tournaments.find(
+    const { raceId } = await c.req.json();
+    const race = db.races.find(
       (item) =>
-        item.id === tournamentId &&
-        TOURNAMENT_REGISTRATION_STATUSES.includes(item.status)
+        item.id === raceId &&
+        item.status === 'registration-open'
     );
 
-    if (!tournament || !isTournamentRegistrationOpen(tournament)) {
-      return c.json({ message: 'Tournament registration is not open' }, 400);
+    if (!race) {
+      return c.json({ message: 'Race registration is not open' }, 400);
     }
 
-    db.jockeyTournamentRegistrations = db.jockeyTournamentRegistrations || [];
-    const existing = db.jockeyTournamentRegistrations.find(
-      (r) => r.tournamentId === tournament.id && r.jockeyUserId === user.id
+    db.jockeyRaceRegistrations = db.jockeyRaceRegistrations || [];
+    const existing = db.jockeyRaceRegistrations.find(
+      (r) => r.raceId === race.id && r.jockeyUserId === user.id
     );
 
     if (existing) {
       return c.json(
-        { message: `You already have a ${existing.status} registration for this tournament.` },
+        { message: `You already have a ${existing.status} registration for this race.` },
         409
       );
     }
 
     const registration = {
       id: randomUUID(),
-      tournamentId: tournament.id,
+      raceId: race.id,
       jockeyUserId: user.id,
       status: 'pending',
       createdAt: new Date().toISOString(),
       reviewedAt: null,
     };
 
-    db.jockeyTournamentRegistrations.unshift(registration);
-    notifyAdmins(db, 'Jockey tournament registration', `${user.name} requested to join ${tournament.name}.`);
-    createNotification(db, user.id, 'Tournament registration submitted', `${tournament.name} is waiting for Admin approval.`);
+    db.jockeyRaceRegistrations.unshift(registration);
+    notifyAdmins(db, 'Jockey race registration', `${user.name} requested to join ${race.name}.`);
+    createNotification(db, user.id, 'Race registration submitted', `${race.name} is waiting for Admin approval.`);
 
     await writeDb(db);
-    return c.json({ registration, jockeyTournamentRegistrations: db.jockeyTournamentRegistrations }, 201);
+    return c.json({ registration, jockeyRaceRegistrations: db.jockeyRaceRegistrations }, 201);
   });
 
   // Jockey chấp nhận hoặc từ chối lời mời tham gia cuộc đua

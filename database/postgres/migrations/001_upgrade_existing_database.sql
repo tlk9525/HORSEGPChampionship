@@ -172,8 +172,8 @@ BEGIN
       ('races', 'updatedAt'),
       ('raceRefereeAssignments', 'assignedAt'),
       ('jockeyProfiles', 'updatedAt'),
-      ('jockeyTournamentRegistrations', 'createdAt'),
-      ('jockeyTournamentRegistrations', 'reviewedAt'),
+      ('jockeyRaceRegistrations', 'createdAt'),
+      ('jockeyRaceRegistrations', 'reviewedAt'),
       ('jockeyInvitations', 'createdAt'),
       ('jockeyInvitations', 'respondedAt'),
       ('horseTournamentRegistrations', 'createdAt'),
@@ -381,8 +381,8 @@ ALTER TABLE "sessions"
 CREATE INDEX IF NOT EXISTS "idx_horses_owner" ON "horses" ("ownerUserId");
 CREATE INDEX IF NOT EXISTS "idx_horses_status" ON "horses" ("status");
 CREATE INDEX IF NOT EXISTS "idx_races_tournament" ON "races" ("tournamentId", "status");
-CREATE INDEX IF NOT EXISTS "idx_jockey_tournament_registrations_tournament"
-  ON "jockeyTournamentRegistrations" ("tournamentId", "status");
+CREATE INDEX IF NOT EXISTS "idx_jockey_race_registrations_race_status"
+  ON "jockeyRaceRegistrations" ("raceId", "status");
 CREATE INDEX IF NOT EXISTS "idx_jockey_invitations_jockey"
   ON "jockeyInvitations" ("jockeyUserId", "status");
 CREATE INDEX IF NOT EXISTS "idx_race_entries_race" ON "raceEntries" ("raceId");
@@ -440,16 +440,16 @@ BEGIN
       ON DELETE CASCADE NOT VALID;
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_jockey_tournament_registrations_tournament') THEN
-    ALTER TABLE "jockeyTournamentRegistrations"
-      ADD CONSTRAINT "fk_jockey_tournament_registrations_tournament"
-      FOREIGN KEY ("tournamentId") REFERENCES "tournaments" ("id")
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_jockey_race_registrations_race') THEN
+    ALTER TABLE "jockeyRaceRegistrations"
+      ADD CONSTRAINT "fk_jockey_race_registrations_race"
+      FOREIGN KEY ("raceId") REFERENCES "races" ("id")
       ON DELETE CASCADE NOT VALID;
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_jockey_tournament_registrations_jockey') THEN
-    ALTER TABLE "jockeyTournamentRegistrations"
-      ADD CONSTRAINT "fk_jockey_tournament_registrations_jockey"
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_jockey_race_registrations_jockey') THEN
+    ALTER TABLE "jockeyRaceRegistrations"
+      ADD CONSTRAINT "fk_jockey_race_registrations_jockey"
       FOREIGN KEY ("jockeyUserId") REFERENCES "users" ("id")
       ON DELETE CASCADE NOT VALID;
   END IF;

@@ -15,12 +15,12 @@ import {
   AuthUser,
   HorseRecord,
   HorseTournamentRegistration,
-  JockeyTournamentRegistration,
+  JockeyRaceRegistration,
   RaceEntryRecord,
   RaceRecord,
   TournamentRecord,
   getBootstrap,
-  joinTournamentAsJockey,
+  joinRaceAsJockey,
 } from '../services/api';
 import { statusLabel } from '../utils/domain';
 import { messageToneClasses } from '../utils/messageTone';
@@ -55,7 +55,7 @@ export default function TournamentPage({
   const [horses, setHorses] = useState<HorseRecord[]>([]);
   const [races, setRaces] = useState<RaceRecord[]>([]);
   const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
-  const [registrations, setRegistrations] = useState<JockeyTournamentRegistration[]>([]);
+  const [registrations, setRegistrations] = useState<JockeyRaceRegistration[]>([]);
   const [horseTournamentRegistrations, setHorseTournamentRegistrations] =
     useState<HorseTournamentRegistration[]>([]);
   const [maxRaceFieldSize, setMaxRaceFieldSize] = useState(10);
@@ -73,7 +73,7 @@ export default function TournamentPage({
         setHorses(data.horses || []);
         setRaces(data.races);
         setRaceEntries(data.raceEntries || []);
-        setRegistrations(data.jockeyTournamentRegistrations || []);
+        setRegistrations(data.jockeyRaceRegistrations || []);
         setHorseTournamentRegistrations(data.horseTournamentRegistrations || []);
         setMaxRaceFieldSize(data.limits?.maxRaceFieldSize || 10);
         setSelectedTournamentId((current) => {
@@ -96,24 +96,24 @@ export default function TournamentPage({
     loadTournaments();
   }, []);
 
-  const jockeyRegistrationByTournament = useMemo(() => {
-    const map = new Map<string, JockeyTournamentRegistration>();
+  const jockeyRegistrationByRace = useMemo(() => {
+    const map = new Map<string, JockeyRaceRegistration>();
 
     registrations
       .filter((registration) => registration.jockeyUserId === currentUser?.id)
-      .forEach((registration) => map.set(registration.tournamentId, registration));
+      .forEach((registration) => map.set(registration.raceId, registration));
 
     return map;
   }, [currentUser?.id, registrations]);
 
-  const handleJoinTournament = (tournamentId: string) => {
-    joinTournamentAsJockey(tournamentId)
+  const handleJoinRace = (raceId: string) => {
+    joinRaceAsJockey(raceId)
       .then(() => {
-        setMessage('Tournament join request submitted. Admin approval required.');
+        setMessage('Race join request submitted. Admin approval required.');
         loadTournaments();
       })
       .catch((error) =>
-        setMessage(error instanceof Error ? error.message : 'Unable to join tournament')
+        setMessage(error instanceof Error ? error.message : 'Unable to join race')
       );
   };
 
@@ -226,7 +226,6 @@ export default function TournamentPage({
               (race) => race.tournamentId === tournament.id
             );
             const tournamentRegistrationOpen = registrationWindowOpen(tournament);
-            const jockeyRegistration = jockeyRegistrationByTournament.get(tournament.id);
             const isCompletedTournament = tournament.status === 'completed';
             const hasTournamentRaces = tournamentRaces.length > 0;
             const activeHorseRegistrations = horseTournamentRegistrations.filter(
@@ -341,23 +340,6 @@ export default function TournamentPage({
                       View Races
                     </button>
 
-                    {!isCompletedTournament && currentUser?.role === 'jockey' && (
-                      <button
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          selectTournament(tournament.id);
-                          handleJoinTournament(tournament.id);
-                        }}
-                        disabled={Boolean(jockeyRegistration) || !tournamentRegistrationOpen}
-                        className="py-4 bg-[#d4af37] hover:bg-[#b8892d] disabled:bg-white/10 disabled:text-gray-500 text-white rounded-xl transition-all font-bold"
-                      >
-                        {jockeyRegistration
-                          ? statusLabel(jockeyRegistration.status)
-                          : 'Join Tournament'}
-                      </button>
-                    )}
-
-
                   </div>
                 </div>
               </div>
@@ -428,15 +410,32 @@ export default function TournamentPage({
                       <p className="text-gray-400 mt-2">{tournamentName}</p>
                     </div>
 
-                    <button
-                      onClick={() => {
-                        openRaceView(race.id, action.page);
-                      }}
-                      disabled={currentUser?.role === 'owner' && !race.tournamentId}
-                      className="shrink-0 px-5 py-3 bg-[#d4af37] hover:bg-[#b8892d] disabled:bg-white/10 disabled:text-gray-500 text-white rounded-xl transition-all font-bold"
-                    >
-                      {action.label}
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          openRaceView(race.id, action.page);
+                        }}
+                        disabled={currentUser?.role === 'owner' && !race.tournamentId}
+                        className="shrink-0 px-5 py-3 bg-[#d4af37] hover:bg-[#b8892d] disabled:bg-white/10 disabled:text-gray-500 text-white rounded-xl transition-all font-bold"
+                      >
+                        {action.label}
+                      </button>
+
+                      {selectedTournament?.status !== 'completed' && currentUser?.role === 'jockey' && ['registration-open'].includes(race.status) && (
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleJoinRace(race.id);
+                          }}
+                          disabled={Boolean(jockeyRegistrationByRace.get(race.id))}
+                          className="shrink-0 px-5 py-3 bg-[#d4af37] hover:bg-[#b8892d] disabled:bg-white/10 disabled:text-gray-500 text-white rounded-xl transition-all font-bold"
+                        >
+                          {jockeyRegistrationByRace.get(race.id)
+                            ? statusLabel(jockeyRegistrationByRace.get(race.id)!.status)
+                            : 'Join Race'}
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-6">
