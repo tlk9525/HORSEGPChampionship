@@ -45,9 +45,21 @@ CREATE INDEX IF NOT EXISTS "idx_referee_reports_race"
 CREATE INDEX IF NOT EXISTS "idx_referee_reports_referee"
   ON "refereeReports" ("refereeUserId", "status");
 
+CREATE TABLE IF NOT EXISTS "jockeyRaceRegistrations" (
+  "id" VARCHAR(64) PRIMARY KEY,
+  "raceId" VARCHAR(64) NOT NULL,
+  "jockeyUserId" VARCHAR(64) NOT NULL,
+  "status" VARCHAR(32) NOT NULL DEFAULT 'pending'
+    CHECK ("status" IN ('pending', 'approved', 'rejected')),
+  "createdAt" TIMESTAMPTZ NOT NULL,
+  "reviewedAt" TIMESTAMPTZ,
+  CONSTRAINT "uq_jockey_race_registration" UNIQUE ("raceId", "jockeyUserId")
+);
+
 CREATE TABLE IF NOT EXISTS "horseTournamentRegistrations" (
   "id" VARCHAR(64) PRIMARY KEY,
   "tournamentId" VARCHAR(64) NOT NULL,
+  "raceId" VARCHAR(64),
   "horseId" VARCHAR(64) NOT NULL,
   "ownerUserId" VARCHAR(64) NOT NULL,
   "jockeyUserId" VARCHAR(64),
@@ -59,13 +71,31 @@ CREATE TABLE IF NOT EXISTS "horseTournamentRegistrations" (
 );
 
 ALTER TABLE "horseTournamentRegistrations"
+  ADD COLUMN IF NOT EXISTS "raceId" VARCHAR(64),
   ADD COLUMN IF NOT EXISTS "invitationId" VARCHAR(64),
   ADD COLUMN IF NOT EXISTS "notes" TEXT,
   ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   ADD COLUMN IF NOT EXISTS "reviewedAt" TIMESTAMPTZ;
 
 ALTER TABLE "horseTournamentRegistrations"
-  ALTER COLUMN "jockeyUserId" DROP NOT NULL;
+  ALTER COLUMN "jockeyUserId" DROP NOT NULL,
+  DROP CONSTRAINT IF EXISTS "uq_horse_tournament_registration",
+  DROP CONSTRAINT IF EXISTS "uq_jockey_tournament_pairing";
+
+UPDATE "horseTournamentRegistrations" AS "registration"
+SET "raceId" = "invitation"."raceId"
+FROM "jockeyInvitations" AS "invitation"
+WHERE "registration"."raceId" IS NULL
+  AND "registration"."invitationId" = "invitation"."id"
+  AND "invitation"."raceId" IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_horse_race_registration"
+  ON "horseTournamentRegistrations" ("raceId", "horseId")
+  WHERE "raceId" IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_jockey_race_pairing"
+  ON "horseTournamentRegistrations" ("raceId", "jockeyUserId")
+  WHERE "raceId" IS NOT NULL AND "jockeyUserId" IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS "idx_horse_tournament_registrations_tournament"
   ON "horseTournamentRegistrations" ("tournamentId", "status");
@@ -79,7 +109,9 @@ ALTER TABLE "users"
 
 ALTER TABLE "tournaments"
   ADD COLUMN IF NOT EXISTS "createdAt" TIMESTAMPTZ,
-  ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMPTZ;
+  ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS "registrationOpensAt" TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS "registrationClosesAt" TIMESTAMPTZ;
 
 ALTER TABLE "horses"
   ADD COLUMN IF NOT EXISTS "updatedAt" TIMESTAMPTZ,
@@ -489,28 +521,23 @@ BEGIN
       ON DELETE CASCADE NOT VALID;
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_horse_tournament_registration') THEN
-    ALTER TABLE "horseTournamentRegistrations"
-      ADD CONSTRAINT "uq_horse_tournament_registration"
-      UNIQUE ("tournamentId", "horseId");
-  END IF;
-
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_horse_tournament_registrations_status') THEN
     ALTER TABLE "horseTournamentRegistrations"
       ADD CONSTRAINT "chk_horse_tournament_registrations_status"
       CHECK ("status" IN ('pending-jockey', 'pending-admin', 'approved', 'rejected', 'cancelled')) NOT VALID;
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_jockey_tournament_pairing') THEN
-    ALTER TABLE "horseTournamentRegistrations"
-      ADD CONSTRAINT "uq_jockey_tournament_pairing"
-      UNIQUE ("tournamentId", "jockeyUserId");
-  END IF;
-
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_horse_tournament_registrations_tournament') THEN
     ALTER TABLE "horseTournamentRegistrations"
       ADD CONSTRAINT "fk_horse_tournament_registrations_tournament"
       FOREIGN KEY ("tournamentId") REFERENCES "tournaments" ("id")
+      ON DELETE CASCADE NOT VALID;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_horse_tournament_registrations_race') THEN
+    ALTER TABLE "horseTournamentRegistrations"
+      ADD CONSTRAINT "fk_horse_tournament_registrations_race"
+      FOREIGN KEY ("raceId") REFERENCES "races" ("id")
       ON DELETE CASCADE NOT VALID;
   END IF;
 

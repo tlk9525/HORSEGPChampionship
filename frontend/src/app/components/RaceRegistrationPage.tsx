@@ -183,7 +183,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
               {tournament?.name}
             </p>
             <p className="text-gray-400 mt-3">
-              Register a horse first. After Admin approves the horse, select an approved jockey for the tournament; the jockey accepts, then Admin gives final approval.
+              Register a horse first. After Admin approves the horse, select a jockey approved for this race; the jockey accepts, then Admin gives final approval.
             </p>
           </div>
 

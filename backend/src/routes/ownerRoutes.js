@@ -11,7 +11,7 @@ import {
   activeRace,
   activeTournament,
   defaultRaceForTournament,
-  isTournamentRegistrationOpen,
+  isRaceRegistrationOpen,
   jockeyName,
   publicRaceEntries,
   publicTournamentJockeyProfiles,
@@ -136,7 +136,7 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     ]);
 
     // Horses busy in another non-completed race in the same tournament cannot be registered again
-    const COMPLETED_RACE_STATUSES = ['completed', 'finished'];
+    const COMPLETED_RACE_STATUSES = ['completed', 'cancelled'];
     const busyInOtherRace = new Set([
       ...(db.raceEntries || []).filter((entry) => {
         if (entry.raceId === race.id || entry.status === 'rejected') return false;
@@ -151,7 +151,10 @@ export const createOwnerRoutes = (getDb, writeDb) => {
       }).map((r) => r.horseId),
     ]);
     const registeredJockeyIds = new Set(
-      activeRegistrations.map((r) => r.jockeyUserId).filter(Boolean)
+      activeRegistrations
+        .filter((registration) => registration.raceId === race.id)
+        .map((registration) => registration.jockeyUserId)
+        .filter(Boolean)
     );
 
     return c.json({
@@ -178,7 +181,7 @@ export const createOwnerRoutes = (getDb, writeDb) => {
           return true;
         }
       ),
-      jockeyProfiles: publicTournamentJockeyProfiles(db, tournament.id).filter(
+      jockeyProfiles: publicTournamentJockeyProfiles(db, tournament.id, race.id).filter(
         (profile) => !registeredJockeyIds.has(profile.userId)
       ),
       horseTournamentRegistrations: activeRegistrations.filter(
@@ -307,14 +310,19 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     if (!jockey) return c.json({ message: 'Jockey must exist and be active' }, 400);
 
     db.jockeyInvitations = db.jockeyInvitations || [];
-    const tournament = activeTournament(db);
     const race =
       db.races.find((item) => item.id === raceId && item.status === 'registration-open') ||
-      (tournament ? defaultRaceForTournament(db, tournament.id) : null);
+      (() => {
+        const active = activeTournament(db);
+        return active ? defaultRaceForTournament(db, active.id) : null;
+      })();
+    const tournament = race
+      ? db.tournaments.find((item) => item.id === race.tournamentId)
+      : null;
 
     if (!race) return c.json({ message: 'No race is available for this tournament' }, 400);
-    if (!tournament || !isTournamentRegistrationOpen(tournament)) {
-      return c.json({ message: 'This tournament is outside its registration window' }, 400);
+    if (!tournament || !isRaceRegistrationOpen(race)) {
+      return c.json({ message: 'This race is outside its registration window' }, 400);
     }
 
     const duplicateEntry = (db.jockeyInvitations || []).some(
@@ -346,7 +354,7 @@ export const createOwnerRoutes = (getDb, writeDb) => {
 
     const race = db.races.find((item) => item.id === raceId);
     if (!race) return c.json({ message: 'Race not found' }, 404);
-    if (!['registration-open'].includes(race.status)) {
+    if (!isRaceRegistrationOpen(race)) {
       return c.json({ message: 'Race registration is not open' }, 400);
     }
     const tournamentId = race.tournamentId;
@@ -361,9 +369,7 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     if (!horse) return c.json({ message: 'Owner can only register approved horses they own' }, 400);
     if (!tournament) return c.json({ message: 'Tournament registration is not open' }, 400);
 
-    const { RACE_CLASSES } = await import('../config/constants.js');
     if (race.raceClass && RACE_CLASSES[race.raceClass]) {
-      const { officialHorseRating } = await import('../services/handicapService.js');
       const rating = officialHorseRating(horse);
       const { min, max } = RACE_CLASSES[race.raceClass];
       if (rating < min || rating > max) {
@@ -379,8 +385,8 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     const existingRegistration = activeRegistrations.find((r) => r.horseId === horse.id && r.raceId === race.id);
 
     if (!jockeyUserId) {
-      if (!isTournamentRegistrationOpen(tournament)) {
-        return c.json({ message: 'This tournament is outside its registration window' }, 400);
+      if (!isRaceRegistrationOpen(race)) {
+        return c.json({ message: 'This race is outside its registration window' }, 400);
       }
 
       if (existingRegistration) {
@@ -392,7 +398,7 @@ export const createOwnerRoutes = (getDb, writeDb) => {
 
       // Rule: 1 horse may only be in 1 active (non-completed) race per tournament.
       // If a previous race is fully completed (results confirmed), allow entering a new one.
-      const COMPLETED_RACE_STATUSES = ['completed', 'finished'];
+      const COMPLETED_RACE_STATUSES = ['completed', 'cancelled'];
       const conflictRaceId = (() => {
         const entryConflict = (db.raceEntries || []).find((entry) => {
           if (entry.horseId !== horse.id || entry.raceId === race.id) return false;

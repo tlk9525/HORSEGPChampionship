@@ -11,6 +11,7 @@ import { requireRole } from '../services/authService.js';
 import {
   approvedRaceEntries,
   formatApprovals,
+  isRaceRegistrationOpen,
   jockeyName,
   publicRaceEntries,
   raceRefereeIds,
@@ -44,6 +45,10 @@ const registrationPair = (registration, invitation) => ({
 });
 
 const validatePairForRace = (db, race, pair) => {
+  if (!isRaceRegistrationOpen(race)) {
+    return `${race.name} registration is closed.`;
+  }
+
   const existingEntry = (db.raceEntries || []).find(
     (entry) => entry.raceId === race.id && entry.horseId === pair.horseId && nonRejectedEntry(entry)
   );
@@ -89,22 +94,6 @@ const addPairToRace = (db, race, pair, createdAt) => {
   race.jockeyConfirmed = race.participants;
   return true;
 };
-
-
-
-const addApprovedTournamentPairsToRace = (db, race, createdAt) => {
-  const registrations = (db.horseTournamentRegistrations || []).filter(
-    (r) => r.tournamentId === race.tournamentId && r.status === 'approved' && r.jockeyUserId
-  );
-  if (registrations.length > MAX_RACE_FIELD_SIZE) {
-    return { error: `Tournament already has more than ${MAX_RACE_FIELD_SIZE} approved horse-jockey pairs.` };
-  }
-  const errors = registrations.map((r) => validatePairForRace(db, race, registrationPair(r, null))).filter(Boolean);
-  if (errors.length) return { error: errors[0] };
-  registrations.forEach((r) => addPairToRace(db, race, registrationPair(r, null), createdAt));
-  return { error: null };
-};
-
 export const createAdminRoutes = (getDb, writeDb) => {
   const app = new Hono();
 
@@ -234,7 +223,16 @@ export const createAdminRoutes = (getDb, writeDb) => {
     if (!Number.isFinite(raceStartsAt.getTime())) {
       return c.json({ message: 'Race date and time must be valid' }, 400);
     }
-    if (Number.isFinite(registrationClosesAt.getTime()) && registrationClosesAt > raceStartsAt) {
+    if (
+      !Number.isFinite(registrationOpensAt.getTime()) ||
+      !Number.isFinite(registrationClosesAt.getTime())
+    ) {
+      return c.json({ message: 'Registration open and close times must be valid' }, 400);
+    }
+    if (registrationOpensAt >= registrationClosesAt) {
+      return c.json({ message: 'Registration close time must be after open time' }, 400);
+    }
+    if (registrationClosesAt > raceStartsAt) {
       return c.json({ message: 'Registration must close before the race starts' }, 400);
     }
     const distanceMeters = Number(distance);
@@ -283,11 +281,6 @@ export const createAdminRoutes = (getDb, writeDb) => {
       resultStatus: 'draft', awardsPublished: false,
       createdBy: user.id, createdAt: now.toISOString(), updatedAt: now.toISOString(),
     };
-
-    const addExistingPairsResult = addApprovedTournamentPairsToRace(db, race, now.toISOString());
-    if (addExistingPairsResult.error) {
-      return c.json({ message: addExistingPairsResult.error }, 400);
-    }
 
     db.races.unshift(race);
     db.raceRefereeAssignments = db.raceRefereeAssignments || [];
@@ -506,8 +499,8 @@ export const createAdminRoutes = (getDb, writeDb) => {
         (entry) => !['ready', 'absent'].includes(entry.preRaceStatus) && !entry.disqualified
       );
 
-      if (readyEntries.length !== 10) {
-        return c.json({ message: 'Exactly 10 participants must be checked in as Ready before starting the race' }, 400);
+      if (readyEntries.length === 0) {
+        return c.json({ message: 'At least one participant must be checked in as Ready before starting the race' }, 400);
       }
       if (uncheckedEntries.length > 0) {
         return c.json({ message: 'Every participant must be marked Ready or Absent before starting the race' }, 400);

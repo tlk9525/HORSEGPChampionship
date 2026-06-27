@@ -1,5 +1,5 @@
 {
-  "name": "@figma/my-make-file",
+  "name": "horse-racing-tournament-website",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -10,6 +10,10 @@
     "db:schema": "node --env-file-if-exists=.env scripts/run-postgres-file.mjs database/postgres/schema.sql",
     "db:seed": "node --env-file-if-exists=.env scripts/run-postgres-file.mjs database/postgres/seed.sql",
     "db:migrate:race-actions": "node --env-file-if-exists=.env scripts/run-postgres-file.mjs database/postgres/migrations/002_race_action_logs.sql",
+    "db:migrate:race-registrations": "node --env-file-if-exists=.env scripts/run-postgres-file.mjs database/postgres/migrations/003_jockey_race_registrations.sql",
+    "test": "node --test backend/src/services/*.test.js backend/test/*.test.js",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm test && npm run build",
     "build": "vite build --config frontend/vite.config.ts",
     "dev": "vite --config frontend/vite.config.ts --host 127.0.0.1",
     "preview": "vite preview --config frontend/vite.config.ts --host 127.0.0.1"
@@ -32,6 +36,7 @@
     "postcss": "^8.5.14",
     "rollup": "^4.60.4",
     "tailwindcss": "^3.4.3",
+    "typescript": "^5.9.3",
     "vite": "^6.4.3"
   }
 }

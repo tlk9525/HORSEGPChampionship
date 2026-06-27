@@ -7,6 +7,7 @@ import { Circle, ShieldCheck, Timer } from 'lucide-react';
 import {
   AuthUser,
   RaceEntryRecord,
+  RaceEntryReadiness,
   RaceRecord,
   getBootstrap,
   getLiveRaceEventsUrl,
@@ -44,8 +45,11 @@ export default function LiveRace() {
   const selectedEntries = entries.filter(
     (entry) => entry.raceId === selectedRace?.id
   );
+  const activeEntries = selectedEntries.filter(
+    (entry) => entry.status === 'approved'
+  );
 
-  const competingEntries = selectedEntries.filter(
+  const competingEntries = activeEntries.filter(
     (entry) => entry.preRaceStatus !== 'absent' && !entry.disqualified
   );
 
@@ -54,7 +58,7 @@ export default function LiveRace() {
     (_, index) => String(index + 1)
   );
 
-  const readyEntries = selectedEntries.filter(
+  const readyEntries = activeEntries.filter(
     (entry) => entry.preRaceStatus === 'ready' && !entry.disqualified
   );
 
@@ -62,7 +66,11 @@ export default function LiveRace() {
     (entry) => entry.preRaceStatus === 'absent' || entry.disqualified
   );
 
-  const uncheckedEntries = selectedEntries.filter(
+  const incidentEntries = activeEntries.filter(
+    (entry) => entry.preRaceStatus === 'incident' && !entry.disqualified
+  );
+
+  const uncheckedEntries = activeEntries.filter(
     (entry) =>
       !['ready', 'absent'].includes(entry.preRaceStatus) &&
       !entry.disqualified
@@ -84,14 +92,15 @@ export default function LiveRace() {
       .then(([me, data]) => {
         if (requestId !== loadRequestIdRef.current) return;
 
-        setCurrentUser(me.user);
+        const authenticatedUser = me.user;
+        setCurrentUser(authenticatedUser);
         const visibleRaces =
-          me.user?.role === 'referee'
+          authenticatedUser?.role === 'referee'
             ? data.races.filter((race) =>
                 String(race.refereeUserIds || race.refereeUserId || '')
                   .split(',')
                   .map((id) => id.trim())
-                  .includes(me.user.id)
+                  .includes(authenticatedUser.id)
               )
             : data.races;
 
@@ -147,26 +156,29 @@ export default function LiveRace() {
     entry: RaceEntryRecord,
     patch: Partial<{ position: string; finishTime: string; notes: string; violationNotes: string }>
   ) => {
-    setResultDrafts((current) => ({
-      ...current,
-      [entry.id]: {
-        position: entry.position ? String(entry.position) : '',
-        finishTime: entry.finishTime || '',
-        notes: entry.notes || '',
-        violationNotes: entry.violationNotes || '',
-        ...current[entry.id],
-        ...patch,
-      },
-    }));
+    setResultDrafts((current) => {
+      const existingDraft = current[entry.id];
+
+      return {
+        ...current,
+        [entry.id]: {
+          position: existingDraft?.position ?? (entry.position ? String(entry.position) : ''),
+          finishTime: existingDraft?.finishTime ?? entry.finishTime ?? '',
+          notes: existingDraft?.notes ?? entry.notes ?? '',
+          violationNotes: existingDraft?.violationNotes ?? entry.violationNotes ?? '',
+          ...patch,
+        },
+      };
+    });
   };
 
   const submitResult = (entry: RaceEntryRecord) => {
+    const existingDraft = resultDrafts[entry.id];
     const rawDraft = {
-      position: entry.position ? String(entry.position) : '',
-      finishTime: entry.finishTime || '',
-      notes: entry.notes || '',
-      violationNotes: entry.violationNotes || '',
-      ...resultDrafts[entry.id],
+      position: existingDraft?.position ?? (entry.position ? String(entry.position) : ''),
+      finishTime: existingDraft?.finishTime ?? entry.finishTime ?? '',
+      notes: existingDraft?.notes ?? entry.notes ?? '',
+      violationNotes: existingDraft?.violationNotes ?? entry.violationNotes ?? '',
     };
     const draft = {
       ...rawDraft,
@@ -198,9 +210,11 @@ export default function LiveRace() {
       .finally(() => setRecordingEntryId(''));
   };
 
-  const markReadiness = (entry: RaceEntryRecord, readiness: 'ready' | 'absent') => {
+  const markReadiness = (entry: RaceEntryRecord, readiness: RaceEntryReadiness) => {
     const previousPreRaceStatus = entry.preRaceStatus;
     const previousDisqualified = entry.disqualified;
+    const previousStatus = entry.status;
+    const previousResultStatus = entry.resultStatus;
 
     setReadinessEntryId(entry.id);
     setMessage(`Marking ${entry.horseName} ${readiness}...`);
@@ -210,7 +224,10 @@ export default function LiveRace() {
           ? {
               ...currentEntry,
               preRaceStatus: readiness,
-              disqualified: readiness === 'absent',
+              disqualified: ['absent', 'scratched'].includes(readiness),
+              status: readiness === 'scratched' ? 'scratched' : currentEntry.status,
+              resultStatus:
+                readiness === 'scratched' ? 'disqualified' : currentEntry.resultStatus,
             }
           : currentEntry
       )
@@ -237,6 +254,8 @@ export default function LiveRace() {
                   ...currentEntry,
                   preRaceStatus: previousPreRaceStatus,
                   disqualified: previousDisqualified,
+                  status: previousStatus,
+                  resultStatus: previousResultStatus,
                 }
               : currentEntry
           )
@@ -310,7 +329,7 @@ export default function LiveRace() {
             </h1>
 
             <p className="text-gray-400 mt-2">
-              Referee verifies readiness, records violations, enters positions, finish times and submits results for Admin review.
+              Referee performs check-in, records draft results, and submits them for Admin review.
             </p>
           </div>
 
@@ -356,6 +375,7 @@ export default function LiveRace() {
                     ['Referee', selectedRace.referee || '-'],
                     ['Ready', String(readyEntries.length)],
                     ['Absent', String(absentEntries.length)],
+                    ['Incident', String(incidentEntries.length)],
                     ['Unchecked', String(uncheckedEntries.length)],
                     ['Can Submit Results', selectedRace.status === 'finished' && selectedRace.resultStatus === 'draft' ? 'Yes' : 'No'],
                   ].map(([label, value]) => (
@@ -414,6 +434,7 @@ export default function LiveRace() {
 
                         {canOperate &&
                           selectedRace.status === 'published' &&
+                          entry.status === 'approved' &&
                           !['ready', 'absent'].includes(entry.preRaceStatus) &&
                           !entry.disqualified && (
                             <div className="grid grid-cols-2 gap-3">
@@ -432,12 +453,29 @@ export default function LiveRace() {
                               >
                                 {readinessEntryId === entry.id ? 'Saving...' : 'Absent'}
                               </button>
+
+                              <button
+                                onClick={() => markReadiness(entry, 'incident')}
+                                disabled={readinessEntryId === entry.id}
+                                className="py-3 bg-yellow-600/20 text-yellow-300 border border-yellow-600/30 disabled:cursor-not-allowed disabled:opacity-60 rounded-xl font-bold"
+                              >
+                                {readinessEntryId === entry.id ? 'Saving...' : 'Incident'}
+                              </button>
+
+                              <button
+                                onClick={() => markReadiness(entry, 'scratched')}
+                                disabled={readinessEntryId === entry.id}
+                                className="py-3 bg-gray-600/20 text-gray-300 border border-gray-500/30 disabled:cursor-not-allowed disabled:opacity-60 rounded-xl font-bold"
+                              >
+                                {readinessEntryId === entry.id ? 'Saving...' : 'Scratch'}
+                              </button>
                             </div>
                           )}
 
                         {canOperate &&
                           selectedRace.status === 'finished' &&
                           selectedRace.resultStatus === 'draft' &&
+                          entry.status === 'approved' &&
                           entry.preRaceStatus !== 'absent' && (
                           <div className="grid grid-cols-2 gap-3">
                             <select
@@ -517,9 +555,9 @@ export default function LiveRace() {
 
                 <div className="space-y-3 text-gray-300 text-sm mb-6">
                   <div className="flex justify-between gap-3">
-                    <span>Readiness check</span>
+                            <span>Check-in</span>
                     <span className="text-white font-bold">
-                      {readyEntries.length}/{selectedEntries.length} Ready
+                      {readyEntries.length}/{activeEntries.length} Ready
                     </span>
                   </div>
 
@@ -545,7 +583,7 @@ export default function LiveRace() {
 
                 {selectedRace.status === 'published' && (
                   <div className="mt-3 rounded-xl border border-white/10 bg-[#071a2f] p-4 text-sm text-gray-400">
-                    Check in every participant. Admin starts the race after readiness is complete.
+                    Check in every participant. Admin starts the race after check-in is complete.
                   </div>
                 )}
 

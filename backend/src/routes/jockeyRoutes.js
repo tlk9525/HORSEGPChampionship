@@ -1,11 +1,10 @@
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
-import { TOURNAMENT_REGISTRATION_STATUSES } from '../config/constants.js';
 import { requireRole } from '../services/authService.js';
 import {
   activeTournament,
   activeRace,
-  isTournamentRegistrationOpen,
+  isRaceRegistrationOpen,
   ownerName,
   publicRaceEntries,
   raceName,
@@ -103,13 +102,9 @@ export const createJockeyRoutes = (getDb, writeDb) => {
     const user = c.get('user');
     const db = c.get('db');
     const { raceId } = await c.req.json();
-    const race = db.races.find(
-      (item) =>
-        item.id === raceId &&
-        item.status === 'registration-open'
-    );
+    const race = db.races.find((item) => item.id === raceId);
 
-    if (!race) {
+    if (!isRaceRegistrationOpen(race)) {
       return c.json({ message: 'Race registration is not open' }, 400);
     }
 

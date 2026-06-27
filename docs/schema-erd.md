@@ -18,6 +18,8 @@ erDiagram
     VARCHAR name
     VARCHAR status
     VARCHAR registrationWindow
+    TIMESTAMPTZ registrationOpensAt
+    TIMESTAMPTZ registrationClosesAt
     DATE startDate
     DATE finalDate
     VARCHAR location
@@ -34,7 +36,7 @@ erDiagram
     INTEGER age
     VARCHAR sex
     VARCHAR color
-    NUMERIC weightKg
+    NUMERIC weightLb
     NUMERIC heightCm
     NUMERIC baseHandicap
     NUMERIC speedRating
@@ -96,14 +98,14 @@ erDiagram
     TEXT bio
     TEXT certificate
     VARCHAR competitionLevel
-    NUMERIC weight
+    NUMERIC weightLb
     VARCHAR status
     TIMESTAMPTZ updatedAt
   }
 
-  jockeyTournamentRegistrations {
+  jockeyRaceRegistrations {
     VARCHAR id PK
-    VARCHAR tournamentId FK
+    VARCHAR raceId FK
     VARCHAR jockeyUserId FK
     VARCHAR status
     TIMESTAMPTZ createdAt
@@ -123,6 +125,20 @@ erDiagram
     TIMESTAMPTZ respondedAt
   }
 
+  horseTournamentRegistrations {
+    VARCHAR id PK
+    VARCHAR tournamentId FK
+    VARCHAR raceId FK
+    VARCHAR horseId FK
+    VARCHAR ownerUserId FK
+    VARCHAR jockeyUserId FK
+    VARCHAR invitationId FK
+    VARCHAR status
+    TEXT notes
+    TIMESTAMPTZ createdAt
+    TIMESTAMPTZ reviewedAt
+  }
+
   raceEntries {
     VARCHAR id PK
     VARCHAR raceId FK
@@ -133,6 +149,8 @@ erDiagram
     INTEGER lane
     NUMERIC handicap
     NUMERIC ratingSnapshot
+    NUMERIC ratingChange
+    NUMERIC postRaceRating
     BOOLEAN ownerConfirmed
     BOOLEAN jockeyConfirmed
     VARCHAR preRaceStatus
@@ -182,19 +200,26 @@ erDiagram
   users ||--o{ races : creates
 
   tournaments ||--o{ races : contains
-  tournaments ||--o{ jockeyTournamentRegistrations : has_registrations
   tournaments ||--o{ jockeyInvitations : scopes
+  tournaments ||--o{ horseTournamentRegistrations : contains
 
   races ||--o{ raceRefereeAssignments : has_referees
   users ||--o{ raceRefereeAssignments : assigned_referee
   users ||--o{ raceRefereeAssignments : assigned_by
 
-  users ||--o{ jockeyTournamentRegistrations : registers_as_jockey
+  races ||--o{ jockeyRaceRegistrations : has_jockey_availability
+  users ||--o{ jockeyRaceRegistrations : registers_as_jockey
 
   horses ||--o{ jockeyInvitations : invited_for
   users ||--o{ jockeyInvitations : owner_sends
   users ||--o{ jockeyInvitations : jockey_receives
   races ||--o{ jockeyInvitations : invitation_for
+
+  races ||--o{ horseTournamentRegistrations : has_horse_registrations
+  horses ||--o{ horseTournamentRegistrations : registered_for
+  users ||--o{ horseTournamentRegistrations : owner_registers
+  users ||--o{ horseTournamentRegistrations : jockey_selected
+  jockeyInvitations ||--o| horseTournamentRegistrations : backs_pairing
 
   races ||--o{ raceEntries : has_entries
   horses ||--o{ raceEntries : competes
@@ -209,4 +234,11 @@ erDiagram
 ## Notes
 
 - `raceRefereeAssignments` is the real link between `races` and referee users. The old duplicated referee fields were removed from `races`.
-- `raceEntries` is the main race participation table: one row links a race, horse, and jockey.
+- `jockeyRaceRegistrations` stores Jockey availability/approval per Race, not per Tournament.
+- `horseTournamentRegistrations` stores Owner Horse registration and later Owner-Jockey pairing approval for a specific Race.
+- `raceEntries` is the official start-list row after Admin approval. It links a Race, Horse, and Jockey.
+- Race state, entry approval state, check-in state, and result state are intentionally separate:
+  - Race state: `draft`, `registration-open`, `registration-closed`, `published`, `in-progress`, `finished`, `completed`, `cancelled`.
+  - Entry approval: `pending-admin`, `approved`, `rejected`, `withdrawn`, `scratched`.
+  - Check-in: `pending`, `ready`, `absent`, `incident`.
+  - Result: `draft`, `submitted`, `official`, `disqualified`.

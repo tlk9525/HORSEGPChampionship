@@ -56,7 +56,6 @@ const protectedPages: Record<string, string[]> = {
   'jockey-profiles': ['admin', 'owner', 'jockey', 'referee', 'spectator'],
   jockeys: ['jockey'],
   'live-race': ['admin', 'referee', 'spectator'],
-  rankings: ['admin', 'owner', 'jockey', 'referee', 'spectator'],
 };
 
 const pageFromPath = (pathname: string) => {
@@ -78,7 +77,6 @@ const pageFromPath = (pathname: string) => {
   if (path === '/jockeys') return 'jockey-profiles';
   if (path === '/live-race' || path.startsWith('/live-race/')) return 'live-race';
   if (path === '/results') return 'results';
-  if (path === '/rankings') return 'rankings';
   if (path === '/admin') return 'admin';
   if (path === '/admin/races/new') return 'create-race';
 
@@ -131,7 +129,6 @@ export default function App() {
         ? `/live-race/${selectedRaceId}`
         : '/live-race',
       results: '/results',
-      rankings: '/rankings',
       admin: '/admin',
       'create-race': '/admin/races/new',
       login: '/login',

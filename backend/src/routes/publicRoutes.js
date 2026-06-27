@@ -126,7 +126,9 @@ export const createPublicRoutes = (getDb) => {
       tournaments: db.tournaments,
       horses: visibleHorses(db, user, raceEntries),
       races: visibleRaces(db, user),
-      jockeyProfiles: publicJockeyProfiles(db),
+      jockeyProfiles: publicJockeyProfiles(db, {
+        includeEmail: user?.role === USER_ROLES.ADMIN,
+      }),
       jockeyRaceRegistrations: visibleJockeyRegistrations(db, user),
       jockeyInvitations: visibleJockeyInvitations(db, user),
       horseTournamentRegistrations: visibleHorseTournamentRegistrations(db, user),

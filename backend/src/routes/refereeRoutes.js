@@ -27,7 +27,7 @@ export const createRefereeRoutes = (
 ) => {
   const app = new Hono();
 
-  // Chỉ trọng tài được phân công mới có quyền điều hành và công bố kết quả.
+  // Chỉ trọng tài được phân công mới có quyền check-in và nộp kết quả nháp.
   app.use('*', async (c, next) => {
     const db = await getDb();
     const user = await requireRole(c.req.raw, db, ['referee']);
@@ -161,14 +161,14 @@ export const createRefereeRoutes = (
     });
   });
 
-  // Đánh dấu một thí sinh là sẵn sàng thi đấu hoặc vắng mặt
+  // Đánh dấu trạng thái check-in của một thí sinh.
   app.post('/race-entries/:entryId/readiness/:status', async (c) => {
     const user = c.get('user');
     const db = c.get('db');
     const entryId = c.req.param('entryId');
     const readiness = c.req.param('status');
 
-    if (!['ready', 'absent'].includes(readiness)) {
+    if (!['ready', 'absent', 'incident', 'scratched'].includes(readiness)) {
       return c.json({ message: 'Invalid readiness status' }, 400);
     }
 
@@ -191,8 +191,12 @@ export const createRefereeRoutes = (
       return c.json({ message: 'Readiness can only be changed before a published race starts' }, 400);
     }
 
-    entry.preRaceStatus = readiness === 'ready' ? 'ready' : 'absent';
-    entry.disqualified = readiness === 'absent';
+    entry.preRaceStatus = readiness;
+    entry.disqualified = ['absent', 'scratched'].includes(readiness);
+    if (readiness === 'scratched') {
+      entry.status = 'scratched';
+      entry.resultStatus = 'disqualified';
+    }
 
     if (persistEntryReadiness) {
       await persistEntryReadiness(entry);
@@ -231,7 +235,7 @@ export const createRefereeRoutes = (
       return c.json({ message: 'Results can only be recorded after Admin finishes the race and before submission' }, 400);
     }
     if (entry.preRaceStatus === 'absent' || entry.disqualified) {
-      return c.json({ message: 'Absent participants cannot compete' }, 400);
+      return c.json({ message: 'Absent or scratched participants cannot compete' }, 400);
     }
 
     const { position, finishTime, notes, violationNotes } = await c.req.json();

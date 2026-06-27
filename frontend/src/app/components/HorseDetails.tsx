@@ -9,6 +9,7 @@ import {
   Scale,
   ShieldCheck,
   Trophy,
+  type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
@@ -83,7 +84,7 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
     );
   }
 
-  const profileCards = [
+  const profileCards: Array<[string, string | number, LucideIcon]> = [
     ['Breed', activeHorse.breed, Trophy],
     ['Species', activeHorse.species || 'Not set', Activity],
     ['Sex', activeHorse.sex || 'Not set', ShieldCheck],

@@ -171,10 +171,12 @@ export default function JockeyDirectoryPage() {
                       </div>
 
                       <div className="flex flex-wrap gap-4 text-gray-400">
-                        <span className="inline-flex items-center gap-2">
-                          <Mail className="h-4 w-4" />
-                          {selectedJockey.jockeyEmail}
-                        </span>
+                        {selectedJockey.jockeyEmail && (
+                          <span className="inline-flex items-center gap-2">
+                            <Mail className="h-4 w-4" />
+                            {selectedJockey.jockeyEmail}
+                          </span>
+                        )}
 
                         <span className="inline-flex items-center gap-2">
                           <Scale className="h-4 w-4" />

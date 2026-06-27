@@ -139,6 +139,14 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
     const regOpens = new Date(form.registrationOpensAt);
     const regCloses = new Date(form.registrationClosesAt);
     const raceStartsAt = new Date(`${form.raceDate}T${form.startTime}`);
+    if (
+      !Number.isFinite(regOpens.getTime()) ||
+      !Number.isFinite(regCloses.getTime()) ||
+      !Number.isFinite(raceStartsAt.getTime())
+    ) {
+      setMessage('Race and registration times must be valid.');
+      return;
+    }
     if (regOpens >= regCloses) {
       setMessage('Registration close time must be after open time.');
       return;
@@ -524,8 +532,8 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   <div className="flex justify-between gap-3">
                     <span>Race registration opens</span>
                     <span className="text-white font-bold text-right">
-                      {selectedTournament?.registrationOpensAt
-                        ? new Date(selectedTournament.registrationOpensAt).toLocaleString()
+                      {form.registrationOpensAt
+                        ? new Date(form.registrationOpensAt).toLocaleString()
                         : 'Not set'}
                     </span>
                   </div>
@@ -533,8 +541,8 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   <div className="flex justify-between gap-3">
                     <span>Race registration closes</span>
                     <span className="text-white font-bold text-right">
-                      {selectedTournament?.registrationClosesAt
-                        ? new Date(selectedTournament.registrationClosesAt).toLocaleString()
+                      {form.registrationClosesAt
+                        ? new Date(form.registrationClosesAt).toLocaleString()
                         : 'Not set'}
                     </span>
                   </div>

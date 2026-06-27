@@ -633,7 +633,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
                                     {race.status === 'published' && (() => {
                                       const readiness = raceReadiness(race.id);
-                                      const disabled = readiness.ready !== 10 || readiness.unchecked > 0;
+                                      const disabled = readiness.ready === 0 || readiness.unchecked > 0;
 
                                       return (
                                         <button
@@ -641,7 +641,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                                           disabled={disabled}
                                           title={
                                             disabled
-                                              ? `Need exactly 10 Ready participants and 0 unchecked. Current: ${readiness.ready} ready, ${readiness.unchecked} unchecked.`
+                                              ? `Need at least one Ready participant and 0 unchecked. Current: ${readiness.ready} ready, ${readiness.unchecked} unchecked.`
                                               : undefined
                                           }
                                           className="flex items-center gap-2 px-4 py-2 bg-[#d4af37]/10 text-[#d4af37] disabled:opacity-40 disabled:cursor-not-allowed rounded-xl hover:bg-[#d4af37]/20 transition-all border border-[#d4af37]/30 text-sm font-semibold"

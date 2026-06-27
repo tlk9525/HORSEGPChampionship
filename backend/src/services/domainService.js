@@ -66,6 +66,27 @@ export const isTournamentRegistrationOpen = (tournament, at = Date.now()) => {
   return Number.isFinite(at) && at >= opensAt && at < closesAt;
 };
 
+export const isRaceRegistrationOpen = (race, at = Date.now()) => {
+  if (!race || race.status !== 'registration-open') return false;
+
+  const hasOpenTime = Boolean(race.registrationOpensAt);
+  const hasCloseTime = Boolean(race.registrationClosesAt);
+  const opensAt = race.registrationOpensAt
+    ? new Date(race.registrationOpensAt).getTime()
+    : Number.NEGATIVE_INFINITY;
+  const closesAt = race.registrationClosesAt
+    ? new Date(race.registrationClosesAt).getTime()
+    : Number.POSITIVE_INFINITY;
+
+  return (
+    Number.isFinite(at) &&
+    (!hasOpenTime || Number.isFinite(opensAt)) &&
+    (!hasCloseTime || Number.isFinite(closesAt)) &&
+    at >= opensAt &&
+    at < closesAt
+  );
+};
+
 export const activeRace = (race) =>
   race && !['finished', 'completed', 'cancelled'].includes(race.status);
 
@@ -111,7 +132,7 @@ export const publicRaceEntries = (db) =>
   }));
 
 // Lấy danh sách hồ sơ jockey công khai (chỉ lấy profile đã publish và user có trạng thái active)
-export const publicJockeyProfiles = (db) =>
+export const publicJockeyProfiles = (db, { includeEmail = false } = {}) =>
   (db.jockeyProfiles || [])
     .map((profile) => {
       const user = db.users.find((item) => item.id === profile.userId);
@@ -119,7 +140,7 @@ export const publicJockeyProfiles = (db) =>
       return {
         ...profile,
         jockeyName: user?.name || 'Unknown Jockey',
-        jockeyEmail: user?.email || '',
+        ...(includeEmail ? { jockeyEmail: user?.email || '' } : {}),
         userStatus: user?.status || 'unknown',
       };
     })
@@ -130,12 +151,17 @@ export const publicJockeyProfiles = (db) =>
     );
 
 // Lấy danh sách jockey công khai đã được phê duyệt tham gia một giải đấu cụ thể
-export const publicTournamentJockeyProfiles = (db, tournamentId) => {
+export const publicTournamentJockeyProfiles = (db, tournamentId, raceId) => {
   const approvedJockeyIds = new Set(
     (db.jockeyRaceRegistrations || [])
       .filter(
         (registration) =>
-          db.races.some(r => r.id === registration.raceId && r.tournamentId === tournamentId) &&
+          db.races.some(
+            (race) =>
+              race.id === registration.raceId &&
+              race.tournamentId === tournamentId &&
+              (!raceId || race.id === raceId)
+          ) &&
           registration.status === 'approved'
       )
       .map((registration) => registration.jockeyUserId)

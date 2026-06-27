@@ -34,6 +34,8 @@ CREATE TABLE "tournaments" (
   "name" VARCHAR(255) NOT NULL,
   "status" VARCHAR(64) NOT NULL,
   "registrationWindow" VARCHAR(128),
+  "registrationOpensAt" TIMESTAMPTZ,
+  "registrationClosesAt" TIMESTAMPTZ,
   "startDate" DATE,
   "finalDate" DATE,
   "location" VARCHAR(255),
@@ -219,21 +221,25 @@ CREATE INDEX "idx_jockey_invitations_jockey"
 CREATE TABLE "horseTournamentRegistrations" (
   "id" VARCHAR(64) PRIMARY KEY,
   "tournamentId" VARCHAR(64) NOT NULL,
+  "raceId" VARCHAR(64) NOT NULL,
   "horseId" VARCHAR(64) NOT NULL,
   "ownerUserId" VARCHAR(64) NOT NULL,
-  "jockeyUserId" VARCHAR(64) NOT NULL,
+  "jockeyUserId" VARCHAR(64),
   "invitationId" VARCHAR(64),
   "status" VARCHAR(32) NOT NULL DEFAULT 'pending-jockey'
     CHECK ("status" IN ('pending-jockey', 'pending-admin', 'approved', 'rejected', 'cancelled')),
   "notes" TEXT,
   "createdAt" TIMESTAMPTZ NOT NULL,
   "reviewedAt" TIMESTAMPTZ,
-  CONSTRAINT "uq_horse_tournament_registration"
-    UNIQUE ("tournamentId", "horseId"),
-  CONSTRAINT "uq_jockey_tournament_pairing"
-    UNIQUE ("tournamentId", "jockeyUserId"),
+  CONSTRAINT "uq_horse_race_registration"
+    UNIQUE ("raceId", "horseId"),
+  CONSTRAINT "uq_jockey_race_pairing"
+    UNIQUE ("raceId", "jockeyUserId"),
   CONSTRAINT "fk_horse_tournament_registrations_tournament"
     FOREIGN KEY ("tournamentId") REFERENCES "tournaments" ("id")
+    ON DELETE CASCADE,
+  CONSTRAINT "fk_horse_tournament_registrations_race"
+    FOREIGN KEY ("raceId") REFERENCES "races" ("id")
     ON DELETE CASCADE,
   CONSTRAINT "fk_horse_tournament_registrations_horse"
     FOREIGN KEY ("horseId") REFERENCES "horses" ("id")
