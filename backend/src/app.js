@@ -10,7 +10,7 @@ import { createNotificationRoutes } from './routes/notificationRoutes.js';
 import { createOwnerRoutes } from './routes/ownerRoutes.js';
 import { createPublicRoutes } from './routes/publicRoutes.js';
 import { createRefereeRoutes } from './routes/refereeRoutes.js';
-
+import { broadcastRaceUpdate } from './services/liveRaceEvents.js';
 export const createApp = ({
   getDb,
   writeDb,
@@ -78,3 +78,34 @@ export const createApp = ({
 
   return app;
 };
+
+setInterval(async () => {
+  try {
+    const db = await getDb();
+    const now = new Date();
+    let changed = false;
+
+    for (const race of db.races) {
+      if (
+        race.status === 'registration-open' &&
+        race.registrationClosesAt &&
+        now >= new Date(race.registrationClosesAt)
+      ) {
+        const entries = (db.raceEntries || []).filter(
+          (e) => e.raceId === race.id && e.status === 'approved'
+        );
+        // Only auto-close if there's at least one participant (same rule as manual)
+        if (entries.length > 0) {
+          race.status = 'registration-closed';
+          race.updatedAt = now.toISOString();
+          changed = true;
+          broadcastRaceUpdate(race.id);
+        }
+      }
+    }
+
+    if (changed) await writeDb(db);
+  } catch (err) {
+    console.error('Auto-close registration error:', err);
+  }
+}, 60_000); // runs every 60 seconds

@@ -194,7 +194,7 @@ CREATE TABLE "jockeyInvitations" (
   "jockeyUserId" VARCHAR(64) NOT NULL,
   "tournamentId" VARCHAR(64),
   "raceId" VARCHAR(64),
-  "status" VARCHAR(32) NOT NULL DEFAULT 'pending' CHECK ("status" IN ('pending', 'accepted', 'rejected', 'cancelled')),
+  "status" VARCHAR(32) NOT NULL DEFAULT 'pending' CHECK ("status" IN ('pending-jockey', 'accepted', 'rejected', 'cancelled')),
   "adminStatus" VARCHAR(32),
   "createdAt" TIMESTAMPTZ NOT NULL,
   "respondedAt" TIMESTAMPTZ,
