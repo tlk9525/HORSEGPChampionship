@@ -10,7 +10,7 @@ export interface AuthUser {
 
 export interface ApprovalItem {
   id: string;
-  entityType: 'horse' | 'account' | 'jockey' | 'jockeyRace' | 'horseRace' | 'raceEntry' | 'pairing';
+  entityType: 'horse' | 'account' | 'jockeyRace' | 'horseRace' | 'pairing';
   type: string;
   name: string;
   detail: string;
@@ -48,7 +48,6 @@ export interface HorseRecord {
   profileNotes?: string;
   ownerUserId: string;
   status: 'draft' | 'pending' | 'approved' | 'rejected' | 'retired';
-  selectedJockeyUserId?: string | null;
   jockeyConfirmation: string;
   veterinaryCertificateUrl?: string;
 }
@@ -107,7 +106,6 @@ export interface RaceRecord {
   participants: number;
   ownerConfirmed: number;
   jockeyConfirmed: number;
-  registrationPeriodMinutes?: number;
   registrationOpensAt?: string;
   registrationClosesAt?: string;
   resultStatus?: string;
@@ -118,9 +116,6 @@ export interface TournamentRecord {
   id: string;
   name: string;
   status: string;
-  registrationWindow?: string;
-  registrationOpensAt?: string;
-  registrationClosesAt?: string;
   startDate?: string;
   finalDate?: string;
   location?: string;
@@ -200,16 +195,6 @@ const API_URL = import.meta.env.PROD
   ? '/api'
   : import.meta.env.VITE_API_URL || 'http://127.0.0.1:4000/api';
 
-class ApiRequestError extends Error {
-  status: number;
-
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = 'ApiRequestError';
-    this.status = status;
-  }
-}
-
 // Tạo URL kết nối Server-Sent Events (SSE) để theo dõi cập nhật trực tiếp của một cuộc đua
 export const getLiveRaceEventsUrl = (raceId: string) =>
   `${API_URL}/live/races/${encodeURIComponent(raceId)}/events`;
@@ -228,7 +213,7 @@ const request = async <T>(path: string, options: RequestInit = {}): Promise<T> =
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new ApiRequestError(data.message || 'Request failed', response.status);
+    throw new Error(data.message || 'Request failed');
   }
 
   return data;
@@ -287,7 +272,7 @@ export const getBootstrap = async () =>
 export const getApprovals = async () =>
   request<{ approvals: ApprovalItem[] }>('/admin/approvals');
 
-// Phê duyệt hoặc từ chối một yêu cầu cụ thể (ngựa, tài khoản, đăng ký jockey, race entry)
+// Phê duyệt hoặc từ chối một yêu cầu cụ thể (ngựa, tài khoản, đăng ký race, pairing)
 export const decideApproval = async (
   entityType: ApprovalItem['entityType'],
   id: string,
@@ -359,14 +344,14 @@ export const getRaceRegistration = async (raceId: string) =>
     raceEntries: RaceEntryRecord[];
   }>(`/owner/race-registration?raceId=${encodeURIComponent(raceId)}`);
 
-// Tạo một race entry mới (owner đăng ký ngựa vào cuộc đua)
-export const createRaceEntry = async (entry: {
+// Owner đăng ký ngựa vào một chặng đua hoặc gửi lời mời jockey cho chặng đó
+export const submitHorseRaceRegistration = async (entry: {
   raceId: string;
   horseId: string;
   jockeyUserId?: string;
   notes?: string;
 }) =>
-  request<{ invitation?: JockeyInvitation; registration?: HorseRaceRegistration }>('/owner/race-entries', {
+  request<{ invitation?: JockeyInvitation; registration?: HorseRaceRegistration }>('/owner/race-registrations', {
     method: 'POST',
     body: JSON.stringify(entry),
   });
@@ -535,29 +520,11 @@ export type RaceEntryReadiness = 'ready' | 'absent' | 'incident' | 'scratched';
 export const markRaceEntryReadiness = async (
   entryId: string,
   readiness: RaceEntryReadiness
-) => {
-  const encodedEntryId = encodeURIComponent(entryId);
-  const options = { method: 'POST' };
-
-  try {
-    return await request<{ entry: RaceEntryRecord; entries: RaceEntryRecord[] }>(
-      `/referee/race-entries/${encodedEntryId}/readiness/${readiness}`,
-      options
-    );
-  } catch (error) {
-    const isLegacyRenderRoute =
-      error instanceof ApiRequestError &&
-      error.status === 404 &&
-      error.message.toLowerCase() === 'not found';
-
-    if (!isLegacyRenderRoute) throw error;
-
-    return request<{ entry: RaceEntryRecord; entries: RaceEntryRecord[] }>(
-      `/referee/race-entries/${encodedEntryId}/${readiness}`,
-      options
-    );
-  }
-};
+) =>
+  request<{ entry: RaceEntryRecord; entries: RaceEntryRecord[] }>(
+    `/referee/race-entries/${encodeURIComponent(entryId)}/readiness/${readiness}`,
+    { method: 'POST' }
+  );
 
 // Ghi kết quả cho một thí sinh: vị trí, thời gian vào đích, ghi chú và vi phạm
 export const recordRaceResult = async (

@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import {
+  ACTIVE_TOURNAMENT_STATUSES,
   MAX_OWNER_HORSES,
-  TOURNAMENT_REGISTRATION_STATUSES,
   RACE_CLASSES,
 } from '../config/constants.js';
 import { requireRole } from '../services/authService.js';
@@ -292,8 +292,8 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     return c.json({ horse });
   });
 
-  // Owner đăng ký ngựa vào cuộc đua
-  app.post('/race-entries', async (c) => {
+  // Owner đăng ký ngựa vào một chặng đua cụ thể
+  app.post('/race-registrations', async (c) => {
     const user = c.get('user');
     const db = c.get('db');
     const { raceId, horseId, jockeyUserId, notes } = await c.req.json();
@@ -306,14 +306,14 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     const tournamentId = race.tournamentId;
 
     const tournament = db.tournaments.find(
-      (item) => item.id === tournamentId && TOURNAMENT_REGISTRATION_STATUSES.includes(item.status)
+      (item) => item.id === tournamentId && ACTIVE_TOURNAMENT_STATUSES.includes(item.status)
     );
     const horse = db.horses.find(
       (item) => item.id === horseId && item.ownerUserId === user.id && item.status === 'approved'
     );
 
     if (!horse) return c.json({ message: 'Owner can only register approved horses they own' }, 400);
-    if (!tournament) return c.json({ message: 'Tournament registration is not open' }, 400);
+    if (!tournament) return c.json({ message: 'Tournament is not active for race registration' }, 400);
 
     if (race.raceClass && RACE_CLASSES[race.raceClass]) {
       const rating = officialHorseRating(horse);
@@ -329,6 +329,13 @@ export const createOwnerRoutes = (getDb, writeDb) => {
 
     const activeRegistrations = activeHorseRaceRegistrations(db, tournamentId);
     const existingRegistration = activeRegistrations.find((r) => r.horseId === horse.id && r.raceId === race.id);
+    const reusableRegistration = db.horseRaceRegistrations.find(
+      (r) =>
+        r.tournamentId === tournamentId &&
+        r.raceId === race.id &&
+        r.horseId === horse.id &&
+        ['rejected', 'cancelled'].includes(r.status)
+    );
 
     if (!jockeyUserId) {
       if (!isRaceRegistrationOpen(race)) {
@@ -373,21 +380,26 @@ export const createOwnerRoutes = (getDb, writeDb) => {
       }
 
       const createdAt = new Date().toISOString();
-      const registration = {
+      const registration = reusableRegistration || {
         id: randomUUID(),
         tournamentId,
         raceId: race.id,
         horseId: horse.id,
         ownerUserId: user.id,
-        jockeyUserId: null,
-        invitationId: null,
-        status: 'pending-admin',
-        notes: notes || '',
         createdAt,
-        reviewedAt: null,
       };
+      registration.tournamentId = tournamentId;
+      registration.raceId = race.id;
+      registration.horseId = horse.id;
+      registration.ownerUserId = user.id;
+      registration.jockeyUserId = null;
+      registration.invitationId = null;
+      registration.status = 'pending-admin';
+      registration.notes = notes || '';
+      registration.createdAt = createdAt;
+      registration.reviewedAt = null;
 
-      db.horseRaceRegistrations.unshift(registration);
+      if (!reusableRegistration) db.horseRaceRegistrations.unshift(registration);
       horse.jockeyConfirmation = 'pending-admin';
       horse.updatedAt = createdAt;
 

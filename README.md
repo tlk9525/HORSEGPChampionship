@@ -147,7 +147,7 @@ Luồng chính:
 2. Mỗi Race có cửa sổ đăng ký riêng.
 3. Owner đăng ký Horse vào Race đang mở.
 4. Jockey đăng ký availability theo Race hoặc nhận lời mời từ Owner.
-5. Admin duyệt Race Entry / Owner-Jockey pairing.
+5. Admin duyệt Horse race registration / Owner-Jockey pairing.
 6. Khi đóng đăng ký, hệ thống snapshot rating, tính assigned weight, random lane và tạo start list.
 7. Admin publish start list.
 8. Referee check-in từng entry.
@@ -160,8 +160,9 @@ Trạng thái được tách riêng:
 | Nhóm trạng thái | Ý nghĩa |
 |-----------------|---------|
 | Race Lifecycle | `draft`, `registration-open`, `registration-closed`, `published`, `in-progress`, `finished`, `completed`, `cancelled` |
-| Entry Approval | `pending-admin`, `approved`, `rejected`, `withdrawn`, `scratched` |
-| Check-in | `pending`, `ready`, `absent`, `incident` |
+| Registration Approval | `pending-jockey`, `pending-admin`, `approved`, `rejected`, `cancelled` |
+| Race Entry | `approved`, `scratched` |
+| Check-in | `pending`, `ready`, `absent`, `incident`, `scratched` |
 | Result | `draft`, `submitted`, `official`, `disqualified` |
 
 Trong implementation hiện tại, `Check-in` được biểu diễn bằng Race `published` cộng với `preRaceStatus` của từng entry; `Results Submitted` được biểu diễn bằng Race `finished` cộng với `resultStatus = submitted`.
@@ -297,7 +298,7 @@ Giao diện sẽ chạy tại: `http://127.0.0.1:5173`
 | `GET` | `/api/owner/portal` | Portal chủ ngựa |
 | `POST` | `/api/owner/horses` | Đăng ký ngựa mới |
 | `POST` | `/api/owner/horses/:id` | Cập nhật thông tin ngựa |
-| `POST` | `/api/owner/race-entries` | Đăng ký ngựa vào cuộc đua |
+| `POST` | `/api/owner/race-registrations` | Đăng ký ngựa vào cuộc đua |
 
 ### Jockey
 | Method | Endpoint | Mô tả |

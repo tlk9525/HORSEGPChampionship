@@ -9,7 +9,7 @@
 5. Owner registers an approved Horse for that Race.
 6. Jockey registers availability for the same Race, or Owner invites a Jockey who is available for that Race.
 7. Jockey accepts or rejects the riding invitation.
-8. Admin approves the Race Entry or Owner-Jockey pairing.
+8. Admin approves the Horse race registration or Owner-Jockey pairing.
 9. When registration closes, the system automatically snapshots horse rating, calculates assigned weight, randomizes lane assignment, and creates the start list.
 10. Admin publishes the start list.
 11. Referee performs check-in for assigned races, including horse, jockey, equipment, and carried-weight checks.
@@ -30,7 +30,7 @@
 - Create and configure Races.
 - Select Race Class and assigned weight bounds.
 - Assign Referees.
-- Approve Owner, Jockey, Horse, Race Entry, and Owner-Jockey pairing requests.
+- Approve Owner, Jockey, Horse, Jockey race registration, Horse race registration, and Owner-Jockey pairing requests.
 - Open and close Race registration.
 - Publish the start list.
 - Start and finish a Race.
@@ -42,7 +42,7 @@
 - Create Horse profiles.
 - Register an approved Horse into an open Race.
 - Invite or select a Jockey who is available for the same Race.
-- Submit Race Entry requests.
+- Submit Horse race registration requests.
 - Cannot start or finish races.
 - Cannot submit or approve results.
 
@@ -102,16 +102,16 @@ Cancelled
 
 Implementation note: the current app represents `Check-in` through `published` Race status plus per-entry `preRaceStatus`. It represents `Results Submitted` through Race `status = finished` plus `resultStatus = submitted`.
 
-## 4. Race Entry Lifecycle
+## 4. Race Registration Approval Lifecycle
 
-Race Entry approval state should only describe whether the entry is accepted into the race.
+Registration approval state describes whether the horse and selected jockey are accepted into the race.
 
 ```text
+Pending Jockey Acceptance
 Pending Admin Approval
 Approved
 Rejected
-Withdrawn
-Scratched
+Cancelled
 ```
 
 ## 5. Check-in Status
@@ -123,6 +123,7 @@ Pending Check-in
 Ready
 Absent
 Incident
+Scratched
 ```
 
 ## 6. Result Status
@@ -145,5 +146,6 @@ Disqualified
 - A Jockey must be available or approved for the same Race before Owner can select them.
 - Referee submits draft results only.
 - Admin approval is required before results become official and before Horse Rating changes.
-- `Withdrawn` is used before the published/start-list stage.
+- `horseRaceRegistrations` handles approval before a row is created in the official start list.
+- `raceEntries` is the official start-list row after Admin approval.
 - `Scratched` is used after publishing or during check-in because of absence, health, equipment, weight, or other referee/admin decision.

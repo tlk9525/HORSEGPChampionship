@@ -114,6 +114,17 @@ export const createJockeyRoutes = (getDb, writeDb) => {
     );
 
     if (existing) {
+      if (existing.status === 'rejected') {
+        existing.status = 'pending';
+        existing.createdAt = new Date().toISOString();
+        existing.reviewedAt = null;
+        notifyAdmins(db, 'Jockey race registration', `${user.name} requested to join ${race.name}.`);
+        createNotification(db, user.id, 'Race registration resubmitted', `${race.name} is waiting for Admin approval.`);
+
+        await writeDb(db);
+        return c.json({ registration: existing, jockeyRaceRegistrations: db.jockeyRaceRegistrations }, 200);
+      }
+
       return c.json(
         { message: `You already have a ${existing.status} registration for this race.` },
         409
@@ -149,9 +160,9 @@ export const createJockeyRoutes = (getDb, writeDb) => {
     }
 
     const invitation = (db.jockeyInvitations || []).find(
-      (item) => item.id === id && item.jockeyUserId === user.id
+      (item) => item.id === id && item.jockeyUserId === user.id && item.status === 'pending'
     );
-    if (!invitation) return c.json({ message: 'Invitation not found' }, 404);
+    if (!invitation) return c.json({ message: 'Pending invitation not found' }, 404);
     const invitationTournament = invitation.tournamentId
       ? db.tournaments.find((item) => item.id === invitation.tournamentId)
       : null;
@@ -183,7 +194,9 @@ export const createJockeyRoutes = (getDb, writeDb) => {
     } else {
       invitation.adminStatus = null;
       if (horseRegistration) {
-        horseRegistration.status = 'rejected';
+        horseRegistration.status = 'approved';
+        horseRegistration.jockeyUserId = null;
+        horseRegistration.invitationId = null;
         horseRegistration.reviewedAt = new Date().toISOString();
       }
       if (horse) { horse.jockeyConfirmation = 'waiting-owner'; horse.updatedAt = new Date().toISOString(); }

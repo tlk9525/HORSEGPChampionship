@@ -69,6 +69,21 @@ const dateInputToIso = (value: string) => {
   return isValidDate ? `${year}-${month}-${day}` : '';
 };
 
+const raceStatusBadgeClass = (status: string) => {
+  const classes: Record<string, string> = {
+    draft: 'bg-gray-600/20 border border-gray-600/30 text-gray-300',
+    'registration-open': 'bg-emerald-600/20 border border-emerald-600/30 text-emerald-400',
+    'registration-closed': 'bg-yellow-600/20 border border-yellow-600/30 text-yellow-500',
+    published: 'bg-sky-600/20 border border-sky-600/30 text-sky-400',
+    'in-progress': 'bg-[#d4af37]/20 border border-[#d4af37]/30 text-[#f6d77a]',
+    finished: 'bg-violet-600/20 border border-violet-600/30 text-violet-400',
+    completed: 'bg-white/10 border border-white/20 text-white',
+    cancelled: 'bg-red-600/20 border border-red-600/30 text-red-400',
+  };
+
+  return classes[status] || classes.draft;
+};
+
 export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   const [pendingApprovals, setPendingApprovals] = useState<ApprovalItem[]>([]);
@@ -583,11 +598,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                                       </h3>
 
                                       <span
-                                        className={`px-3 py-1 rounded-xl text-xs font-bold ${
-                                          race.status === 'scheduled'
-                                            ? 'bg-green-600/20 border border-green-600/30 text-green-500'
-                                            : 'bg-yellow-600/20 border border-yellow-600/30 text-yellow-500'
-                                        }`}
+                                        className={`px-3 py-1 rounded-xl text-xs font-bold ${raceStatusBadgeClass(race.status)}`}
                                       >
                                         {statusLabel(race.status)}
                                       </span>

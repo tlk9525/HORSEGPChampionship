@@ -164,3 +164,53 @@ test('a scratched entry is not counted as an active runner when starting', async
   assert.equal(result.status, 200);
   assert.equal(result.body.race.status, 'in-progress');
 });
+
+test('admin rejecting a pairing keeps the approved horse registration reusable', async () => {
+  const db = baseDb();
+  db.races = [{
+    id: 'race-1',
+    tournamentId: 'tournament-1',
+    name: 'Race',
+    date: '2099-01-01',
+    time: '10:00',
+    status: 'registration-open',
+    raceClass: 'Open',
+    registrationOpensAt: '2020-01-01T00:00:00.000Z',
+    registrationClosesAt: '2099-01-01T00:00:00.000Z',
+  }];
+  db.horseRaceRegistrations = [{
+    id: 'horse-reg-1',
+    tournamentId: 'tournament-1',
+    raceId: 'race-1',
+    horseId: 'horse-1',
+    ownerUserId: 'owner-1',
+    jockeyUserId: 'jockey-1',
+    invitationId: 'invitation-1',
+    status: 'pending-admin',
+    notes: '',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    reviewedAt: null,
+  }];
+  db.jockeyInvitations = [{
+    id: 'invitation-1',
+    tournamentId: 'tournament-1',
+    raceId: 'race-1',
+    horseId: 'horse-1',
+    ownerUserId: 'owner-1',
+    jockeyUserId: 'jockey-1',
+    status: 'accepted',
+    adminStatus: 'pending',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    respondedAt: '2026-01-01T01:00:00.000Z',
+  }];
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/approvals/pairing/invitation-1', { decision: 'rejected' });
+
+  assert.equal(result.status, 200);
+  assert.equal(db.jockeyInvitations[0].adminStatus, 'rejected');
+  assert.equal(db.horseRaceRegistrations[0].status, 'approved');
+  assert.equal(db.horseRaceRegistrations[0].jockeyUserId, null);
+  assert.equal(db.horseRaceRegistrations[0].invitationId, null);
+});

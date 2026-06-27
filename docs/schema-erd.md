@@ -17,9 +17,6 @@ erDiagram
     VARCHAR id PK
     VARCHAR name
     VARCHAR status
-    VARCHAR registrationWindow
-    TIMESTAMPTZ registrationOpensAt
-    TIMESTAMPTZ registrationClosesAt
     DATE startDate
     DATE finalDate
     VARCHAR location
@@ -73,7 +70,6 @@ erDiagram
     INTEGER participants
     INTEGER ownerConfirmed
     INTEGER jockeyConfirmed
-    INTEGER registrationPeriodMinutes
     TIMESTAMPTZ registrationOpensAt
     TIMESTAMPTZ registrationClosesAt
     VARCHAR resultStatus
@@ -239,6 +235,7 @@ erDiagram
 - `raceEntries` is the official start-list row after Admin approval. It links a Race, Horse, and Jockey.
 - Race state, entry approval state, check-in state, and result state are intentionally separate:
   - Race state: `draft`, `registration-open`, `registration-closed`, `published`, `in-progress`, `finished`, `completed`, `cancelled`.
-  - Entry approval: `pending-admin`, `approved`, `rejected`, `withdrawn`, `scratched`.
-  - Check-in: `pending`, `ready`, `absent`, `incident`.
+  - Horse race registration approval: `pending-jockey`, `pending-admin`, `approved`, `rejected`, `cancelled`.
+  - Race entry status: `approved`, `scratched`.
+  - Check-in: `pending`, `ready`, `absent`, `incident`, `scratched`.
   - Result: `draft`, `submitted`, `official`, `disqualified`.

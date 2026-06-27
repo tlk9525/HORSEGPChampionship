@@ -28,7 +28,7 @@
         <mxCell id="sessions" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=10;fillColor=#ffffff;strokeColor=#475569;fontSize=13;" value="&lt;b&gt;sessions&lt;/b&gt;&lt;br/&gt;&lt;u&gt;token PK&lt;/u&gt;&lt;br/&gt;userId FK&lt;br/&gt;createdAt" vertex="1">
           <mxGeometry height="120" width="220" x="1240" y="120" as="geometry" />
         </mxCell>
-        <mxCell id="tournaments" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=10;fillColor=#ffffff;strokeColor=#1d4ed8;fontSize=13;" value="&lt;b&gt;tournaments&lt;/b&gt;&lt;br/&gt;&lt;u&gt;id PK&lt;/u&gt;&lt;br/&gt;name&lt;br/&gt;status&lt;br/&gt;registrationWindow&lt;br/&gt;startDate&lt;br/&gt;finalDate&lt;br/&gt;location&lt;br/&gt;prizePool" vertex="1">
+        <mxCell id="tournaments" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=10;fillColor=#ffffff;strokeColor=#1d4ed8;fontSize=13;" value="&lt;b&gt;tournaments&lt;/b&gt;&lt;br/&gt;&lt;u&gt;id PK&lt;/u&gt;&lt;br/&gt;name&lt;br/&gt;status&lt;br/&gt;startDate&lt;br/&gt;finalDate&lt;br/&gt;location&lt;br/&gt;prizePool" vertex="1">
           <mxGeometry height="170" width="240" x="140" y="330" as="geometry" />
         </mxCell>
         <mxCell id="races" parent="1" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=10;fillColor=#ffffff;strokeColor=#1d4ed8;fontSize=13;" value="&lt;b&gt;races&lt;/b&gt;&lt;br/&gt;&lt;u&gt;id PK&lt;/u&gt;&lt;br/&gt;tournamentId FK&lt;br/&gt;raceNumber&lt;br/&gt;name&lt;br/&gt;date / time / venue&lt;br/&gt;distance / surface&lt;br/&gt;raceClass&lt;br/&gt;handicapMin / handicapMax&lt;br/&gt;status&lt;br/&gt;resultStatus" vertex="1">

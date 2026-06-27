@@ -30,17 +30,17 @@ interface TournamentPageProps {
 const raceNumberValue = (raceNumber?: string) =>
   Number(String(raceNumber || '').replace(/\D/g, '')) || 999;
 
-const registrationWindowOpen = (tournament: TournamentRecord) => {
-  if (!['registration', 'registration-open', 'approvals', 'active'].includes(tournament.status)) {
-    return false;
-  }
+const raceRegistrationOpen = (race: RaceRecord) => {
+  if (race.status !== 'registration-open') return false;
+
   const now = Date.now();
-  const opensAt = tournament.registrationOpensAt
-    ? new Date(tournament.registrationOpensAt).getTime()
+  const opensAt = race.registrationOpensAt
+    ? new Date(race.registrationOpensAt).getTime()
     : Number.NEGATIVE_INFINITY;
-  const closesAt = tournament.registrationClosesAt
-    ? new Date(tournament.registrationClosesAt).getTime()
+  const closesAt = race.registrationClosesAt
+    ? new Date(race.registrationClosesAt).getTime()
     : Number.POSITIVE_INFINITY;
+
   return now >= opensAt && now < closesAt;
 };
 
@@ -202,7 +202,7 @@ export default function TournamentPage({
           </h1>
 
           <p className="text-gray-400 text-lg">
-            Jockeys join tournaments here. Owners register horses first; after Admin approval, owners select a jockey for final approval.
+            Jockeys join individual races here. Owners register horses per race; after Admin approval, owners select a jockey for final approval.
           </p>
         </div>
 
@@ -217,7 +217,7 @@ export default function TournamentPage({
             const tournamentRaces = races.filter(
               (race) => race.tournamentId === tournament.id
             );
-            const tournamentRegistrationOpen = registrationWindowOpen(tournament);
+            const openRaceCount = tournamentRaces.filter(raceRegistrationOpen).length;
             const hasTournamentRaces = tournamentRaces.length > 0;
 
             return (
@@ -269,9 +269,9 @@ export default function TournamentPage({
                     <div className="flex items-start gap-3">
                       <Users className="w-5 h-5 text-[#d4af37] mt-1" />
                       <div>
-                        <p className="text-gray-500 text-xs uppercase">Registration</p>
+                        <p className="text-gray-500 text-xs uppercase">Open Races</p>
                         <p className="text-white font-semibold mt-1">
-                          {tournamentRegistrationOpen ? 'Open' : 'Closed'}
+                          {openRaceCount}/{tournamentRaces.length}
                         </p>
                       </div>
                     </div>

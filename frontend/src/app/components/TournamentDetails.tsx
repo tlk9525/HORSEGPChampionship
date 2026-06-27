@@ -11,22 +11,10 @@ import {
   HorseRecord,
   RaceEntryRecord,
   RaceRecord,
+  TournamentRecord,
   getBootstrap,
 } from '../services/api';
 import { statusLabel } from '../utils/domain';
-
-type TournamentRecord = {
-  id: string;
-  name: string;
-  status: string;
-  registrationWindow?: string;
-  registrationOpensAt?: string;
-  registrationClosesAt?: string;
-  startDate?: string;
-  finalDate?: string;
-  location?: string;
-  prizePool?: number | string;
-};
 
 interface TournamentDetailsProps {
   onNavigate: (page: string) => void;
@@ -34,6 +22,20 @@ interface TournamentDetailsProps {
 
 const raceNumberValue = (raceNumber?: string) =>
   Number(String(raceNumber || '').replace(/\D/g, '')) || 999;
+
+const raceRegistrationOpen = (race: RaceRecord) => {
+  if (race.status !== 'registration-open') return false;
+
+  const now = Date.now();
+  const opensAt = race.registrationOpensAt
+    ? new Date(race.registrationOpensAt).getTime()
+    : Number.NEGATIVE_INFINITY;
+  const closesAt = race.registrationClosesAt
+    ? new Date(race.registrationClosesAt).getTime()
+    : Number.POSITIVE_INFINITY;
+
+  return now >= opensAt && now < closesAt;
+};
 
 export default function TournamentDetails({ onNavigate }: TournamentDetailsProps) {
   const { tournamentId } = useParams();
@@ -91,6 +93,7 @@ export default function TournamentDetails({ onNavigate }: TournamentDetailsProps
 
   const isCompleted = tournament?.status === 'completed';
   const visibleRaces = raceListExpanded ? tournamentRaces : tournamentRaces.slice(0, 4);
+  const openRaceCount = tournamentRaces.filter(raceRegistrationOpen).length;
 
   const openRace = (raceId: string) => {
     sessionStorage.setItem('selectedRaceId', raceId);
@@ -166,10 +169,8 @@ export default function TournamentDetails({ onNavigate }: TournamentDetailsProps
 
               {
                 icon: Users,
-                label: 'Registration',
-                value: tournament?.registrationOpensAt && tournament?.registrationClosesAt
-                  ? `${new Date(tournament.registrationOpensAt).toLocaleString()} - ${new Date(tournament.registrationClosesAt).toLocaleString()}`
-                  : tournament?.registrationWindow || '-',
+                label: 'Race Registration',
+                value: `${openRaceCount} open / ${tournamentRaces.length} races`,
               },
             ].map((item) => (
               <div

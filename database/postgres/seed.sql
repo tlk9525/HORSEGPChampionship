@@ -134,14 +134,13 @@ INSERT INTO "horses" ("id", "name", "breed", "color", "age", "weightLb", "overal
   ('h_060', 'Horse 60', 'Quarter Horse', 'Palomino', 7, 1184, 59, 'Gelding', 'u_owner_10', 'approved', NOW(), NOW());
 
 INSERT INTO "tournaments" (
-  "id", "name", "status", "startDate", "finalDate", "location",
-  "registrationOpensAt", "registrationClosesAt", "createdAt"
+  "id", "name", "status", "startDate", "finalDate", "location", "createdAt"
 ) VALUES
-  ('t_past_1', 'Winter Cup 2024', 'completed', '2024-11-01', '2024-11-28', 'Grand Arena', '2024-10-01', '2024-10-20', NOW()),
-  ('t_past_2', 'Spring Classic 2025', 'completed', '2025-03-01', '2025-03-28', 'Grand Arena', '2025-02-01', '2025-02-20', NOW()),
-  ('t_past_3', 'Autumn Derby 2025', 'completed', '2025-09-01', '2025-09-28', 'Grand Arena', '2025-08-01', '2025-08-20', NOW()),
-  ('t_active', 'Spring Championship 2026', 'active', CURRENT_DATE - 7, CURRENT_DATE + 30, 'Grand Arena', NOW() - INTERVAL '7 days', NOW() + INTERVAL '14 days', NOW()),
-  ('t_upcoming', 'Summer Stakes 2026', 'upcoming', CURRENT_DATE + 20, CURRENT_DATE + 60, 'Grand Arena', NOW() + INTERVAL '10 days', NOW() + INTERVAL '18 days', NOW());
+  ('t_past_1', 'Winter Cup 2024', 'completed', '2024-11-01', '2024-11-28', 'Grand Arena', NOW()),
+  ('t_past_2', 'Spring Classic 2025', 'completed', '2025-03-01', '2025-03-28', 'Grand Arena', NOW()),
+  ('t_past_3', 'Autumn Derby 2025', 'completed', '2025-09-01', '2025-09-28', 'Grand Arena', NOW()),
+  ('t_active', 'Spring Championship 2026', 'active', CURRENT_DATE - 7, CURRENT_DATE + 30, 'Grand Arena', NOW()),
+  ('t_upcoming', 'Summer Stakes 2026', 'upcoming', CURRENT_DATE + 20, CURRENT_DATE + 60, 'Grand Arena', NOW());
 
 INSERT INTO "races" ("id", "tournamentId", "raceNumber", "name", "raceDate", "raceTime", "venue", "distance", "surface", "raceClass", "handicapMin", "handicapMax", "status", "registrationOpensAt", "registrationClosesAt", "createdAt") VALUES
   ('r_1', 't_past_1', 'R1', 'Race 1 - Class 4', '2024-11-11', '14:00', 'Track 2', '1200m', 'Turf', 'Class 4', 115, 135, 'completed', '2024-11-01', '2024-11-05', NOW()),

@@ -6,8 +6,8 @@ import {
   JockeyProfileRecord,
   RaceRecord,
   TournamentRecord,
-  createRaceEntry,
   getRaceRegistration,
+  submitHorseRaceRegistration,
 } from '../services/api';
 import { useParams } from 'react-router-dom';
 import { statusLabel } from '../utils/domain';
@@ -117,11 +117,11 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
       return;
     }
     if (!registrationOpen) {
-      setMessage('This tournament is outside its registration window.');
+      setMessage('This race is outside its registration window.');
       return;
     }
 
-    createRaceEntry({
+    submitHorseRaceRegistration({
       horseId: form.horseId,
       raceId: raceId!,
       jockeyUserId: undefined,
@@ -144,7 +144,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
       return;
     }
 
-    createRaceEntry({
+    submitHorseRaceRegistration({
       horseId: selectedRegistration.horseId,
       raceId: raceId!,
       jockeyUserId: form.jockeyUserId,
@@ -339,7 +339,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
             <div className="mt-4 grid md:grid-cols-2 gap-3">
               {tournamentRaces.length === 0 && (
                 <div className="md:col-span-2 text-gray-500">
-                  Admin has not created races for this tournament yet. The pair will be assigned automatically when races are created.
+                  Admin has not created races for this tournament yet.
                 </div>
               )}
 

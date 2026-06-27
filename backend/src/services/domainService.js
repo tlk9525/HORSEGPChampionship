@@ -4,7 +4,7 @@ import { ACTIVE_TOURNAMENT_STATUSES, USER_ROLES } from '../config/constants.js';
 export const ownerName = (db, userId) =>
   db.users.find((user) => user.id === userId)?.name || 'Unknown Owner';
 
-// Lấy tên jockey (nửịm) từ userId, trả về 'Unknown Jockey' nếu không tìm thấy
+// Lấy tên jockey từ userId, trả về 'Unknown Jockey' nếu không tìm thấy
 export const jockeyName = (db, userId) =>
   userId
     ? db.users.find((user) => user.id === userId)?.name || 'Unknown Jockey'
@@ -53,19 +53,6 @@ export const activeTournament = (db) =>
 export const tournamentRaces = (db, tournamentId) =>
   (db.races || []).filter((race) => race.tournamentId === tournamentId);
 
-export const isTournamentRegistrationOpen = (tournament, at = Date.now()) => {
-  if (!tournament || !ACTIVE_TOURNAMENT_STATUSES.includes(tournament.status)) return false;
-
-  const opensAt = tournament.registrationOpensAt
-    ? new Date(tournament.registrationOpensAt).getTime()
-    : Number.NEGATIVE_INFINITY;
-  const closesAt = tournament.registrationClosesAt
-    ? new Date(tournament.registrationClosesAt).getTime()
-    : Number.POSITIVE_INFINITY;
-
-  return Number.isFinite(at) && at >= opensAt && at < closesAt;
-};
-
 export const isRaceRegistrationOpen = (race, at = Date.now()) => {
   if (!race || race.status !== 'registration-open') return false;
 
@@ -97,14 +84,6 @@ export const activeHorseRaceRegistrations = (db, tournamentId) =>
       registration.tournamentId === tournamentId &&
       !['rejected', 'cancelled'].includes(registration.status)
   );
-
-// Tìm cuộc đua đang mở đăng ký (registration-open) mặc định của giải đấu
-export const defaultRaceForTournament = (db, tournamentId) =>
-  db.races.find(
-    (race) =>
-      race.tournamentId === tournamentId &&
-      race.status === 'registration-open'
-  ) || null;
 
 // Tìm một race entry theo ID cụ thể
 export const findEntry = (db, entryId) =>
@@ -207,7 +186,7 @@ export const formatApprovals = (db) => [
       type: 'Horse Registration',
       name: horse.name,
       detail: `Owner: ${ownerName(db, horse.ownerUserId)}`,
-      date: db.tournaments[0]?.registrationWindow || 'Registration window',
+      date: horse.createdAt || 'Submitted',
       targetUserId: horse.ownerUserId,
     })),
   ...db.users
@@ -222,7 +201,7 @@ export const formatApprovals = (db) => [
       type: `${user.role.charAt(0).toUpperCase()}${user.role.slice(1)} Account Request`,
       name: user.name,
       detail: `Email: ${user.email} • Role: ${user.role}`,
-      date: db.tournaments[0]?.registrationWindow || 'Registration window',
+      date: user.createdAt || 'Submitted',
       targetUserId: user.id,
     })),
   ...(db.jockeyRaceRegistrations || [])
@@ -236,21 +215,6 @@ export const formatApprovals = (db) => [
       date: registration.createdAt,
       targetUserId: registration.jockeyUserId,
     })),
-  ...(db.raceEntries || [])
-    .filter((entry) => entry.status === 'pending-approval')
-    .map((entry) => {
-      const horse = db.horses.find((item) => item.id === entry.horseId);
-
-      return {
-        id: entry.id,
-        entityType: 'raceEntry',
-        type: 'Horse Race Entry',
-        name: `${horseName(db, entry.horseId)} + ${jockeyName(db, entry.jockeyUserId)}`,
-        detail: `Race: ${raceName(db, entry.raceId)} • Owner: ${ownerName(db, horse?.ownerUserId)}`,
-        date: entry.createdAt,
-        targetUserId: horse?.ownerUserId,
-      };
-    }),
   ...(db.horseRaceRegistrations || [])
     .filter(
       (registration) =>
