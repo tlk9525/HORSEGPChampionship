@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import {
   ApprovalItem,
-  HorseTournamentRegistration,
+  HorseRaceRegistration,
   RaceEntryRecord,
   RaceRecord,
   TournamentRecord,
@@ -77,7 +77,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   const [totalUsers, setTotalUsers] = useState(0);
   const [tournaments, setTournaments] = useState<TournamentRecord[]>([]);
   const [races, setRaces] = useState<RaceRecord[]>([]);
-  const [pairings, setPairings] = useState<HorseTournamentRegistration[]>([]);
+  const [pairings, setPairings] = useState<HorseRaceRegistration[]>([]);
   const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
   const [maxRacesPerTournament, setMaxRacesPerTournament] = useState(10);
   const [showCreateTournament, setShowCreateTournament] = useState(false);
@@ -114,7 +114,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     getBootstrap()
       .then((data) => {
         setRaces(data.races || []);
-        setPairings(data.horseTournamentRegistrations || []);
+        setPairings(data.horseRaceRegistrations || []);
         setRaceEntries(data.raceEntries || []);
         setMaxRacesPerTournament(data.limits?.maxRacesPerTournament || 10);
         setTotalUsers(data.users.length);
@@ -211,10 +211,6 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   const [editRace, setEditRace] =
     useState<RaceRecord | null>(null);
-
-  const tournamentNameById = (tournamentId?: string | null) =>
-    tournaments.find((tournament) => tournament.id === tournamentId)?.name ||
-    'No tournament selected';
 
   const updateRace = () => {
     if (!editRace) return;

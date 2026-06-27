@@ -29,7 +29,7 @@ const baseDb = () => ({
   jockeyProfiles: [],
   jockeyRaceRegistrations: [],
   jockeyInvitations: [],
-  horseTournamentRegistrations: [{
+  horseRaceRegistrations: [{
     id: 'registration-old',
     tournamentId: 'tournament-1',
     raceId: 'old-race',
@@ -93,13 +93,13 @@ test('creating a race does not copy approved pairs from another race', async () 
   assert.equal(db.raceEntries.length, 0);
 });
 
-test('a published race can start with ready runners and declared absences', async () => {
+test('a published race can start before schedule after referee check-in is complete', async () => {
   const db = baseDb();
   db.races = [{
     id: 'race-1',
     tournamentId: 'tournament-1',
     name: 'Race',
-    date: '2020-01-01',
+    date: '2099-01-01',
     time: '10:00',
     status: 'published',
     resultStatus: 'draft',

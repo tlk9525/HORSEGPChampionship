@@ -21,7 +21,8 @@ const makeDb = (race) => ({
   }],
   raceEntries: [],
   jockeyInvitations: [],
-  horseTournamentRegistrations: [],
+  jockeyRaceRegistrations: [],
+  horseRaceRegistrations: [],
   notifications: [],
 });
 
@@ -61,5 +62,54 @@ test('owner registration keeps the selected race id', async () => {
   app.route('/', createOwnerRoutes(async () => db, async () => undefined));
 
   assert.equal((await registerHorse(app)).status, 201);
-  assert.equal(db.horseTournamentRegistrations[0].raceId, 'race-1');
+  assert.equal(db.horseRaceRegistrations[0].raceId, 'race-1');
+});
+
+test('owner jockey selection creates a pending invitation after horse approval', async () => {
+  const db = makeDb({
+    id: 'race-1',
+    name: 'Race 1',
+    tournamentId: 'tournament-1',
+    status: 'registration-open',
+    raceClass: 'Open',
+    registrationOpensAt: '2020-01-01T00:00:00.000Z',
+    registrationClosesAt: '2099-01-01T00:00:00.000Z',
+  });
+  db.users.push({ id: 'jockey-1', name: 'Jockey', role: 'jockey', status: 'active' });
+  db.jockeyRaceRegistrations.push({
+    id: 'jockey-reg-1',
+    tournamentId: 'tournament-1',
+    raceId: 'race-1',
+    jockeyUserId: 'jockey-1',
+    status: 'approved',
+  });
+  db.horseRaceRegistrations.push({
+    id: 'horse-reg-1',
+    tournamentId: 'tournament-1',
+    raceId: 'race-1',
+    horseId: 'horse-1',
+    ownerUserId: 'owner-1',
+    jockeyUserId: null,
+    invitationId: null,
+    status: 'approved',
+    notes: '',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    reviewedAt: '2026-01-01T00:00:00.000Z',
+  });
+  const app = new Hono();
+  app.route('/', createOwnerRoutes(async () => db, async () => undefined));
+
+  const response = await app.request('/race-entries', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer owner-token',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ raceId: 'race-1', horseId: 'horse-1', jockeyUserId: 'jockey-1' }),
+  });
+
+  assert.equal(response.status, 201);
+  assert.equal(db.jockeyInvitations[0].status, 'pending');
+  assert.equal(db.jockeyInvitations[0].adminStatus, null);
+  assert.equal(db.horseRaceRegistrations[0].status, 'pending-jockey');
 });

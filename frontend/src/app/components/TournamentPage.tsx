@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   Clock,
   Flag,
-  DollarSign,
   Gauge,
   MapPin,
   ShieldCheck,
@@ -13,8 +12,6 @@ import {
 } from 'lucide-react';
 import {
   AuthUser,
-  HorseRecord,
-  HorseTournamentRegistration,
   JockeyRaceRegistration,
   RaceEntryRecord,
   RaceRecord,
@@ -52,12 +49,9 @@ export default function TournamentPage({
   onNavigate,
 }: TournamentPageProps) {
   const [tournaments, setTournaments] = useState<TournamentRecord[]>([]);
-  const [horses, setHorses] = useState<HorseRecord[]>([]);
   const [races, setRaces] = useState<RaceRecord[]>([]);
   const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
   const [registrations, setRegistrations] = useState<JockeyRaceRegistration[]>([]);
-  const [horseTournamentRegistrations, setHorseTournamentRegistrations] =
-    useState<HorseTournamentRegistration[]>([]);
   const [maxRaceFieldSize, setMaxRaceFieldSize] = useState(10);
   const [selectedTournamentId, setSelectedTournamentId] = useState(
     sessionStorage.getItem('selectedTournamentId') || ''
@@ -70,11 +64,9 @@ export default function TournamentPage({
     getBootstrap()
       .then((data) => {
         setTournaments(data.tournaments);
-        setHorses(data.horses || []);
         setRaces(data.races);
         setRaceEntries(data.raceEntries || []);
         setRegistrations(data.jockeyRaceRegistrations || []);
-        setHorseTournamentRegistrations(data.horseTournamentRegistrations || []);
         setMaxRaceFieldSize(data.limits?.maxRaceFieldSize || 10);
         setSelectedTournamentId((current) => {
           const stored = sessionStorage.getItem('selectedTournamentId');
@@ -226,40 +218,7 @@ export default function TournamentPage({
               (race) => race.tournamentId === tournament.id
             );
             const tournamentRegistrationOpen = registrationWindowOpen(tournament);
-            const isCompletedTournament = tournament.status === 'completed';
             const hasTournamentRaces = tournamentRaces.length > 0;
-            const activeHorseRegistrations = horseTournamentRegistrations.filter(
-              (registration) =>
-                registration.tournamentId === tournament.id &&
-                !['rejected', 'cancelled'].includes(registration.status)
-            );
-            const registeredHorseIds = new Set(
-              activeHorseRegistrations.map((registration) => registration.horseId)
-            );
-            raceEntries
-              .filter(
-                (entry) =>
-                  tournamentRaces.some((race) => race.id === entry.raceId) &&
-                  entry.status !== 'rejected'
-              )
-              .forEach((entry) => registeredHorseIds.add(entry.horseId));
-            const availableOwnerHorseCount = horses.filter(
-              (horse) =>
-                horse.ownerUserId === currentUser?.id &&
-                horse.status === 'approved' &&
-                !registeredHorseIds.has(horse.id)
-            ).length;
-            const approvedHorsesAwaitingJockeyCount = activeHorseRegistrations.filter(
-              (registration) =>
-                registration.ownerUserId === currentUser?.id &&
-                registration.status === 'approved' &&
-                !registration.jockeyUserId
-            ).length;
-            const canRegisterTournamentHorse =
-              currentUser?.role === 'owner' &&
-              !isCompletedTournament &&
-              (tournamentRegistrationOpen && availableOwnerHorseCount > 0 ||
-                approvedHorsesAwaitingJockeyCount > 0);
 
             return (
               <div

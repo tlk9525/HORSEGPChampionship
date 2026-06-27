@@ -108,7 +108,7 @@ export default function JockeyPage({
   const tournamentById = (tournamentId?: string | null) =>
     tournaments.find((tournament) => tournament.id === tournamentId);
   const needsJockeyResponse = (invitation: JockeyInvitation) =>
-    ['pending', 'pending-jockey'].includes(invitation.status);
+    invitation.status === 'pending';
 
   const visibleAssignedEntries = assignedExpanded
     ? raceEntries

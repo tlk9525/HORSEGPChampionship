@@ -89,13 +89,13 @@ const visibleJockeyInvitations = (db, user) => {
   return [];
 };
 
-// Lấy danh sách đăng ký ngựa vào giải mà người dùng được phép xem
-const visibleHorseTournamentRegistrations = (db, user) => {
-  if (user?.role === USER_ROLES.ADMIN) return db.horseTournamentRegistrations || [];
+// Lấy danh sách đăng ký ngựa theo từng race mà người dùng được phép xem
+const visibleHorseRaceRegistrations = (db, user) => {
+  if (user?.role === USER_ROLES.ADMIN) return db.horseRaceRegistrations || [];
   if (user?.role === USER_ROLES.OWNER)
-    return (db.horseTournamentRegistrations || []).filter((r) => r.ownerUserId === user.id);
+    return (db.horseRaceRegistrations || []).filter((r) => r.ownerUserId === user.id);
   if (user?.role === USER_ROLES.JOCKEY)
-    return (db.horseTournamentRegistrations || []).filter((r) => r.jockeyUserId === user.id);
+    return (db.horseRaceRegistrations || []).filter((r) => r.jockeyUserId === user.id);
   return [];
 };
 
@@ -131,7 +131,7 @@ export const createPublicRoutes = (getDb) => {
       }),
       jockeyRaceRegistrations: visibleJockeyRegistrations(db, user),
       jockeyInvitations: visibleJockeyInvitations(db, user),
-      horseTournamentRegistrations: visibleHorseTournamentRegistrations(db, user),
+      horseRaceRegistrations: visibleHorseRaceRegistrations(db, user),
       raceEntries,
       users: visibleUsers(db, user),
       notifications: user

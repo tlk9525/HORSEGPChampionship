@@ -125,7 +125,7 @@ erDiagram
     TIMESTAMPTZ respondedAt
   }
 
-  horseTournamentRegistrations {
+  horseRaceRegistrations {
     VARCHAR id PK
     VARCHAR tournamentId FK
     VARCHAR raceId FK
@@ -201,7 +201,7 @@ erDiagram
 
   tournaments ||--o{ races : contains
   tournaments ||--o{ jockeyInvitations : scopes
-  tournaments ||--o{ horseTournamentRegistrations : contains
+  tournaments ||--o{ horseRaceRegistrations : contains
 
   races ||--o{ raceRefereeAssignments : has_referees
   users ||--o{ raceRefereeAssignments : assigned_referee
@@ -215,11 +215,11 @@ erDiagram
   users ||--o{ jockeyInvitations : jockey_receives
   races ||--o{ jockeyInvitations : invitation_for
 
-  races ||--o{ horseTournamentRegistrations : has_horse_registrations
-  horses ||--o{ horseTournamentRegistrations : registered_for
-  users ||--o{ horseTournamentRegistrations : owner_registers
-  users ||--o{ horseTournamentRegistrations : jockey_selected
-  jockeyInvitations ||--o| horseTournamentRegistrations : backs_pairing
+  races ||--o{ horseRaceRegistrations : has_horse_registrations
+  horses ||--o{ horseRaceRegistrations : registered_for
+  users ||--o{ horseRaceRegistrations : owner_registers
+  users ||--o{ horseRaceRegistrations : jockey_selected
+  jockeyInvitations ||--o| horseRaceRegistrations : backs_pairing
 
   races ||--o{ raceEntries : has_entries
   horses ||--o{ raceEntries : competes
@@ -235,7 +235,7 @@ erDiagram
 
 - `raceRefereeAssignments` is the real link between `races` and referee users. The old duplicated referee fields were removed from `races`.
 - `jockeyRaceRegistrations` stores Jockey availability/approval per Race, not per Tournament.
-- `horseTournamentRegistrations` stores Owner Horse registration and later Owner-Jockey pairing approval for a specific Race.
+- `horseRaceRegistrations` stores Owner Horse registration and later Owner-Jockey pairing approval for a specific Race.
 - `raceEntries` is the official start-list row after Admin approval. It links a Race, Horse, and Jockey.
 - Race state, entry approval state, check-in state, and result state are intentionally separate:
   - Race state: `draft`, `registration-open`, `registration-closed`, `published`, `in-progress`, `finished`, `completed`, `cancelled`.

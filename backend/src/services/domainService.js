@@ -90,9 +90,9 @@ export const isRaceRegistrationOpen = (race, at = Date.now()) => {
 export const activeRace = (race) =>
   race && !['finished', 'completed', 'cancelled'].includes(race.status);
 
-// Lấy danh sách đăng ký ngựa vào giải (loại bỏ các mục bị từ chối hoặc hủy bỏ)
-export const activeHorseTournamentRegistrations = (db, tournamentId) =>
-  (db.horseTournamentRegistrations || []).filter(
+// Lấy danh sách đăng ký ngựa theo từng race (loại bỏ các mục bị từ chối hoặc hủy bỏ)
+export const activeHorseRaceRegistrations = (db, tournamentId) =>
+  (db.horseRaceRegistrations || []).filter(
     (registration) =>
       registration.tournamentId === tournamentId &&
       !['rejected', 'cancelled'].includes(registration.status)
@@ -251,7 +251,7 @@ export const formatApprovals = (db) => [
         targetUserId: horse?.ownerUserId,
       };
     }),
-  ...(db.horseTournamentRegistrations || [])
+  ...(db.horseRaceRegistrations || [])
     .filter(
       (registration) =>
         registration.status === 'pending-admin' &&
@@ -260,7 +260,7 @@ export const formatApprovals = (db) => [
     )
     .map((registration) => ({
       id: registration.id,
-      entityType: 'horseTournament',
+      entityType: 'horseRace',
       type: 'Horse Race Registration',
       name: horseName(db, registration.horseId),
       detail: `Race: ${raceName(db, registration.raceId)} • Owner: ${ownerName(db, registration.ownerUserId)}`,

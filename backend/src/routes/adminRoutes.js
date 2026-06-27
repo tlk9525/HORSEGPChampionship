@@ -416,7 +416,13 @@ export const createAdminRoutes = (getDb, writeDb) => {
       if (entries.length === 0) {
         return c.json({ message: 'A race must have at least one approved participant' }, 400);
       }
-      
+      if (
+        race.registrationClosesAt &&
+        Date.now() < new Date(race.registrationClosesAt).getTime()
+      ) {
+        return c.json({ message: 'Registration cannot close before its configured close time' }, 400);
+      }
+
       if (entries.length > MAX_RACE_FIELD_SIZE) {
         return c.json(
           { message: `A race can have at most ${MAX_RACE_FIELD_SIZE} horses and ${MAX_RACE_FIELD_SIZE} jockeys on the track.` },
@@ -481,9 +487,6 @@ export const createAdminRoutes = (getDb, writeDb) => {
       if (race.status !== 'published') {
         return c.json({ message: 'Race must be published before it can start' }, 400);
       }
-
-      const scheduledStart = new Date(`${race.date}T${race.time}`).getTime();
-      
 
       const readyEntries = entries.filter(
         (entry) => entry.preRaceStatus === 'ready' && !entry.disqualified
@@ -686,21 +689,22 @@ export const createAdminRoutes = (getDb, writeDb) => {
         `${race?.name || 'Race'} participation has been ${decision}.`);
     }
 
-    if (entityType === 'horseTournament') {
-      const registration = (db.horseTournamentRegistrations || []).find(
+    if (entityType === 'horseRace') {
+      const registration = (db.horseRaceRegistrations || []).find(
         (item) =>
           item.id === id &&
           item.status === 'pending-admin' &&
           !item.invitationId &&
           !item.jockeyUserId
       );
-      if (!registration) return c.json({ message: 'Horse tournament registration not found' }, 404);
+      if (!registration) return c.json({ message: 'Horse race registration not found' }, 404);
 
       registration.status = decision === 'approved' ? 'approved' : 'rejected';
       registration.reviewedAt = new Date().toISOString();
 
       const horse = db.horses.find((item) => item.id === registration.horseId);
       const tournament = db.tournaments.find((item) => item.id === registration.tournamentId);
+      const race = db.races.find((item) => item.id === registration.raceId);
       if (horse) {
         horse.jockeyConfirmation = decision === 'approved' ? 'waiting-owner' : 'rejected';
         horse.updatedAt = registration.reviewedAt;
@@ -709,8 +713,8 @@ export const createAdminRoutes = (getDb, writeDb) => {
       createNotification(
         db,
         registration.ownerUserId,
-        decision === 'approved' ? 'Horse tournament registration approved' : 'Horse tournament registration rejected',
-        `${horse?.name || 'Horse'} for ${tournament?.name || 'Tournament'} has been ${decision}.`
+        decision === 'approved' ? 'Horse race registration approved' : 'Horse race registration rejected',
+        `${horse?.name || 'Horse'} for ${race?.name || tournament?.name || 'Race'} has been ${decision}.`
       );
     }
 
@@ -745,7 +749,7 @@ export const createAdminRoutes = (getDb, writeDb) => {
       if (!invitation) return c.json({ message: 'Horse-Jockey pairing approval not found' }, 404);
 
       const horse = db.horses.find((item) => item.id === invitation.horseId);
-      const registration = (db.horseTournamentRegistrations || []).find((item) => item.invitationId === invitation.id);
+      const registration = (db.horseRaceRegistrations || []).find((item) => item.invitationId === invitation.id);
       const targetLabel = raceName(db, invitation.raceId);
 
       if (decision === 'approved') {

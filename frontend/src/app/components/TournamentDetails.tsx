@@ -5,7 +5,6 @@ import {
   Flag,
   MapPin,
   ShieldCheck,
-  Trophy,
   Users,
 } from 'lucide-react';
 import {
@@ -90,8 +89,6 @@ export default function TournamentDetails({ onNavigate }: TournamentDetailsProps
     return raceEntries.filter((entry) => raceIds.has(entry.raceId));
   }, [raceEntries, tournamentRaces]);
 
-  const uniqueHorseIds = new Set(tournamentEntries.map((entry) => entry.horseId));
-  const uniqueJockeyIds = new Set(tournamentEntries.map((entry) => entry.jockeyUserId));
   const isCompleted = tournament?.status === 'completed';
   const visibleRaces = raceListExpanded ? tournamentRaces : tournamentRaces.slice(0, 4);
 

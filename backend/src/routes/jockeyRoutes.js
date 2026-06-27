@@ -167,7 +167,7 @@ export const createJockeyRoutes = (getDb, writeDb) => {
 
     const horse = db.horses.find((item) => item.id === invitation.horseId);
     const targetLabel = raceName(db, invitation.raceId);
-    const horseRegistration = (db.horseTournamentRegistrations || []).find(
+    const horseRegistration = (db.horseRaceRegistrations || []).find(
       (r) => r.invitationId === invitation.id
     );
 

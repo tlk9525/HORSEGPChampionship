@@ -75,9 +75,7 @@ Horse Racing Tournament Website/
 │       │       ├── domain.ts        # Hàm tiện ích chuyển đổi status label
 │       │       └── messageTone.ts   # Phân loại điệu cảm thông báo UI
 │       └── styles/
-│           ├── index.css            # Entry point CSS (import Tailwind)
-│           ├── tailwind.css         # Cấu hình Tailwind v4
-│           └── theme.css            # Design tokens màu sắc chủ đề
+│           └── index.css            # Entry point CSS (Tailwind)
 │
 ├── backend/                         # API server (Node.js)
 │   └── src/
@@ -106,11 +104,7 @@ Horse Racing Tournament Website/
 ├── database/
 │   └── postgres/
 │       ├── schema.sql               # Tạo bảng cơ sở dữ liệu
-│       ├── seed.sql                 # Dữ liệu mẫu ban đầu
-│       └── migrations/
-│           ├── 001_upgrade_existing_database.sql
-│           ├── 002_race_action_logs.sql
-│           └── 003_jockey_race_registrations.sql
+│       └── seed.sql                 # Dữ liệu mẫu ban đầu
 │
 ├── docs/                            # Tài liệu thiết kế hệ thống
 │   ├── erd.drawio                   # Sơ đồ ERD
@@ -264,22 +258,11 @@ Giao diện sẽ chạy tại: `http://127.0.0.1:5173`
 | `npm run db:init` | Tạo schema + nạp dữ liệu mẫu |
 | `npm run db:schema` | Chỉ chạy schema (tạo bảng) |
 | `npm run db:seed` | Chỉ nạp dữ liệu mẫu |
-| `npm run db:migrate:race-registrations` | Nâng cấp đăng ký jockey/ngựa theo từng race |
 | `npm test` | Chạy test nghiệp vụ backend |
 | `npm run typecheck` | Kiểm tra TypeScript |
 | `npm run check` | Chạy typecheck, test và production build |
 | `npm run build` | Build frontend production |
 | `npm run preview` | Xem trước bản build production |
-
-### Nâng cấp database (migration)
-
-Nếu bạn đã có database cũ và muốn nâng cấp mà không mất dữ liệu:
-
-```bash
-node scripts/run-postgres-file.mjs database/postgres/migrations/001_upgrade_existing_database.sql
-```
-
----
 
 ## 🔌 API Endpoints
 
@@ -314,7 +297,6 @@ node scripts/run-postgres-file.mjs database/postgres/migrations/001_upgrade_exis
 | `GET` | `/api/owner/portal` | Portal chủ ngựa |
 | `POST` | `/api/owner/horses` | Đăng ký ngựa mới |
 | `POST` | `/api/owner/horses/:id` | Cập nhật thông tin ngựa |
-| `POST` | `/api/owner/jockey-requests` | Gửi lời mời jockey |
 | `POST` | `/api/owner/race-entries` | Đăng ký ngựa vào cuộc đua |
 
 ### Jockey

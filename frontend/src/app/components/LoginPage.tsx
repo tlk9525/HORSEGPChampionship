@@ -18,13 +18,11 @@ import {
 interface LoginPageProps {
   initialMode?: 'login' | 'register';
   onLogin: (user: AuthUser) => void;
-  onNavigate: (page: string) => void;
 }
 
 export default function LoginPage({
   initialMode = 'login',
   onLogin,
-  onNavigate,
 }: LoginPageProps) {
 
   const [showPassword, setShowPassword] =

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft, Send } from 'lucide-react';
 import {
   HorseRecord,
-  HorseTournamentRegistration,
+  HorseRaceRegistration,
   JockeyProfileRecord,
   RaceRecord,
   TournamentRecord,
@@ -32,7 +32,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
   const [tournamentRaces, setTournamentRaces] = useState<RaceRecord[]>([]);
   const [horses, setHorses] = useState<HorseRecord[]>([]);
   const [jockeys, setJockeys] = useState<JockeyProfileRecord[]>([]);
-  const [horseRegistrations, setHorseRegistrations] = useState<HorseTournamentRegistration[]>([]);
+  const [horseRegistrations, setHorseRegistrations] = useState<HorseRaceRegistration[]>([]);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState({
     horseId: '',
@@ -66,7 +66,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
       .then((data) => {
         const availableHorses = data.horses || [];
         const availableJockeys = data.jockeyProfiles || [];
-        const availableRegistrations = data.horseTournamentRegistrations || [];
+        const availableRegistrations = data.horseRaceRegistrations || [];
         const scheduleRaces = data.races?.length ? data.races : data.race ? [data.race] : [];
 
         setTournament(data.tournament);
@@ -128,7 +128,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
       notes: form.notes,
     })
       .then(() => {
-        setMessage('Horse tournament registration submitted. Admin must approve before jockey selection.');
+        setMessage('Horse race registration submitted. Admin must approve before jockey selection.');
         loadRegistrationData();
       })
       .catch((error) =>
@@ -173,7 +173,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
         <div className="bg-[#12304f] border border-white/10 rounded-3xl p-8">
           <div className="mb-8">
             <p className="text-[#d4af37] text-sm uppercase tracking-widest">
-              Tournament Registration
+              Race Registration
             </p>
 
             <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">

@@ -309,7 +309,6 @@ export default function App() {
                       { replace: true }
                     );
                   }}
-                  onNavigate={navigate}
                 />
               }
             />
@@ -325,7 +324,6 @@ export default function App() {
                       { replace: true }
                     );
                   }}
-                  onNavigate={navigate}
                 />
               }
             />

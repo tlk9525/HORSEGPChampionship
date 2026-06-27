@@ -42,249 +42,46 @@ const getPool = () => {
   return pool;
 };
 
+const requiredRuntimeTables = [
+  'users',
+  'tournaments',
+  'horses',
+  'races',
+  'raceRefereeAssignments',
+  'raceActionLogs',
+  'jockeyProfiles',
+  'jockeyRaceRegistrations',
+  'jockeyInvitations',
+  'horseRaceRegistrations',
+  'raceEntries',
+  'refereeReports',
+  'notifications',
+  'sessions',
+];
+
 const ensureRuntimeSchema = async () => {
   if (!runtimeSchemaPromise) {
     runtimeSchemaPromise = (async () => {
-      const client = await getPool().connect();
+      const { rows } = await getPool().query(
+        `
+          SELECT "tableName"
+          FROM unnest($1::text[]) AS required("tableName")
+          WHERE to_regclass($2 || '.' || quote_ident("tableName")) IS NULL
+        `,
+        [requiredRuntimeTables, 'public']
+      );
 
-      try {
-        await client.query('BEGIN');
-        await client.query(`
-          CREATE TABLE IF NOT EXISTS "raceActionLogs" (
-            "id" VARCHAR(64) PRIMARY KEY,
-            "raceId" VARCHAR(64) NOT NULL REFERENCES "races" ("id") ON DELETE CASCADE,
-            "userId" VARCHAR(64) REFERENCES "users" ("id") ON DELETE SET NULL,
-            "action" VARCHAR(64) NOT NULL,
-            "fromStatus" VARCHAR(64),
-            "toStatus" VARCHAR(64),
-            "details" TEXT,
-            "createdAt" TIMESTAMPTZ NOT NULL
-          )
-        `);
-        await client.query(`
-          CREATE INDEX IF NOT EXISTS "idx_race_action_logs_race"
-          ON "raceActionLogs" ("raceId", "createdAt")
-        `);
-        await client.query(`
-          CREATE TABLE IF NOT EXISTS "refereeReports" (
-            "id" VARCHAR(64) PRIMARY KEY,
-            "raceId" VARCHAR(64) NOT NULL REFERENCES "races" ("id") ON DELETE CASCADE,
-            "raceEntryId" VARCHAR(64) REFERENCES "raceEntries" ("id") ON DELETE SET NULL,
-            "refereeUserId" VARCHAR(64) NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
-            "reportType" VARCHAR(64) NOT NULL DEFAULT 'incident',
-            "description" TEXT NOT NULL,
-            "violation" TEXT,
-            "status" VARCHAR(32) NOT NULL DEFAULT 'submitted'
-              CHECK ("status" IN ('draft', 'submitted', 'reviewed', 'dismissed')),
-            "createdAt" TIMESTAMPTZ NOT NULL,
-            "reviewedAt" TIMESTAMPTZ
-          )
-        `);
-        await client.query(`
-          CREATE INDEX IF NOT EXISTS "idx_referee_reports_race"
-          ON "refereeReports" ("raceId", "status")
-        `);
-        await client.query(`
-          CREATE INDEX IF NOT EXISTS "idx_referee_reports_referee"
-          ON "refereeReports" ("refereeUserId", "status")
-        `);
-        await client.query(`
-          CREATE TABLE IF NOT EXISTS "jockeyRaceRegistrations" (
-            "id" VARCHAR(64) PRIMARY KEY,
-            "raceId" VARCHAR(64) NOT NULL REFERENCES "races" ("id") ON DELETE CASCADE,
-            "jockeyUserId" VARCHAR(64) NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
-            "status" VARCHAR(32) NOT NULL DEFAULT 'pending'
-              CHECK ("status" IN ('pending', 'approved', 'rejected')),
-            "createdAt" TIMESTAMPTZ NOT NULL,
-            "reviewedAt" TIMESTAMPTZ,
-            CONSTRAINT "uq_jockey_race_registration" UNIQUE ("raceId", "jockeyUserId")
-          )
-        `);
-        await client.query(`
-          CREATE INDEX IF NOT EXISTS "idx_jockey_race_registrations_race_status"
-          ON "jockeyRaceRegistrations" ("raceId", "status")
-        `);
-        await client.query(`
-          ALTER TABLE "horses"
-          ADD COLUMN IF NOT EXISTS "weightLb" NUMERIC(7, 2) NOT NULL DEFAULT 0
-        `);
-        await client.query(`
-          DO $$
-          BEGIN
-            IF EXISTS (
-              SELECT 1
-              FROM information_schema.columns
-              WHERE table_name = 'horses'
-                AND column_name = 'weightKg'
-            ) THEN
-              UPDATE "horses"
-              SET "weightLb" = ROUND("weightKg" * 2.20462)
-              WHERE "weightLb" = 0 AND "weightKg" > 0;
-            END IF;
-          END $$;
-        `);
-        await client.query(`
-          ALTER TABLE "horses"
-          DROP COLUMN IF EXISTS "weightKg"
-        `);
-        await client.query(`
-          ALTER TABLE "jockeyProfiles"
-          ADD COLUMN IF NOT EXISTS "weightLb" NUMERIC(6, 2) NOT NULL DEFAULT 0
-        `);
-        await client.query(`
-          DO $$
-          BEGIN
-            IF EXISTS (
-              SELECT 1
-              FROM information_schema.columns
-              WHERE table_name = 'jockeyProfiles'
-                AND column_name = 'weight'
-            ) THEN
-              UPDATE "jockeyProfiles"
-              SET "weightLb" = ROUND("weight" * 2.20462)
-              WHERE "weightLb" = 0 AND "weight" > 0;
-            END IF;
-          END $$;
-        `);
-        await client.query(`
-          ALTER TABLE "jockeyProfiles"
-          DROP COLUMN IF EXISTS "weight"
-        `);
-        await client.query(`
-          ALTER TABLE "raceEntries"
-          ADD COLUMN IF NOT EXISTS "ratingChange" NUMERIC(6, 2) NOT NULL DEFAULT 0
-        `);
-        await client.query(`
-          ALTER TABLE "raceEntries"
-          ADD COLUMN IF NOT EXISTS "postRaceRating" NUMERIC(6, 2) NOT NULL DEFAULT 0
-        `);
-        await client.query(`
-          ALTER TABLE "tournaments"
-          ADD COLUMN IF NOT EXISTS "registrationOpensAt" TIMESTAMPTZ
-        `);
-        await client.query(`
-          ALTER TABLE "tournaments"
-          ADD COLUMN IF NOT EXISTS "registrationClosesAt" TIMESTAMPTZ
-        `);
-        await client.query(`
-          ALTER TABLE "horseTournamentRegistrations"
-          ALTER COLUMN "jockeyUserId" DROP NOT NULL
-        `);
-        await client.query(`
-          ALTER TABLE "horseTournamentRegistrations"
-          ADD COLUMN IF NOT EXISTS "raceId" VARCHAR(64)
-        `);
-        await client.query(`
-          UPDATE "horseTournamentRegistrations" AS "registration"
-          SET "raceId" = "invitation"."raceId"
-          FROM "jockeyInvitations" AS "invitation"
-          WHERE "registration"."raceId" IS NULL
-            AND "registration"."invitationId" = "invitation"."id"
-            AND "invitation"."raceId" IS NOT NULL
-        `);
-        await client.query(`
-          ALTER TABLE "horseTournamentRegistrations"
-          DROP CONSTRAINT IF EXISTS "uq_horse_tournament_registration",
-          DROP CONSTRAINT IF EXISTS "uq_jockey_tournament_pairing"
-        `);
-        await client.query(`
-          CREATE UNIQUE INDEX IF NOT EXISTS "uq_horse_race_registration"
-          ON "horseTournamentRegistrations" ("raceId", "horseId")
-          WHERE "raceId" IS NOT NULL
-        `);
-        await client.query(`
-          CREATE UNIQUE INDEX IF NOT EXISTS "uq_jockey_race_pairing"
-          ON "horseTournamentRegistrations" ("raceId", "jockeyUserId")
-          WHERE "raceId" IS NOT NULL AND "jockeyUserId" IS NOT NULL
-        `);
-        await client.query(`
-          DO $$
-          BEGIN
-            IF NOT EXISTS (
-              SELECT 1 FROM pg_constraint
-              WHERE conname = 'fk_horse_tournament_registrations_race'
-            ) THEN
-              ALTER TABLE "horseTournamentRegistrations"
-                ADD CONSTRAINT "fk_horse_tournament_registrations_race"
-                FOREIGN KEY ("raceId") REFERENCES "races" ("id")
-                ON DELETE CASCADE NOT VALID;
-            END IF;
-          END $$;
-        `);
-        await client.query(`
-          UPDATE "tournaments" AS "tournament"
-          SET
-            "registrationOpensAt" = COALESCE(
-              "tournament"."registrationOpensAt",
-              (
-                SELECT MIN("race"."registrationOpensAt")
-                FROM "races" AS "race"
-                WHERE "race"."tournamentId" = "tournament"."id"
-              )
-            ),
-            "registrationClosesAt" = COALESCE(
-              "tournament"."registrationClosesAt",
-              (
-                SELECT MAX("race"."registrationClosesAt")
-                FROM "races" AS "race"
-                WHERE "race"."tournamentId" = "tournament"."id"
-              )
-            )
-        `);
-        await client.query(`
-          UPDATE "races"
-          SET
-            "handicapMin" = CASE "raceClass"
-              WHEN 'Class 1' THEN 115
-              WHEN 'Class 2' THEN 115
-              WHEN 'Class 3' THEN 113
-              WHEN 'Class 4' THEN 112
-              WHEN 'Class 5' THEN 110
-              ELSE 110
-            END,
-            "handicapMax" = CASE "raceClass"
-              WHEN 'Class 1' THEN 135
-              WHEN 'Class 2' THEN 135
-              WHEN 'Class 3' THEN 133
-              WHEN 'Class 4' THEN 132
-              WHEN 'Class 5' THEN 130
-              ELSE 135
-            END
-          WHERE ("handicapMin" = 115 AND "handicapMax" = 135)
-             OR "handicapMax" < 100
-        `);
-        await client.query(`
-          WITH "fieldRatings" AS (
-            SELECT "raceId", MAX("ratingSnapshot") AS "topRating"
-            FROM "raceEntries"
-            WHERE "ratingSnapshot" > 0
-            GROUP BY "raceId"
-          )
-          UPDATE "raceEntries" AS "entry"
-          SET "handicap" = LEAST(
-            "race"."handicapMax",
-            GREATEST(
-            "race"."handicapMin",
-            ROUND(
-              "race"."handicapMax" -
-              ("fieldRatings"."topRating" - "entry"."ratingSnapshot")
-            )
-            )
-          )
-          FROM "fieldRatings", "races" AS "race"
-          WHERE "entry"."raceId" = "fieldRatings"."raceId"
-            AND "entry"."raceId" = "race"."id"
-            AND "entry"."ratingSnapshot" > 0
-        `);
-        await client.query('COMMIT');
-      } catch (error) {
-        await client.query('ROLLBACK');
-        runtimeSchemaPromise = undefined;
-        throw error;
-      } finally {
-        client.release();
+      if (rows.length) {
+        throw new Error(
+          'Database schema is missing tables: ' +
+            rows.map((row) => row.tableName).join(', ') +
+            '. Run npm run db:init.'
+        );
       }
-    })();
+    })().catch((error) => {
+      runtimeSchemaPromise = undefined;
+      throw error;
+    });
   }
 
   return runtimeSchemaPromise;
@@ -358,7 +155,7 @@ export const readDb = async () => {
     jockeyProfiles,
     jockeyRaceRegistrations,
     jockeyInvitations,
-    horseTournamentRegistrations,
+    horseRaceRegistrations,
     raceEntries,
     raceRefereeAssignments,
     raceActionLogs,
@@ -385,7 +182,7 @@ export const readDb = async () => {
       { column: 'createdAt', direction: 'DESC' },
       { column: 'id' },
     ]),
-    selectAll('horseTournamentRegistrations', [
+    selectAll('horseRaceRegistrations', [
       { column: 'createdAt', direction: 'DESC' },
       { column: 'id' },
     ]),
@@ -453,7 +250,7 @@ export const readDb = async () => {
     jockeyProfiles,
     jockeyRaceRegistrations,
     jockeyInvitations,
-    horseTournamentRegistrations,
+    horseRaceRegistrations,
     raceEntries: raceEntries.map((entry) => ({
       ...entry,
       ownerConfirmed: bool(entry.ownerConfirmed),
@@ -540,7 +337,7 @@ const tableDeleteOrder = [
   'raceActionLogs',
   'refereeReports',
   'raceEntries',
-  'horseTournamentRegistrations',
+  'horseRaceRegistrations',
   'jockeyInvitations',
   'jockeyRaceRegistrations',
   'jockeyProfiles',
@@ -754,7 +551,7 @@ export const writeDb = async (db) => {
     );
 
     await writeRows(
-      'horseTournamentRegistrations',
+      'horseRaceRegistrations',
       [
         'id',
         'tournamentId',
@@ -768,7 +565,7 @@ export const writeDb = async (db) => {
         'createdAt',
         'reviewedAt',
       ],
-      (db.horseTournamentRegistrations || []).map((registration) => ({
+      (db.horseRaceRegistrations || []).map((registration) => ({
         ...registration,
         raceId: registration.raceId || null,
         jockeyUserId: registration.jockeyUserId || null,
