@@ -413,13 +413,6 @@ export const createAdminRoutes = (getDb, writeDb) => {
       if (entries.length === 0) {
         return c.json({ message: 'A race must have at least one approved participant' }, 400);
       }
-      if (
-        race.registrationClosesAt &&
-        Date.now() < new Date(race.registrationClosesAt).getTime()
-      ) {
-        return c.json({ message: 'Registration cannot close before its configured close time' }, 400);
-      }
-
       if (entries.length > MAX_RACE_FIELD_SIZE) {
         return c.json(
           { message: `A race can have at most ${MAX_RACE_FIELD_SIZE} horses and ${MAX_RACE_FIELD_SIZE} jockeys on the track.` },

@@ -93,6 +93,34 @@ test('creating a race does not copy approved pairs from another race', async () 
   assert.equal(db.raceEntries.length, 0);
 });
 
+test('admin can close registration before configured close time to start referee check-in', async () => {
+  const db = baseDb();
+  db.races = [{
+    id: 'race-1',
+    tournamentId: 'tournament-1',
+    name: 'Race',
+    date: '2099-01-01',
+    time: '10:00',
+    status: 'registration-open',
+    raceClass: 'Open',
+    handicapMin: 115,
+    handicapMax: 135,
+    registrationOpensAt: '2020-01-01T00:00:00.000Z',
+    registrationClosesAt: '2099-01-01T00:00:00.000Z',
+  }];
+  db.raceEntries = [
+    { id: 'entry-1', raceId: 'race-1', horseId: 'horse-1', jockeyUserId: 'jockey-1', status: 'approved', disqualified: false },
+  ];
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/races/race-1/close-registration');
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.race.status, 'registration-closed');
+  assert.equal(db.raceEntries[0].preRaceStatus, 'ready-for-referee');
+});
+
 test('a published race can start before schedule after referee check-in is complete', async () => {
   const db = baseDb();
   db.races = [{
