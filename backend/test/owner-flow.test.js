@@ -66,6 +66,38 @@ test('owner registration keeps the selected race id', async () => {
   assert.equal(db.horseRaceRegistrations[0].raceId, 'race-1');
 });
 
+test('owner profile update preserves an official Class 5 rating of zero', async () => {
+  const db = makeDb({
+    id: 'race-1',
+    tournamentId: 'tournament-1',
+    status: 'registration-open',
+    raceClass: 'Class 5',
+  });
+  db.horses[0].overallRating = 0;
+  const app = new Hono();
+  app.route('/', createOwnerRoutes(async () => db, async () => undefined));
+
+  const response = await app.request('/horses/horse-1', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer owner-token',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: 'Horse',
+      breed: 'Arabian',
+      age: 3,
+      speedRating: 90,
+      staminaRating: 90,
+      formRating: 90,
+      healthRating: 90,
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(db.horses[0].overallRating, 0);
+});
+
 test('owner jockey selection creates a pending invitation after horse approval', async () => {
   const db = makeDb({
     id: 'race-1',

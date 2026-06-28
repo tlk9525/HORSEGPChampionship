@@ -32,8 +32,16 @@ export const horseOverallRating = (horse = {}) => {
 };
 
 export const officialHorseRating = (horse = {}) => {
-  const storedRating = numeric(horse.overallRating, 0);
-  return Math.round(clamp(storedRating > 0 ? storedRating : horseOverallRating(horse), 0, 140));
+  const hasStoredRating =
+    horse.overallRating !== null &&
+    horse.overallRating !== undefined &&
+    horse.overallRating !== '' &&
+    Number.isFinite(Number(horse.overallRating));
+  const rating = hasStoredRating
+    ? Number(horse.overallRating)
+    : horseOverallRating(horse);
+
+  return Math.round(clamp(rating, 0, 140));
 };
 
 
@@ -77,10 +85,25 @@ const ratedFieldFactor = (fieldSize) => {
 const roundRatingChange = (value) =>
   value < 0 ? -Math.round(Math.abs(value)) : Math.round(value);
 
+const ratingSnapshotValue = (entry) => {
+  if (
+    entry?.ratingSnapshot === null ||
+    entry?.ratingSnapshot === undefined ||
+    entry?.ratingSnapshot === ''
+  ) {
+    return null;
+  }
+
+  const parsed = Number(entry.ratingSnapshot);
+  return Number.isFinite(parsed)
+    ? Math.round(clamp(parsed, 0, 140))
+    : null;
+};
+
 // Rating compares the actual finishing score with the score expected from
 // ratingSnapshot against every other classified starter in the field.
 export const computePostRaceRating = (entry, fieldEntries = []) => {
-  const previousRating = Math.round(clamp(numeric(entry?.ratingSnapshot, 0), 0, 140));
+  const previousRating = ratingSnapshotValue(entry);
   const position = Number(entry?.position);
   const rankedEntries = fieldEntries.filter(
     (item) => Number.isInteger(Number(item.position)) && Number(item.position) > 0
@@ -88,7 +111,7 @@ export const computePostRaceRating = (entry, fieldEntries = []) => {
   const fieldSize = rankedEntries.length;
 
   if (
-    !previousRating ||
+    previousRating === null ||
     !Number.isInteger(position) ||
     position < 1 ||
     position > fieldSize ||
@@ -99,9 +122,11 @@ export const computePostRaceRating = (entry, fieldEntries = []) => {
 
   const opponentRatings = rankedEntries
     .filter((item) => item !== entry && (!entry?.id || item.id !== entry.id))
-    .map((item) => Math.round(clamp(numeric(item.ratingSnapshot, 0), 0, 140)))
-    .filter((rating) => rating > 0);
-  if (opponentRatings.length !== fieldSize - 1) {
+    .map(ratingSnapshotValue);
+  if (
+    opponentRatings.length !== fieldSize - 1 ||
+    opponentRatings.some((rating) => rating === null)
+  ) {
     return { previousRating, ratingChange: 0, postRaceRating: previousRating };
   }
 

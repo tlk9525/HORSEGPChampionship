@@ -347,7 +347,7 @@ export default function JockeyPage({
                             <div>
                               <p className="text-gray-500 text-xs">Rating</p>
                               <p className="text-white text-2xl font-black">
-                                {entry.ratingSnapshot || 'TBD'}
+                                {entry.ratingSnapshot ?? 'TBD'}
                               </p>
                             </div>
 

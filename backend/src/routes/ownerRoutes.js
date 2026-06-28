@@ -279,7 +279,12 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     horse.weightLb = Number(weightLb) || 0; horse.heightCm = Number(heightCm) || 0;
     horse.speedRating = numeric(speedRating, 75); horse.staminaRating = numeric(staminaRating, 75);
     horse.formRating = numeric(formRating, 75); horse.healthRating = numeric(healthRating, 80);
-    if (!numeric(horse.overallRating, 0)) {
+    const hasOfficialRating =
+      horse.overallRating !== null &&
+      horse.overallRating !== undefined &&
+      horse.overallRating !== '' &&
+      Number.isFinite(Number(horse.overallRating));
+    if (!hasOfficialRating) {
       horse.overallRating = horseOverallRating({ speedRating, staminaRating, formRating, healthRating });
     }
     horse.healthStatus = healthStatus || ''; horse.profileNotes = profileNotes || '';

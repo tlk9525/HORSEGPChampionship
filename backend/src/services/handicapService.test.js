@@ -4,6 +4,7 @@ import {
   computePostRaceRating,
   computeRaceHandicap,
   horseOverallRating,
+  officialHorseRating,
 } from './handicapService.js';
 
 test('initial rating uses the documented attribute weights', () => {
@@ -32,6 +33,19 @@ test('assigned weight uses one pound per rating point below the top horse', () =
   assert.deepEqual(
     computeRaceHandicap({ overallRating: 60 }, race, 90),
     { rating: 60, handicap: 115 }
+  );
+});
+
+test('official rating zero is preserved instead of recalculating from attributes', () => {
+  assert.equal(
+    officialHorseRating({
+      overallRating: 0,
+      speedRating: 100,
+      staminaRating: 100,
+      formRating: 100,
+      healthRating: 100,
+    }),
+    0
   );
 });
 
@@ -92,5 +106,34 @@ test('positive and negative half-point changes round symmetrically', () => {
   assert.deepEqual(
     entries.map((entry) => computePostRaceRating(entry, entries).ratingChange),
     [3, 1, 0, -1, -3]
+  );
+});
+
+test('zero is a valid Class 5 rating snapshot and does not invalidate the field', () => {
+  const entries = Array.from({ length: 10 }, (_, index) => ({
+    id: `entry-${index + 1}`,
+    position: index + 1,
+    ratingSnapshot: 0,
+  }));
+
+  assert.deepEqual(
+    entries.map((entry) => computePostRaceRating(entry, entries).ratingChange),
+    [5, 4, 3, 2, 1, -1, -2, -3, -4, -5]
+  );
+  assert.equal(computePostRaceRating(entries[0], entries).postRaceRating, 5);
+});
+
+test('missing or invalid rating snapshots do not silently become rating zero', () => {
+  const entries = Array.from({ length: 10 }, (_, index) => ({
+    id: `entry-${index + 1}`,
+    position: index + 1,
+    ratingSnapshot: index === 9 ? null : 75,
+  }));
+
+  assert.equal(computePostRaceRating(entries[0], entries).ratingChange, 0);
+  assert.equal(
+    computePostRaceRating({ ...entries[0], ratingSnapshot: 'invalid' }, entries)
+      .ratingChange,
+    0
   );
 });

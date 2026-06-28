@@ -73,20 +73,19 @@ export default function RegisterHorsePage({
   const latestAdjustment = activeHorse
     ? raceEntries
         .filter((entry) => {
-          const postRaceRating = Number(entry.postRaceRating || 0);
-          const ratingChange = Number(entry.ratingChange || 0);
           return (
             entry.horseId === activeHorse.id &&
-            entry.resultStatus === 'official' &&
-            (postRaceRating > 0 || ratingChange !== 0)
+            entry.resultStatus === 'official'
           );
         })
         .map((entry) => {
           const race = races.find((item) => item.id === entry.raceId);
-          const ratingSnapshot = Number(entry.ratingSnapshot || 0);
+          const ratingSnapshot = Number(entry.ratingSnapshot ?? 0);
           const ratingChange = Number(entry.ratingChange || 0);
           const postRaceRating =
-            Number(entry.postRaceRating || 0) || ratingSnapshot + ratingChange;
+            entry.postRaceRating === null || entry.postRaceRating === undefined
+              ? ratingSnapshot + ratingChange
+              : Number(entry.postRaceRating);
           const sortTime = race
             ? Date.parse(`${race.raceDate}T${race.raceTime || '00:00'}`)
             : 0;

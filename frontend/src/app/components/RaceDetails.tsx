@@ -148,7 +148,13 @@ export default function RaceDetails() {
     const jockeyProfile = jockeyProfiles.find(
       (profile) => profile.userId === entry.jockeyUserId
     );
-    const rating = Number(entry.ratingSnapshot || 0) || ratingForHorse(horse);
+    const hasRatingSnapshot =
+      entry.ratingSnapshot !== null &&
+      entry.ratingSnapshot !== undefined &&
+      Number.isFinite(Number(entry.ratingSnapshot));
+    const rating = hasRatingSnapshot
+      ? Number(entry.ratingSnapshot)
+      : ratingForHorse(horse);
     const ratingChange = Math.round(Number(entry.ratingChange || 0));
     const postRaceRating = Number(entry.postRaceRating || 0);
 
@@ -171,7 +177,8 @@ export default function RaceDetails() {
       rating: formatRating(rating),
       ratingChange,
       ratingChangeLabel: `${ratingChange > 0 ? '+' : ''}${ratingChange}`,
-      postRaceRating: postRaceRating > 0 ? formatRating(postRaceRating) : '-',
+      postRaceRating:
+        entry.resultStatus === 'official' ? formatRating(postRaceRating) : '-',
       horseWeightLb:
         lbValue(entry.horseWeightLb) !== '-'
           ? lbValue(entry.horseWeightLb)

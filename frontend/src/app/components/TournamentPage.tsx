@@ -492,7 +492,7 @@ export default function TournamentPage({
                                 key={entry.id}
                                 className="px-3 py-2 rounded-lg bg-[#071a2f]/40 border border-white/10 text-sm text-white"
                               >
-                                Gate {entry.lane || '-'} • {entry.horseName || 'Horse'} • Rating {entry.ratingSnapshot || 'TBD'} • Assigned Wt. {Number(entry.handicap || 0).toFixed(0)}lb
+                                Gate {entry.lane || '-'} • {entry.horseName || 'Horse'} • Rating {entry.ratingSnapshot ?? 'TBD'} • Assigned Wt. {Number(entry.handicap || 0).toFixed(0)}lb
                               </span>
                             ))}
                           </div>

@@ -15,6 +15,15 @@ export const initialHorseRating = (horse: Partial<HorseRecord>) =>
 
 export const officialHorseRating = (horse?: HorseRecord) => {
   if (!horse) return 0;
-  const stored = Number(horse.overallRating || 0);
-  return Math.round(stored > 0 ? stored : initialHorseRating(horse));
+  const storedRating: unknown = horse.overallRating;
+  const hasStoredRating =
+    storedRating !== null &&
+    storedRating !== undefined &&
+    storedRating !== '' &&
+    Number.isFinite(Number(storedRating));
+  const rating = hasStoredRating
+    ? Number(storedRating)
+    : initialHorseRating(horse);
+
+  return Math.round(Math.min(140, Math.max(0, rating)));
 };

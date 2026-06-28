@@ -483,14 +483,29 @@ export const createAdminRoutes = (getDb, writeDb) => {
       if (!['registration-closed', 'published'].includes(race.status)) {
         return c.json({ message: 'Close registration before publishing the race' }, 400);
       }
-      if (entries.length === 0) {
-        return c.json({ message: 'A race must have at least one approved participant before publishing' }, 400);
+      if (
+        approvedPairEntries.length !== MAX_RACE_FIELD_SIZE ||
+        approvedHorseCount !== MAX_RACE_FIELD_SIZE ||
+        approvedJockeyCount !== MAX_RACE_FIELD_SIZE
+      ) {
+        return c.json(
+          {
+            message: `A race can be published only with exactly ${MAX_RACE_FIELD_SIZE} distinct approved horse-jockey pairs. Current: ${approvedPairCount}/${MAX_RACE_FIELD_SIZE}.`,
+          },
+          400
+        );
       }
       race.status = 'published';
       race.updatedAt = new Date().toISOString();
       entries.forEach((entry) => {
         const horse = db.horses.find((item) => item.id === entry.horseId);
-        const msg = `${race.name} has been published. Gate ${entry.lane}, rating ${entry.ratingSnapshot || 'TBD'}, assigned weight ${entry.handicap}lb.`;
+        const ratingLabel =
+          entry.ratingSnapshot === null ||
+          entry.ratingSnapshot === undefined ||
+          entry.ratingSnapshot === ''
+            ? 'TBD'
+            : entry.ratingSnapshot;
+        const msg = `${race.name} has been published. Gate ${entry.lane}, rating ${ratingLabel}, assigned weight ${entry.handicap}lb.`;
         createNotification(db, horse?.ownerUserId, 'Race published', msg);
         createNotification(db, entry.jockeyUserId, 'Race published', msg);
       });
@@ -574,6 +589,24 @@ export const createAdminRoutes = (getDb, writeDb) => {
         return c.json({ message: 'A race needs at least one competing participant before completion' }, 400);
       }
 
+      const ratingResults = competingEntries.map((entry) => ({
+        entry,
+        result: computePostRaceRating(entry, competingEntries),
+      }));
+      const invalidRatingResult = ratingResults.find(
+        ({ result }) =>
+          result.previousRating === null ||
+          (competingEntries.length >= 4 && !result.calcLog)
+      );
+      if (invalidRatingResult) {
+        return c.json(
+          {
+            message: `Cannot complete results because entry ${invalidRatingResult.entry.id} has a missing or invalid rating snapshot.`,
+          },
+          400
+        );
+      }
+
       race.status = 'completed';
       race.resultStatus = 'official';
       race.awardsPublished = true;
@@ -583,8 +616,7 @@ export const createAdminRoutes = (getDb, writeDb) => {
           ? 'disqualified'
           : 'official';
       });
-      competingEntries.forEach((entry) => {
-        const result = computePostRaceRating(entry, competingEntries);
+      ratingResults.forEach(({ entry, result }) => {
         const horse = db.horses.find((item) => item.id === entry.horseId);
         entry.ratingChange = result.ratingChange;
         entry.postRaceRating = result.postRaceRating;

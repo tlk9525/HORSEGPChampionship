@@ -190,6 +190,31 @@ test('admin can close registration after 10 horse-jockey pairs are approved', as
   );
 });
 
+test('admin cannot publish legacy closed registration with fewer than 10 pairs', async () => {
+  const db = baseDb();
+  db.races = [{
+    id: 'race-1',
+    tournamentId: 'tournament-1',
+    name: 'Race',
+    status: 'registration-closed',
+  }];
+  db.raceEntries = [{
+    id: 'entry-1',
+    raceId: 'race-1',
+    horseId: 'horse-1',
+    jockeyUserId: 'jockey-1',
+    status: 'approved',
+  }];
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/races/race-1/publish');
+
+  assert.equal(result.status, 400);
+  assert.match(result.body.message, /exactly 10 distinct approved/i);
+  assert.equal(db.races[0].status, 'registration-closed');
+});
+
 test('admin completion applies expected-versus-actual rating changes to horses', async () => {
   const db = baseDb();
   db.races = [{
@@ -232,6 +257,46 @@ test('admin completion applies expected-versus-actual rating changes to horses',
     db.horses.map((horse) => horse.overallRating),
     [80, 79, 78, 77, 76, 74, 73, 72, 71, 70]
   );
+});
+
+test('admin cannot complete results with a missing rating snapshot', async () => {
+  const db = baseDb();
+  db.races = [{
+    id: 'race-1',
+    tournamentId: 'tournament-1',
+    name: 'Race',
+    status: 'finished',
+    resultStatus: 'submitted',
+  }];
+  db.horses = Array.from({ length: 4 }, (_, index) => ({
+    id: `horse-${index + 1}`,
+    name: `Horse ${index + 1}`,
+    ownerUserId: 'owner-1',
+    overallRating: 75,
+  }));
+  db.raceEntries = Array.from({ length: 4 }, (_, index) => ({
+    id: `entry-${index + 1}`,
+    raceId: 'race-1',
+    horseId: `horse-${index + 1}`,
+    jockeyUserId: `jockey-${index + 1}`,
+    status: 'approved',
+    preRaceStatus: 'ready',
+    disqualified: false,
+    resultStatus: 'submitted',
+    ratingSnapshot: index === 3 ? null : 75,
+    position: index + 1,
+  }));
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/races/race-1/complete-results');
+
+  assert.equal(result.status, 400);
+  assert.match(result.body.message, /missing or invalid rating snapshot/i);
+  assert.equal(db.races[0].status, 'finished');
+  assert.equal(db.races[0].resultStatus, 'submitted');
+  assert.ok(db.raceEntries.every((entry) => entry.ratingChange === undefined));
+  assert.ok(db.horses.every((horse) => horse.overallRating === 75));
 });
 
 test('a published race can start before schedule after referee check-in is complete', async () => {
