@@ -125,7 +125,7 @@ export default function RaceDetails() {
         .filter(
           (entry) =>
             entry.raceId === selectedRace?.id &&
-            !['rejected', 'withdrawn'].includes(entry.status)
+            entry.status !== 'rejected'
         )
         .sort((a, b) => (a.lane || 999) - (b.lane || 999)),
     [entries, selectedRace?.id]
