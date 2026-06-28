@@ -55,6 +55,19 @@ const formatDateInput = (value: string) => {
 };
 
 const dateInputToIso = (value: string) => {
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+    const isValidDate =
+      date.getUTCFullYear() === Number(year) &&
+      date.getUTCMonth() === Number(month) - 1 &&
+      date.getUTCDate() === Number(day);
+
+    return isValidDate ? value : '';
+  }
+
   const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
 
   if (!match) return '';
@@ -969,32 +982,28 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
 
                 <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="Start date (dd/MM/yyyy)"
+                  type="date"
+                  placeholder="Start date"
                   value={tournamentForm.startDate}
                   onChange={(event) =>
                     setTournamentForm({
                       ...tournamentForm,
-                      startDate: formatDateInput(event.target.value),
+                      startDate: event.target.value,
                     })
                   }
-                  maxLength={10}
                   className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
                 />
 
                 <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="Final date (dd/MM/yyyy)"
+                  type="date"
+                  placeholder="Final date"
                   value={tournamentForm.finalDate}
                   onChange={(event) =>
                     setTournamentForm({
                       ...tournamentForm,
-                      finalDate: formatDateInput(event.target.value),
+                      finalDate: event.target.value,
                     })
                   }
-                  maxLength={10}
                   className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
                 />
 
