@@ -404,14 +404,25 @@ export const createAdminRoutes = (getDb, writeDb) => {
     const entries = (db.raceEntries || []).filter(
       (entry) => entry.raceId === race.id && entry.status === 'approved'
     );
+    const approvedPairEntries = entries.filter(
+      (entry) => entry.horseId && entry.jockeyUserId
+    );
+    const approvedHorseCount = new Set(
+      approvedPairEntries.map((entry) => entry.horseId)
+    ).size;
+    const approvedJockeyCount = new Set(
+      approvedPairEntries.map((entry) => entry.jockeyUserId)
+    ).size;
+    const approvedPairCount = Math.min(
+      approvedPairEntries.length,
+      approvedHorseCount,
+      approvedJockeyCount
+    );
     const fromStatus = race.status;
 
     if (action === 'close-registration') {
       if (race.status !== 'registration-open') {
         return c.json({ message: 'Only an open registration can be closed' }, 400);
-      }
-      if (entries.length === 0) {
-        return c.json({ message: 'A race must have at least one approved participant' }, 400);
       }
       if (entries.length > MAX_RACE_FIELD_SIZE) {
         return c.json(
@@ -419,14 +430,26 @@ export const createAdminRoutes = (getDb, writeDb) => {
           400
         );
       }
+      if (
+        approvedPairEntries.length !== MAX_RACE_FIELD_SIZE ||
+        approvedHorseCount !== MAX_RACE_FIELD_SIZE ||
+        approvedJockeyCount !== MAX_RACE_FIELD_SIZE
+      ) {
+        return c.json(
+          {
+            message: `Registration can close only after Admin approves exactly ${MAX_RACE_FIELD_SIZE} distinct horse-jockey pairs. Current: ${approvedPairCount}/${MAX_RACE_FIELD_SIZE}.`,
+          },
+          400
+        );
+      }
 
       race.status = 'registration-closed';
-      race.participants = entries.length;
-      race.ownerConfirmed = entries.length;
-      race.jockeyConfirmed = entries.length;
+      race.participants = approvedPairEntries.length;
+      race.ownerConfirmed = approvedPairEntries.length;
+      race.jockeyConfirmed = approvedPairEntries.length;
       race.updatedAt = new Date().toISOString();
 
-      const sortedEntries = [...entries];
+      const sortedEntries = [...approvedPairEntries];
       for (let index = sortedEntries.length - 1; index > 0; index -= 1) {
         const swapIndex = Math.floor(Math.random() * (index + 1));
         [sortedEntries[index], sortedEntries[swapIndex]] = [

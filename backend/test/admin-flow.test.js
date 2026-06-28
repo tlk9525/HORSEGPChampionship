@@ -93,7 +93,7 @@ test('creating a race does not copy approved pairs from another race', async () 
   assert.equal(db.raceEntries.length, 0);
 });
 
-test('admin can close registration before configured close time to start referee check-in', async () => {
+test('admin cannot close registration before 10 horse-jockey pairs are approved', async () => {
   const db = baseDb();
   db.races = [{
     id: 'race-1',
@@ -116,9 +116,122 @@ test('admin can close registration before configured close time to start referee
 
   const result = await requestJson(app, '/races/race-1/close-registration');
 
+  assert.equal(result.status, 400);
+  assert.match(result.body.message, /Current: 1\/10/i);
+  assert.equal(db.races[0].status, 'registration-open');
+});
+
+test('admin cannot close registration with duplicate approved jockeys', async () => {
+  const db = baseDb();
+  db.races = [{
+    id: 'race-1',
+    tournamentId: 'tournament-1',
+    name: 'Race',
+    status: 'registration-open',
+  }];
+  db.raceEntries = Array.from({ length: 10 }, (_, index) => ({
+    id: `entry-${index + 1}`,
+    raceId: 'race-1',
+    horseId: `horse-${index + 1}`,
+    jockeyUserId: 'jockey-1',
+    status: 'approved',
+  }));
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/races/race-1/close-registration');
+
+  assert.equal(result.status, 400);
+  assert.match(result.body.message, /Current: 1\/10/i);
+  assert.equal(db.races[0].status, 'registration-open');
+});
+
+test('admin can close registration after 10 horse-jockey pairs are approved', async () => {
+  const db = baseDb();
+  db.races = [{
+    id: 'race-1',
+    tournamentId: 'tournament-1',
+    name: 'Race',
+    date: '2099-01-01',
+    time: '10:00',
+    status: 'registration-open',
+    raceClass: 'Open',
+    handicapMin: 115,
+    handicapMax: 135,
+    registrationOpensAt: '2020-01-01T00:00:00.000Z',
+    registrationClosesAt: '2099-01-01T00:00:00.000Z',
+  }];
+  db.horses = Array.from({ length: 10 }, (_, index) => ({
+    id: `horse-${index + 1}`,
+    name: `Horse ${index + 1}`,
+    ownerUserId: 'owner-1',
+    overallRating: 50 + index,
+  }));
+  db.raceEntries = Array.from({ length: 10 }, (_, index) => ({
+    id: `entry-${index + 1}`,
+    raceId: 'race-1',
+    horseId: `horse-${index + 1}`,
+    jockeyUserId: `jockey-${index + 1}`,
+    status: 'approved',
+    disqualified: false,
+  }));
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/races/race-1/close-registration');
+
   assert.equal(result.status, 200);
   assert.equal(result.body.race.status, 'registration-closed');
-  assert.equal(db.raceEntries[0].preRaceStatus, 'ready-for-referee');
+  assert.equal(db.raceEntries.length, 10);
+  assert.ok(db.raceEntries.every((entry) => entry.preRaceStatus === 'ready-for-referee'));
+  assert.deepEqual(
+    db.raceEntries.map((entry) => entry.lane).sort((a, b) => a - b),
+    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  );
+});
+
+test('admin completion applies expected-versus-actual rating changes to horses', async () => {
+  const db = baseDb();
+  db.races = [{
+    id: 'race-1',
+    tournamentId: 'tournament-1',
+    name: 'Race',
+    status: 'finished',
+    resultStatus: 'submitted',
+  }];
+  db.horses = Array.from({ length: 10 }, (_, index) => ({
+    id: `horse-${index + 1}`,
+    name: `Horse ${index + 1}`,
+    ownerUserId: 'owner-1',
+    overallRating: 75,
+  }));
+  db.raceEntries = Array.from({ length: 10 }, (_, index) => ({
+    id: `entry-${index + 1}`,
+    raceId: 'race-1',
+    horseId: `horse-${index + 1}`,
+    jockeyUserId: `jockey-${index + 1}`,
+    status: 'approved',
+    preRaceStatus: 'ready',
+    disqualified: false,
+    resultStatus: 'submitted',
+    ratingSnapshot: 75,
+    position: index + 1,
+  }));
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/races/race-1/complete-results');
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.race.status, 'completed');
+  assert.deepEqual(
+    db.raceEntries.map((entry) => entry.ratingChange),
+    [5, 4, 3, 2, 1, -1, -2, -3, -4, -5]
+  );
+  assert.deepEqual(
+    db.horses.map((horse) => horse.overallRating),
+    [80, 79, 78, 77, 76, 74, 73, 72, 71, 70]
+  );
 });
 
 test('a published race can start before schedule after referee check-in is complete', async () => {

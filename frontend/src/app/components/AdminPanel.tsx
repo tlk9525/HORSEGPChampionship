@@ -107,6 +107,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   const [races, setRaces] = useState<RaceRecord[]>([]);
   const [pairings, setPairings] = useState<HorseRaceRegistration[]>([]);
   const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
+  const [maxRaceFieldSize, setMaxRaceFieldSize] = useState(10);
   const [maxRacesPerTournament, setMaxRacesPerTournament] = useState(10);
   const [showCreateTournament, setShowCreateTournament] = useState(false);
   const [tournamentMessage, setTournamentMessage] = useState('');
@@ -144,6 +145,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
         setRaces(data.races || []);
         setPairings(data.horseRaceRegistrations || []);
         setRaceEntries(data.raceEntries || []);
+        setMaxRaceFieldSize(data.limits?.maxRaceFieldSize || 10);
         setMaxRacesPerTournament(data.limits?.maxRacesPerTournament || 10);
         setTotalUsers(data.users.length);
         setTournaments(data.tournaments || []);
@@ -331,6 +333,22 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     ).length;
 
     return { total: entries.length, ready, unchecked };
+  };
+
+  const approvedPairCount = (raceId: string) => {
+    const entries = raceEntries.filter(
+      (entry) =>
+        entry.raceId === raceId &&
+        entry.status === 'approved' &&
+        entry.horseId &&
+        entry.jockeyUserId
+    );
+
+    return Math.min(
+      entries.length,
+      new Set(entries.map((entry) => entry.horseId)).size,
+      new Set(entries.map((entry) => entry.jockeyUserId)).size
+    );
   };
 
   const handleCreateTournament = () => {
@@ -636,9 +654,15 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                                     {race.status === 'registration-open' && (
                                       <button
                                         onClick={() => handleRaceAction(race.id, 'close-registration')}
-                                        className="flex items-center gap-2 px-4 py-2 bg-yellow-500/10 text-yellow-400 rounded-xl hover:bg-yellow-500/20 transition-all border border-yellow-500/30 text-sm font-semibold"
+                                        disabled={approvedPairCount(race.id) !== maxRaceFieldSize}
+                                        title={
+                                          approvedPairCount(race.id) === maxRaceFieldSize
+                                            ? undefined
+                                            : `Admin must approve ${maxRaceFieldSize} horse-jockey pairs before closing registration. Current: ${approvedPairCount(race.id)}/${maxRaceFieldSize}.`
+                                        }
+                                        className="flex items-center gap-2 px-4 py-2 bg-yellow-500/10 text-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl hover:bg-yellow-500/20 transition-all border border-yellow-500/30 text-sm font-semibold"
                                       >
-                                        Close Registration
+                                        Close Registration ({approvedPairCount(race.id)}/{maxRaceFieldSize})
                                       </button>
                                     )}
 

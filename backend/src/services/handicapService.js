@@ -14,6 +14,8 @@ export const clamp = (value, min, max) => {
 
 export const MIN_CARRIED_WEIGHT_LB = 110;
 export const MAX_CARRIED_WEIGHT_LB = 135;
+const RATING_K_FACTOR = 10;
+const MIN_RATED_FIELD_SIZE = 4;
 
 const ratingComponent = (value, fallback = 75) =>
   clamp(numeric(value, fallback), 0, 100);
@@ -57,7 +59,7 @@ export const computeRaceHandicap = (horse, race, highestFieldRating) => {
 };
 
 const expectedFieldScore = (rating, fieldRatings) => {
-  if (fieldRatings.length <= 1) return 0.5;
+  if (fieldRatings.length === 0) return 0.5;
 
   const scores = fieldRatings.map(
     (opponentRating) => 1 / (1 + 10 ** ((opponentRating - rating) / 16))
@@ -65,14 +67,18 @@ const expectedFieldScore = (rating, fieldRatings) => {
   return scores.reduce((total, score) => total + score, 0) / scores.length;
 };
 
+const ratedFieldFactor = (fieldSize) => {
+  if (fieldSize >= 8) return 1;
+  if (fieldSize >= 6) return 0.75;
+  if (fieldSize >= MIN_RATED_FIELD_SIZE) return 0.5;
+  return 0;
+};
 
+const roundRatingChange = (value) =>
+  value < 0 ? -Math.round(Math.abs(value)) : Math.round(value);
 
-// Tính điểm rating thay đổi theo chuẩn HKJC:
-// 1st: +5 đến +8 tùy field size
-// 2nd: +2 đến +4
-// 3rd: +1 đến +2
-// 4th-5th: 0 (không đổi)
-// 6th+: âm tùy vị trí
+// Rating compares the actual finishing score with the score expected from
+// ratingSnapshot against every other classified starter in the field.
 export const computePostRaceRating = (entry, fieldEntries = []) => {
   const previousRating = Math.round(clamp(numeric(entry?.ratingSnapshot, 0), 0, 140));
   const position = Number(entry?.position);
@@ -81,37 +87,41 @@ export const computePostRaceRating = (entry, fieldEntries = []) => {
   );
   const fieldSize = rankedEntries.length;
 
-  if (!previousRating || !Number.isInteger(position) || position < 1 || fieldSize < 2) {
+  if (
+    !previousRating ||
+    !Number.isInteger(position) ||
+    position < 1 ||
+    position > fieldSize ||
+    fieldSize < MIN_RATED_FIELD_SIZE
+  ) {
     return { previousRating, ratingChange: 0, postRaceRating: previousRating };
   }
 
-  // Scale: bigger field = slightly bigger swings
-  const scale = Math.max(1, Math.round(fieldSize / 2));
-  let ratingChange;
-  let positionLabel;
-
-  if (position === 1) {
-    ratingChange = Math.min(5 + Math.floor(scale / 2), 8);
-    positionLabel = '1st';
-  } else if (position === 2) {
-    ratingChange = Math.min(2 + Math.floor(scale / 4), 4);
-    positionLabel = '2nd';
-  } else if (position === 3) {
-    ratingChange = fieldSize >= 8 ? 2 : 1;
-    positionLabel = '3rd';
-  } else if (position <= Math.ceil(fieldSize * 0.5)) {
-    ratingChange = 0;
-    positionLabel = 'mid-field';
-  } else if (position < fieldSize) {
-    ratingChange = fieldSize >= 8 ? -2 : -1;
-    positionLabel = 'lower-field';
-  } else {
-    ratingChange = fieldSize >= 8 ? -5 : (fieldSize >= 6 ? -4 : -3);
-    positionLabel = 'last';
+  const opponentRatings = rankedEntries
+    .filter((item) => item !== entry && (!entry?.id || item.id !== entry.id))
+    .map((item) => Math.round(clamp(numeric(item.ratingSnapshot, 0), 0, 140)))
+    .filter((rating) => rating > 0);
+  if (opponentRatings.length !== fieldSize - 1) {
+    return { previousRating, ratingChange: 0, postRaceRating: previousRating };
   }
 
+  const expectedScore = expectedFieldScore(previousRating, opponentRatings);
+  const actualScore = (fieldSize - position) / (fieldSize - 1);
+  const fieldFactor = ratedFieldFactor(fieldSize);
+  const rawRatingChange = RATING_K_FACTOR * (actualScore - expectedScore) * fieldFactor;
+  const ratingChange = roundRatingChange(clamp(rawRatingChange, -8, 8));
   const postRaceRating = Math.round(clamp(previousRating + ratingChange, 0, 140));
-  const calcLog = { fieldSize, position, positionLabel, scale, ratingChange, previousRating, postRaceRating };
+  const calcLog = {
+    fieldSize,
+    position,
+    expectedScore,
+    actualScore,
+    fieldFactor,
+    rawRatingChange,
+    ratingChange,
+    previousRating,
+    postRaceRating,
+  };
 
   return { previousRating, ratingChange, postRaceRating, calcLog };
 };
