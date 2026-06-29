@@ -700,7 +700,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                   </h2>
 
                   <p className="text-gray-400 mt-2">
-                    Showing {tournaments.filter((t) => races.some((r) => r.tournamentId === t.id)).length} tournaments
+                    Showing {tournaments.length} tournaments
                   </p>
                 </div>
 
@@ -724,7 +724,6 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
               <div className="space-y-6">
                 {tournaments
-                  .filter((tournament) => races.some((r) => r.tournamentId === tournament.id))
                   .map((tournament) => {
                     const tournamentRaces = races.filter((r) => r.tournamentId === tournament.id);
                     const isExpanded = expandedTournaments[tournament.id];
@@ -764,6 +763,17 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
                         {isExpanded && (
                           <div className="p-5 border-t border-white/10 space-y-4 bg-[#0a1e35]/50">
+                            {tournamentRaces.length === 0 && (
+                              <div className="bg-[#071a2f] border border-dashed border-white/15 rounded-xl p-5">
+                                <p className="text-white font-bold">
+                                  No races yet
+                                </p>
+                                <p className="text-gray-400 text-sm mt-1">
+                                  This tournament is visible in Admin and ready for race creation.
+                                </p>
+                              </div>
+                            )}
+
                             {tournamentRaces.map((race) => (
                               <div
                                 key={race.id}
