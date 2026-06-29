@@ -20,6 +20,7 @@ import TournamentDetails from './app/components/TournamentDetails';
 
 import HorseManagement from './app/components/HorseManagement';
 import HorseDetails from './app/components/HorseDetails';
+import HorseDirectoryPage from './app/components/HorseDirectoryPage';
 import RegisterHorsePage from './app/components/RegisterHorsePage';
 import RaceRegistrationPage from './app/components/RaceRegistrationPage';
 
@@ -52,7 +53,8 @@ const protectedPages: Record<string, string[]> = {
   'register-horse': ['owner'],
   'race-registration': ['owner'],
   'edit-horse': ['owner'],
-  'horse-details': ['admin', 'owner'],
+  'horse-details': ['admin', 'owner', 'jockey', 'referee', 'spectator'],
+  'horse-profiles': ['admin', 'owner', 'jockey', 'referee', 'spectator'],
   'jockey-profiles': ['admin', 'owner', 'jockey', 'referee', 'spectator'],
   jockeys: ['jockey'],
   'live-race': ['admin', 'referee', 'spectator'],
@@ -69,6 +71,7 @@ const pageFromPath = (pathname: string) => {
   if (path.startsWith('/tournaments/')) return 'tournament-details';
   if (path === '/races' || path.startsWith('/races/')) return 'race-details';
   if (path === '/horses') return 'horses';
+  if (path === '/horse-profiles') return 'horse-profiles';
   if (path === '/horses/new') return 'register-horse';
   if (/^\/horses\/[^/]+\/edit$/.test(path)) return 'edit-horse';
   if (/^\/horses\/[^/]+$/.test(path)) return 'horse-details';
@@ -120,6 +123,7 @@ export default function App() {
       'horse-details': selectedHorseId
         ? `/horses/${selectedHorseId}`
         : '/horses',
+      'horse-profiles': '/horse-profiles',
       'edit-horse': selectedHorseId
         ? `/horses/${selectedHorseId}/edit`
         : '/horses',
@@ -249,6 +253,7 @@ export default function App() {
                 />
               }
             />
+            <Route path="/horse-profiles" element={<HorseDirectoryPage />} />
             <Route
               path="/horses/new"
               element={<RegisterHorsePage onNavigate={navigate} />}
@@ -261,6 +266,7 @@ export default function App() {
               path="/horses/:horseId"
               element={
                 <HorseDetails
+                  currentUser={currentUser}
                   horse={selectedHorse}
                   onNavigate={navigate}
                 />

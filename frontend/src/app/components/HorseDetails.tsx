@@ -7,7 +7,6 @@ import {
   Gauge,
   HeartPulse,
   Pencil,
-  Ruler,
   Scale,
   ShieldCheck,
   Trophy,
@@ -16,6 +15,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
+  AuthUser,
   HorseRecord,
   RaceEntryRecord,
   getBootstrap,
@@ -24,6 +24,7 @@ import { statusLabel } from '../utils/domain';
 import { officialHorseRating } from '../utils/rating';
 
 interface HorseDetailsProps {
+  currentUser: AuthUser | null;
   horse: HorseRecord | null;
   onNavigate: (page: string) => void;
 }
@@ -35,13 +36,18 @@ const value = (input: string | number | null | undefined, suffix = '') =>
 
 const overall = officialHorseRating;
 
-export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
+export default function HorseDetails({
+  currentUser,
+  horse,
+  onNavigate,
+}: HorseDetailsProps) {
   const { horseId } = useParams();
   const [loadedHorse, setLoadedHorse] = useState<HorseRecord | null>(null);
   const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
   const [raceHistoryExpanded, setRaceHistoryExpanded] = useState(false);
   const [message, setMessage] = useState('');
   const activeHorse = horse || loadedHorse;
+  const canOpenHorseList = ['admin', 'owner'].includes(currentUser?.role || '');
 
   useEffect(() => {
     const activeHorseId = horse?.id || horseId;
@@ -73,11 +79,11 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
       <div className="min-h-screen bg-[#071a2f] pt-24 pb-12">
         <div className="max-w-4xl mx-auto px-4">
           <button
-            onClick={() => onNavigate('horses')}
+            onClick={() => onNavigate(canOpenHorseList ? 'horses' : 'tournaments')}
             className="flex items-center gap-2 text-gray-400 hover:text-white mb-8"
           >
             <ArrowLeft className="w-5 h-5" />
-            Back to Horses
+            {canOpenHorseList ? 'Back to Horses' : 'Back to Tournaments'}
           </button>
 
           <div className="rounded-2xl border border-white/10 bg-[#0b223d] p-8 text-gray-300">
@@ -95,42 +101,43 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
     ['Color', activeHorse.color || 'Not set', FileText],
     ['Age', `${activeHorse.age} years`, Activity],
     ['Weight', value(activeHorse.weightLb, 'lb'), Scale],
-    ['Height', value(activeHorse.heightCm, 'cm'), Ruler],
     ['Official Rating', value(overall(activeHorse)), Trophy],
     ['Speed Rating', value(activeHorse.speedRating), Gauge],
     ['Stamina Rating', value(activeHorse.staminaRating), Activity],
     ['Form Rating', value(activeHorse.formRating), Trophy],
     ['Health Rating', value(activeHorse.healthRating), HeartPulse],
     ['Overall Rating', overall(activeHorse), Gauge],
-    ['Health Status', activeHorse.healthStatus || 'Not set', HeartPulse],
-    ['Jockey Pairing', statusLabel(activeHorse.jockeyConfirmation), ShieldCheck],
   ];
   const visibleRaceEntries = raceHistoryExpanded
     ? raceEntries
     : raceEntries.slice(0, 5);
+  const canEditHorse =
+    currentUser?.role === 'owner' && activeHorse.ownerUserId === currentUser.id;
 
   return (
     <div className="min-h-screen bg-[#071a2f] pt-24 pb-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
           <button
-            onClick={() => onNavigate('horses')}
+            onClick={() => onNavigate(canOpenHorseList ? 'horses' : 'tournaments')}
             className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
-            Back to Horses
+            {canOpenHorseList ? 'Back to Horses' : 'Back to Tournaments'}
           </button>
 
-          <button
-            onClick={() => {
-              sessionStorage.setItem('selectedHorseId', activeHorse.id);
-              onNavigate('edit-horse');
-            }}
-            className="flex items-center justify-center gap-2 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/10 px-5 py-3 text-[#d4af37] font-bold hover:bg-[#d4af37]/20"
-          >
-            <Pencil className="w-4 h-4" />
-            Edit Horse
-          </button>
+          {canEditHorse && (
+            <button
+              onClick={() => {
+                sessionStorage.setItem('selectedHorseId', activeHorse.id);
+                onNavigate('edit-horse');
+              }}
+              className="flex items-center justify-center gap-2 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/10 px-5 py-3 text-[#d4af37] font-bold hover:bg-[#d4af37]/20"
+            >
+              <Pencil className="w-4 h-4" />
+              Edit Horse
+            </button>
+          )}
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-[#0b223d] overflow-hidden mb-8">
@@ -297,11 +304,11 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
 
                 <div className="rounded-xl border border-white/10 bg-[#12304f] p-5">
                   <div className="text-gray-400 text-sm mb-2">
-                    Owner ID
+                    Owner name
                   </div>
 
                   <div className="text-white font-semibold">
-                    {activeHorse.ownerUserId}
+                    {activeHorse.ownerName || 'Unknown Owner'}
                   </div>
                 </div>
               </div>

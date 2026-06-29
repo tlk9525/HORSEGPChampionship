@@ -9,6 +9,7 @@ import {
 } from '../config/constants.js';
 import { authenticate, publicUser } from '../services/authService.js';
 import {
+  ownerName,
   publicJockeyProfiles,
   publicRaceEntries,
   raceRefereeIds,
@@ -53,13 +54,18 @@ const visibleRaceEntries = (db, user) => {
 
 // Lấy danh sách ngựa mà người dùng được phép xem
 const visibleHorses = (db, user, entries) => {
-  if (user?.role === USER_ROLES.ADMIN) return db.horses;
+  const withOwnerName = (horse) => ({
+    ...horse,
+    ownerName: ownerName(db, horse.ownerUserId),
+  });
+
+  if (user?.role === USER_ROLES.ADMIN) return db.horses.map(withOwnerName);
   const visibleHorseIds = new Set(entries.map((entry) => entry.horseId));
   return db.horses.filter(
     (horse) =>
       visibleHorseIds.has(horse.id) ||
       (user?.role === USER_ROLES.OWNER && horse.ownerUserId === user.id)
-  );
+  ).map(withOwnerName);
 };
 
 // Lấy danh sách user được phép xem theo vai trò

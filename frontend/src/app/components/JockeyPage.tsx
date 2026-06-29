@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import {
+  Activity,
   ChevronDown,
   ChevronUp,
   CheckCircle,
+  HeartPulse,
   Flag,
   Gauge,
   MapPin,
   Save,
+  Scale,
+  ShieldCheck,
   XCircle,
 } from 'lucide-react';
 import {
@@ -28,6 +32,17 @@ interface JockeyPageProps {
   currentUser: AuthUser | null;
   onNavigate: (page: string) => void;
 }
+
+const numberLabel = (value?: number | null, suffix = '') => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 'Not set';
+  return `${parsed.toFixed(0)}${suffix}`;
+};
+
+const horseRatingLabel = (horse?: HorseRecord) => {
+  const rating = horse?.overallRating ?? horse?.baseHandicap;
+  return Number.isFinite(Number(rating)) ? Number(rating).toFixed(0) : 'TBD';
+};
 
 export default function JockeyPage({
   currentUser,
@@ -107,6 +122,8 @@ export default function JockeyPage({
 
   const raceById = (raceId: string) =>
     races.find((race) => race.id === raceId);
+  const horseById = (horseId: string) =>
+    horses.find((horse) => horse.id === horseId);
   const tournamentById = (tournamentId?: string | null) =>
     tournaments.find((tournament) => tournament.id === tournamentId);
   const needsJockeyResponse = (invitation: JockeyInvitation) =>
@@ -125,6 +142,78 @@ export default function JockeyPage({
       race &&
         ['published', 'in-progress', 'finished', 'completed'].includes(race.status)
     );
+  const renderHorseInformation = (horse?: HorseRecord, ratingSnapshot?: number) => {
+    if (!horse) {
+      return (
+        <div className="mt-4 rounded-xl border border-white/10 bg-[#0b223d] p-4 text-gray-400 text-sm">
+          Horse information is not available yet.
+        </div>
+      );
+    }
+
+    const profileItems = [
+      { label: 'Breed', value: horse.breed || 'Not set', icon: Activity },
+      { label: 'Age', value: numberLabel(horse.age, ' years'), icon: Activity },
+      { label: 'Sex', value: horse.sex || 'Not set', icon: ShieldCheck },
+      { label: 'Color', value: horse.color || 'Not set', icon: ShieldCheck },
+      { label: 'Horse Weight', value: numberLabel(horse.weightLb, 'lb'), icon: Scale },
+      {
+        label: 'Official Rating',
+        value: ratingSnapshot ?? horseRatingLabel(horse),
+        icon: Gauge,
+      },
+      { label: 'Speed', value: numberLabel(horse.speedRating), icon: Gauge },
+      { label: 'Stamina', value: numberLabel(horse.staminaRating), icon: HeartPulse },
+    ];
+
+    return (
+      <div className="mt-4 rounded-xl border border-white/10 bg-[#0b223d] p-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="text-gray-300 text-xs uppercase font-bold">
+            Horse Information
+          </div>
+
+          <span className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs font-bold text-gray-300">
+            {statusLabel(horse.status)}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {profileItems.map(({ label, value, icon: Icon }) => (
+            <div
+              key={label}
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2"
+            >
+              <div className="flex items-center gap-1.5 text-[11px] uppercase font-bold text-gray-500">
+                <Icon className="h-3.5 w-3.5 text-[#d4af37]" />
+                {label}
+              </div>
+
+              <div className="mt-1 text-sm font-bold text-white">
+                {value}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-gray-300">
+            Health: <span className="font-bold text-white">{horse.healthStatus || 'Not set'}</span>
+          </div>
+
+          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-gray-300">
+            Species: <span className="font-bold text-white">{horse.species || 'Not set'}</span>
+          </div>
+        </div>
+
+        {horse.profileNotes && (
+          <p className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-300">
+            {horse.profileNotes}
+          </p>
+        )}
+      </div>
+    );
+  };
 
   if (currentUser?.role !== 'jockey') {
     return (
@@ -268,56 +357,62 @@ export default function JockeyPage({
                 </div>
               )}
 
-              {visibleInvitations.map((invitation) => (
-                <div
-                  key={invitation.id}
-                  className="rounded-xl bg-[#071a2f] border border-white/10 p-4"
-                >
-                  <div className="text-white font-bold">
-                    {horses.find((horse) => horse.id === invitation.horseId)?.name || 'Horse'}
+              {visibleInvitations.map((invitation) => {
+                const horse = horseById(invitation.horseId);
+
+                return (
+                  <div
+                    key={invitation.id}
+                    className="rounded-xl bg-[#071a2f] border border-white/10 p-4"
+                  >
+                    <div className="text-white font-bold">
+                      {horse?.name || 'Horse'}
+                    </div>
+
+                    <div className="text-gray-400 text-sm mt-1">
+                      {invitation.raceId
+                        ? `Race: ${races.find((race) => race.id === invitation.raceId)?.name || 'Race'}`
+                        : `Tournament: ${tournamentById(invitation.tournamentId)?.name || 'Tournament'}`}{' '}
+                      • Status: {statusLabel(invitation.status)}
+                    </div>
+
+                    {needsJockeyResponse(invitation) && (
+                      <div className="text-blue-300 text-sm mt-2 font-semibold">
+                        Owner selected you after Admin approved the horse. Accept to send this pairing to final Admin approval.
+                      </div>
+                    )}
+
+                    {renderHorseInformation(horse)}
+
+                    {invitation.status === 'accepted' && (
+                      <div className="text-yellow-400 text-sm mt-2 font-semibold">
+                        Admin approval:{' '}
+                        {statusLabel(invitation.adminStatus || 'pending')}
+                      </div>
+                    )}
+
+                    {needsJockeyResponse(invitation) && (
+                      <div className="grid grid-cols-2 gap-3 mt-4">
+                        <button
+                          onClick={() => respond(invitation.id, 'accepted')}
+                          className="flex items-center justify-center gap-2 py-3 rounded-xl bg-green-600 text-white font-bold hover:bg-green-700 transition-all"
+                        >
+                          <CheckCircle className="w-5 h-5" />
+                          Accept
+                        </button>
+
+                        <button
+                          onClick={() => respond(invitation.id, 'rejected')}
+                          className="flex items-center justify-center gap-2 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition-all"
+                        >
+                          <XCircle className="w-5 h-5" />
+                          Reject
+                        </button>
+                      </div>
+                    )}
                   </div>
-
-                  <div className="text-gray-400 text-sm mt-1">
-                    {invitation.raceId
-                      ? `Race: ${races.find((race) => race.id === invitation.raceId)?.name || 'Race'}`
-                      : `Tournament: ${tournamentById(invitation.tournamentId)?.name || 'Tournament'}`}{' '}
-                    • Status: {statusLabel(invitation.status)}
-                  </div>
-
-                  {needsJockeyResponse(invitation) && (
-                    <div className="text-blue-300 text-sm mt-2 font-semibold">
-                      Owner selected you after Admin approved the horse. Accept to send this pairing to final Admin approval.
-                    </div>
-                  )}
-
-                  {invitation.status === 'accepted' && (
-                    <div className="text-yellow-400 text-sm mt-2 font-semibold">
-                      Admin approval:{' '}
-                      {statusLabel(invitation.adminStatus || 'pending')}
-                    </div>
-                  )}
-
-                  {needsJockeyResponse(invitation) && (
-                    <div className="grid grid-cols-2 gap-3 mt-4">
-                      <button
-                        onClick={() => respond(invitation.id, 'accepted')}
-                        className="flex items-center justify-center gap-2 py-3 rounded-xl bg-green-600 text-white font-bold hover:bg-green-700 transition-all"
-                      >
-                        <CheckCircle className="w-5 h-5" />
-                        Accept
-                      </button>
-
-                      <button
-                        onClick={() => respond(invitation.id, 'rejected')}
-                        className="flex items-center justify-center gap-2 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition-all"
-                      >
-                        <XCircle className="w-5 h-5" />
-                        Reject
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="mt-8 border-t border-white/10 pt-6">
@@ -334,6 +429,7 @@ export default function JockeyPage({
 
                 {visibleAssignedEntries.map((entry) => {
                   const race = raceById(entry.raceId);
+                  const horse = horseById(entry.horseId);
                   const lineVisible = canViewLine(race);
 
                   return (
@@ -356,6 +452,8 @@ export default function JockeyPage({
                           {race?.raceNumber || 'Race'}
                         </span>
                       </div>
+
+                      {renderHorseInformation(horse, entry.ratingSnapshot)}
 
                       <div className="mt-4 rounded-xl border border-white/10 bg-[#0b223d] p-4">
                         <div className="flex items-center gap-2 text-gray-400 text-xs uppercase font-bold mb-3">

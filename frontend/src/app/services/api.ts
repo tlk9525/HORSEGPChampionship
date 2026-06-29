@@ -55,6 +55,7 @@ export interface HorseRecord {
   healthStatus?: string;
   profileNotes?: string;
   ownerUserId: string;
+  ownerName?: string;
   status: 'draft' | 'pending' | 'approved' | 'rejected' | 'retired';
   jockeyConfirmation: string;
   veterinaryCertificateUrl?: string;
