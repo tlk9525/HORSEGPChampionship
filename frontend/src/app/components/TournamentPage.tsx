@@ -497,14 +497,24 @@ export default function TournamentPage({
                       {approvedEntries.length > 0 ? (
                         <>
                           <div className="flex flex-wrap gap-2">
-                            {visibleGateEntries.map((entry) => (
-                              <span
-                                key={entry.id}
-                                className="px-3 py-2 rounded-lg bg-[#071a2f]/40 border border-white/10 text-sm text-white"
-                              >
-                                Gate {entry.lane || '-'} • {entry.horseName || 'Horse'} • Rating {entry.ratingSnapshot ?? 'TBD'} • Assigned Wt. {Number(entry.handicap || 0).toFixed(0)}lb
-                              </span>
-                            ))}
+                            {visibleGateEntries.map((entry) => {
+                              const isCurrentJockey =
+                                currentUser?.role === 'jockey' &&
+                                entry.jockeyUserId === currentUser.id;
+
+                              return (
+                                <span
+                                  key={entry.id}
+                                  className={`px-3 py-2 rounded-lg border text-sm text-white ${
+                                    isCurrentJockey
+                                      ? 'bg-[#d4af37]/20 border-[#d4af37]/70'
+                                      : 'bg-[#071a2f]/40 border-white/10'
+                                  }`}
+                                >
+                                  Gate {entry.lane || '-'} • {entry.horseName || 'Horse'} • Jockey: {entry.jockeyName || 'Jockey pending'}{isCurrentJockey ? ' (You)' : ''} • Rating {entry.ratingSnapshot ?? 'TBD'} • Assigned Wt. {Number(entry.handicap || 0).toFixed(0)}lb
+                                </span>
+                              );
+                            })}
                           </div>
 
                           {approvedEntries.length > 4 && (
