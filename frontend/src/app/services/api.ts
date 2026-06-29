@@ -309,6 +309,36 @@ export const createTournament = async (tournament: {
     }
   );
 
+// Cập nhật thông tin giải đấu (admin)
+export const updateTournament = async (
+  tournamentId: string,
+  tournament: {
+    name: string;
+    startDate: string;
+    finalDate?: string;
+    location?: string;
+  }
+) =>
+  request<{ tournament: TournamentRecord; tournaments: TournamentRecord[]; notifications: NotificationItem[] }>(
+    `/admin/tournaments/${tournamentId}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(tournament),
+    }
+  );
+
+// Xóa giải đấu và toàn bộ dữ liệu race thuộc giải đấu đó (admin)
+export const deleteTournament = async (tournamentId: string) =>
+  request<{
+    ok: boolean;
+    tournamentId: string;
+    raceIds: string[];
+    tournaments: TournamentRecord[];
+    notifications: NotificationItem[];
+  }>(`/admin/tournaments/${tournamentId}`, {
+    method: 'DELETE',
+  });
+
 // Lấy danh sách thông báo của người dùng hiện tại
 export const getNotifications = async () =>
   request<{ notifications: NotificationItem[] }>('/notifications');

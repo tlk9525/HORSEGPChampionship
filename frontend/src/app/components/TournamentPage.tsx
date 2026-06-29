@@ -257,6 +257,16 @@ export default function TournamentPage({
                     </div>
 
                     <div className="flex items-start gap-3">
+                      <Flag className="w-5 h-5 text-[#d4af37] mt-1" />
+                      <div>
+                        <p className="text-gray-500 text-xs uppercase">End Date</p>
+                        <p className="text-white font-semibold mt-1">
+                          {tournament.finalDate || '-'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
                       <MapPin className="w-5 h-5 text-[#d4af37] mt-1" />
                       <div>
                         <p className="text-gray-500 text-xs uppercase">Location</p>

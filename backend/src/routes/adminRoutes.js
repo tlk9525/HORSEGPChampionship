@@ -48,6 +48,20 @@ const tournamentHasEnded = (tournament, at = new Date()) => {
   );
 };
 
+const isDateOnly = (value) => {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+
+  const [, year, month, day] = match;
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+
+  return (
+    date.getUTCFullYear() === Number(year) &&
+    date.getUTCMonth() === Number(month) - 1 &&
+    date.getUTCDate() === Number(day)
+  );
+};
+
 const registrationPair = (registration, invitation) => ({
   horseId: registration?.horseId || invitation?.horseId,
   jockeyUserId: registration?.jockeyUserId || invitation?.jockeyUserId,
@@ -172,6 +186,105 @@ export const createAdminRoutes = (getDb, writeDb) => {
 
     await writeDb(db);
     return c.json({ tournament, tournaments: db.tournaments, notifications: db.notifications || [] }, 201);
+  });
+
+  // Cập nhật thông tin cơ bản của giải đấu.
+  app.patch('/tournaments/:tournamentId', async (c) => {
+    const user = c.get('user');
+    const db = c.get('db');
+    const tournament = db.tournaments.find(
+      (item) => item.id === c.req.param('tournamentId')
+    );
+
+    if (!tournament) return c.json({ message: 'Tournament not found' }, 404);
+
+    const { name, startDate, finalDate, location } = await c.req.json();
+    const cleanName = String(name || '').trim();
+    const cleanStartDate = String(startDate || '').trim();
+    const cleanFinalDate = String(finalDate || '').trim();
+    const cleanLocation = String(location ?? tournament.location ?? '').trim();
+
+    if (!cleanName || !cleanStartDate) {
+      return c.json(
+        { message: 'Tournament name and start date are required' },
+        400
+      );
+    }
+
+    if (!isDateOnly(cleanStartDate) || (cleanFinalDate && !isDateOnly(cleanFinalDate))) {
+      return c.json({ message: 'Tournament dates must be valid' }, 400);
+    }
+
+    if (cleanFinalDate && cleanFinalDate < cleanStartDate) {
+      return c.json({ message: 'End date must be after start date' }, 400);
+    }
+
+    tournament.name = cleanName;
+    tournament.startDate = cleanStartDate;
+    tournament.finalDate = cleanFinalDate;
+    tournament.location = cleanLocation;
+    tournament.updatedAt = new Date().toISOString();
+
+    notifyAdmins(db, 'Tournament updated', `${tournament.name} was updated by ${user.name}.`);
+
+    await writeDb(db);
+    return c.json({ tournament, tournaments: db.tournaments, notifications: db.notifications || [] });
+  });
+
+  // Xóa giải đấu và toàn bộ dữ liệu race thuộc giải đấu đó.
+  app.delete('/tournaments/:tournamentId', async (c) => {
+    const user = c.get('user');
+    const db = c.get('db');
+    const tournamentId = c.req.param('tournamentId');
+    const tournament = db.tournaments.find((item) => item.id === tournamentId);
+
+    if (!tournament) return c.json({ message: 'Tournament not found' }, 404);
+
+    const raceIds = new Set(
+      (db.races || [])
+        .filter((race) => race.tournamentId === tournamentId)
+        .map((race) => race.id)
+    );
+    const entryIds = new Set(
+      (db.raceEntries || [])
+        .filter((entry) => raceIds.has(entry.raceId))
+        .map((entry) => entry.id)
+    );
+
+    db.tournaments = (db.tournaments || []).filter((item) => item.id !== tournamentId);
+    db.races = (db.races || []).filter((race) => race.tournamentId !== tournamentId);
+    db.raceEntries = (db.raceEntries || []).filter((entry) => !raceIds.has(entry.raceId));
+    db.horseRaceRegistrations = (db.horseRaceRegistrations || []).filter(
+      (registration) =>
+        registration.tournamentId !== tournamentId && !raceIds.has(registration.raceId)
+    );
+    db.jockeyRaceRegistrations = (db.jockeyRaceRegistrations || []).filter(
+      (registration) => !raceIds.has(registration.raceId)
+    );
+    db.jockeyInvitations = (db.jockeyInvitations || []).filter(
+      (invitation) =>
+        invitation.tournamentId !== tournamentId && !raceIds.has(invitation.raceId)
+    );
+    db.raceRefereeAssignments = (db.raceRefereeAssignments || []).filter(
+      (assignment) => !raceIds.has(assignment.raceId)
+    );
+    db.refereeReports = (db.refereeReports || []).filter(
+      (report) => !raceIds.has(report.raceId) && !entryIds.has(report.raceEntryId)
+    );
+    db.raceActionLogs = (db.raceActionLogs || []).filter(
+      (log) => !raceIds.has(log.raceId)
+    );
+
+    notifyAdmins(db, 'Tournament deleted', `${tournament.name} was deleted by ${user.name}.`);
+
+    await writeDb(db);
+    return c.json({
+      ok: true,
+      tournamentId,
+      raceIds: Array.from(raceIds),
+      tournaments: db.tournaments,
+      notifications: db.notifications || [],
+    });
   });
 
   // Tạo một cuộc đua mới trong giải đấu

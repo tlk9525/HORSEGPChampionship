@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { Hono } from 'hono';
 import { createAdminRoutes } from '../src/routes/adminRoutes.js';
 
-const requestJson = async (app, path, body) => {
+const requestJson = async (app, path, body, method = 'POST') => {
   const response = await app.request(path, {
-    method: 'POST',
+    method,
     headers: {
       Authorization: 'Bearer admin-token',
       'Content-Type': 'application/json',
@@ -43,6 +43,116 @@ const baseDb = () => ({
   raceActionLogs: [],
   refereeReports: [],
   notifications: [],
+});
+
+test('admin can update tournament name and schedule dates', async () => {
+  const db = baseDb();
+  db.tournaments[0] = {
+    ...db.tournaments[0],
+    startDate: '2099-01-01',
+    finalDate: '2099-01-10',
+    location: 'Old Track',
+  };
+  let writes = 0;
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => {
+    writes += 1;
+  }));
+
+  const result = await requestJson(app, '/tournaments/tournament-1', {
+    name: 'Updated Tournament',
+    startDate: '2099-02-01',
+    finalDate: '2099-02-15',
+  }, 'PATCH');
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.tournament.name, 'Updated Tournament');
+  assert.equal(result.body.tournament.startDate, '2099-02-01');
+  assert.equal(result.body.tournament.finalDate, '2099-02-15');
+  assert.equal(result.body.tournament.location, 'Old Track');
+  assert.equal(db.tournaments[0].name, 'Updated Tournament');
+  assert.equal(writes, 1);
+});
+
+test('admin cannot set tournament end date before start date', async () => {
+  const db = baseDb();
+  db.tournaments[0] = {
+    ...db.tournaments[0],
+    name: 'Original Tournament',
+    startDate: '2099-01-01',
+    finalDate: '2099-01-10',
+  };
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/tournaments/tournament-1', {
+    name: 'Invalid Tournament',
+    startDate: '2099-02-15',
+    finalDate: '2099-02-01',
+  }, 'PATCH');
+
+  assert.equal(result.status, 400);
+  assert.match(result.body.message, /End date must be after start date/i);
+  assert.equal(db.tournaments[0].name, 'Original Tournament');
+});
+
+test('admin can delete a tournament with all dependent race data', async () => {
+  const db = baseDb();
+  db.tournaments.push({ id: 'other-tournament', name: 'Other', status: 'active' });
+  db.races = [
+    { id: 'race-1', tournamentId: 'tournament-1', name: 'Race 1', status: 'registration-open' },
+    { id: 'other-race', tournamentId: 'other-tournament', name: 'Other Race', status: 'registration-open' },
+  ];
+  db.raceEntries = [
+    { id: 'entry-1', raceId: 'race-1', horseId: 'horse-1', status: 'approved' },
+    { id: 'other-entry', raceId: 'other-race', horseId: 'horse-1', status: 'approved' },
+  ];
+  db.horseRaceRegistrations = [
+    ...db.horseRaceRegistrations,
+    { id: 'registration-1', tournamentId: 'tournament-1', raceId: 'race-1', status: 'approved' },
+    { id: 'other-registration', tournamentId: 'other-tournament', raceId: 'other-race', status: 'approved' },
+  ];
+  db.jockeyRaceRegistrations = [
+    { id: 'jockey-registration-1', raceId: 'race-1', jockeyUserId: 'jockey-1', status: 'approved' },
+    { id: 'other-jockey-registration', raceId: 'other-race', jockeyUserId: 'jockey-1', status: 'approved' },
+  ];
+  db.jockeyInvitations = [
+    { id: 'invitation-1', tournamentId: 'tournament-1', raceId: 'race-1' },
+    { id: 'other-invitation', tournamentId: 'other-tournament', raceId: 'other-race' },
+  ];
+  db.raceRefereeAssignments = [
+    { id: 'assignment-1', raceId: 'race-1', refereeUserId: 'referee-1' },
+    { id: 'other-assignment', raceId: 'other-race', refereeUserId: 'referee-1' },
+  ];
+  db.refereeReports = [
+    { id: 'report-1', raceId: 'race-1', raceEntryId: 'entry-1' },
+    { id: 'other-report', raceId: 'other-race', raceEntryId: 'other-entry' },
+  ];
+  db.raceActionLogs = [
+    { id: 'log-1', raceId: 'race-1' },
+    { id: 'other-log', raceId: 'other-race' },
+  ];
+  let writes = 0;
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => {
+    writes += 1;
+  }));
+
+  const result = await requestJson(app, '/tournaments/tournament-1', undefined, 'DELETE');
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.raceIds, ['race-1']);
+  assert.equal(db.tournaments.some((item) => item.id === 'tournament-1'), false);
+  assert.equal(db.races.some((item) => item.id === 'race-1'), false);
+  assert.equal(db.raceEntries.some((item) => item.id === 'entry-1'), false);
+  assert.equal(db.horseRaceRegistrations.some((item) => item.tournamentId === 'tournament-1'), false);
+  assert.equal(db.jockeyRaceRegistrations.some((item) => item.raceId === 'race-1'), false);
+  assert.equal(db.jockeyInvitations.some((item) => item.tournamentId === 'tournament-1'), false);
+  assert.equal(db.raceRefereeAssignments.some((item) => item.raceId === 'race-1'), false);
+  assert.equal(db.refereeReports.some((item) => item.raceId === 'race-1'), false);
+  assert.equal(db.raceActionLogs.some((item) => item.raceId === 'race-1'), false);
+  assert.equal(db.races.some((item) => item.id === 'other-race'), true);
+  assert.equal(writes, 1);
 });
 
 test('race creation rejects invalid registration timestamps', async () => {

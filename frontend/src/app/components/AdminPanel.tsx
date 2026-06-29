@@ -26,9 +26,11 @@ import {
   createTournament,
   decideApproval,
   deleteRace,
+  deleteTournament,
   getApprovals,
   getBootstrap,
   updateRace as persistRace,
+  updateTournament,
 } from '../services/api';
 import { statusLabel } from '../utils/domain';
 import { messageToneClasses } from '../utils/messageTone';
@@ -111,6 +113,8 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   const [maxRacesPerTournament, setMaxRacesPerTournament] = useState(10);
   const [showCreateTournament, setShowCreateTournament] = useState(false);
   const [tournamentMessage, setTournamentMessage] = useState('');
+  const [editTournament, setEditTournament] = useState<TournamentRecord | null>(null);
+  const [deleteTournamentTarget, setDeleteTournamentTarget] = useState<TournamentRecord | null>(null);
 
   const [expandedTournaments, setExpandedTournaments] = useState<Record<string, boolean>>({});
   const toggleTournament = (tournamentId: string) => {
@@ -241,6 +245,8 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   const [editRace, setEditRace] =
     useState<RaceRecord | null>(null);
+  const [deleteRaceTarget, setDeleteRaceTarget] =
+    useState<RaceRecord | null>(null);
 
   const updateRace = () => {
     if (!editRace) return;
@@ -248,7 +254,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     const raceDate = editRace.date ? dateInputToIso(editRace.date) : '';
 
     if (editRace.date && !raceDate) {
-      setApprovalMessage('Race date must use dd/MM/yyyy format.');
+      setApprovalMessage('Race date must be valid.');
       return;
     }
 
@@ -271,19 +277,22 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       );
   };
 
-  const removeRace = () => {
-    if (!editRace) return;
-    if (!window.confirm(`Delete ${editRace.name}? This action cannot be undone.`)) {
-      return;
-    }
+  const requestDeleteRace = (race: RaceRecord) => {
+    setDeleteRaceTarget(race);
+  };
 
-    deleteRace(editRace.id)
+  const confirmDeleteRace = () => {
+    if (!deleteRaceTarget) return;
+
+    const race = deleteRaceTarget;
+    deleteRace(race.id)
       .then(() => {
-        setRaces((current) => current.filter((race) => race.id !== editRace.id));
+        setRaces((current) => current.filter((item) => item.id !== race.id));
         setRaceEntries((current) =>
-          current.filter((entry) => entry.raceId !== editRace.id)
+          current.filter((entry) => entry.raceId !== race.id)
         );
-        setEditRace(null);
+        if (editRace?.id === race.id) setEditRace(null);
+        setDeleteRaceTarget(null);
         setApprovalMessage('Race deleted.');
       })
       .catch((error) =>
@@ -291,6 +300,11 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
           error instanceof Error ? error.message : 'Unable to delete race'
         )
       );
+  };
+
+  const removeRace = () => {
+    if (!editRace) return;
+    requestDeleteRace(editRace);
   };
 
   const handleRaceAction = (
@@ -368,7 +382,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     }
 
     if (!startDate || (tournamentForm.finalDate && !finalDate)) {
-      setTournamentMessage('Dates must use dd/MM/yyyy format.');
+      setTournamentMessage('Tournament dates must be valid.');
       return;
     }
 
@@ -394,6 +408,83 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       .catch((error) =>
         setTournamentMessage(
           error instanceof Error ? error.message : 'Unable to create tournament'
+        )
+      );
+  };
+
+  const handleUpdateTournament = () => {
+    if (!editTournament) return;
+
+    setTournamentMessage('');
+
+    const startDate = dateInputToIso(editTournament.startDate || '');
+    const finalDate = editTournament.finalDate
+      ? dateInputToIso(editTournament.finalDate)
+      : '';
+
+    if (!editTournament.name || !editTournament.startDate) {
+      setTournamentMessage('Tournament name and start date are required.');
+      return;
+    }
+
+    if (!startDate || (editTournament.finalDate && !finalDate)) {
+      setTournamentMessage('Tournament dates must be valid.');
+      return;
+    }
+
+    updateTournament(editTournament.id, {
+      name: editTournament.name,
+      startDate,
+      finalDate,
+      location: editTournament.location,
+    })
+      .then((result) => {
+        setTournaments(result.tournaments);
+        setEditTournament(null);
+        setTournamentMessage('');
+        setApprovalMessage('Tournament saved.');
+      })
+      .catch((error) =>
+        setTournamentMessage(
+          error instanceof Error ? error.message : 'Unable to save tournament'
+        )
+      );
+  };
+
+  const requestDeleteTournament = () => {
+    if (!editTournament) return;
+    setDeleteTournamentTarget(editTournament);
+  };
+
+  const confirmDeleteTournament = () => {
+    if (!deleteTournamentTarget) return;
+
+    deleteTournament(deleteTournamentTarget.id)
+      .then((result) => {
+        const deletedRaceIds = new Set(result.raceIds);
+
+        setTournaments(result.tournaments);
+        setRaces((current) =>
+          current.filter((race) => race.tournamentId !== result.tournamentId)
+        );
+        setRaceEntries((current) =>
+          current.filter((entry) => !deletedRaceIds.has(entry.raceId))
+        );
+        setPairings((current) =>
+          current.filter(
+            (pairing) =>
+              pairing.tournamentId !== result.tournamentId &&
+              !deletedRaceIds.has(pairing.raceId)
+          )
+        );
+        setEditTournament(null);
+        setDeleteTournamentTarget(null);
+        setTournamentMessage('');
+        setApprovalMessage('Tournament deleted.');
+      })
+      .catch((error) =>
+        setTournamentMessage(
+          error instanceof Error ? error.message : 'Unable to delete tournament'
         )
       );
   };
@@ -640,22 +731,36 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
                     return (
                       <div key={tournament.id} className="bg-[#071a2f] border border-white/10 rounded-2xl overflow-hidden">
-                        <button
-                          onClick={() => toggleTournament(tournament.id)}
-                          className="w-full flex items-center justify-between p-5 hover:bg-white/5 transition-colors text-left"
-                        >
-                          <div>
-                            <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                              {tournament.name}
-                              <span className="text-xs font-semibold px-2 py-1 bg-[#d4af37]/20 text-[#d4af37] rounded-lg">
-                                {tournamentRaces.length} races
-                              </span>
-                            </h3>
-                          </div>
-                          <div className="flex items-center gap-3">
+                        <div className="flex items-center justify-between gap-4 p-5 hover:bg-white/5 transition-colors">
+                          <button
+                            onClick={() => toggleTournament(tournament.id)}
+                            className="flex-1 flex items-center justify-between gap-4 text-left"
+                          >
+                            <div>
+                              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                {tournament.name}
+                                <span className="text-xs font-semibold px-2 py-1 bg-[#d4af37]/20 text-[#d4af37] rounded-lg">
+                                  {tournamentRaces.length} races
+                                </span>
+                              </h3>
+                            </div>
                             {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
-                          </div>
-                        </button>
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              setEditTournament({
+                                ...tournament,
+                                startDate: tournament.startDate || '',
+                                finalDate: tournament.finalDate || '',
+                              })
+                            }
+                            className="flex items-center gap-2 px-4 py-2 bg-[#d4af37]/10 text-[#d4af37] rounded-xl hover:bg-[#d4af37] hover:text-white transition-all border border-[#d4af37]/30 text-sm font-semibold"
+                          >
+                            <Pencil className="w-4 h-4" />
+                            Edit
+                          </button>
+                        </div>
 
                         {isExpanded && (
                           <div className="p-5 border-t border-white/10 space-y-4 bg-[#0a1e35]/50">
@@ -943,47 +1048,64 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
               <div className="space-y-5">
 
-                <input
-                  type="text"
-                  value={editRace.name}
-                  onChange={(e) =>
-                    setEditRace({
-                      ...editRace,
-                      name:
-                        e.target.value,
-                    })
-                  }
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
+                <label className="space-y-2 block">
+                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                    Race name
+                  </span>
+                  <input
+                    type="text"
+                    value={editRace.name}
+                    onChange={(e) =>
+                      setEditRace({
+                        ...editRace,
+                        name:
+                          e.target.value,
+                      })
+                    }
+                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                  />
+                </label>
 
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="Race date (dd/MM/yyyy)"
-                  value={editRace.date}
-                  onChange={(e) =>
-                    setEditRace({
-                      ...editRace,
-                      date:
-                        formatDateInput(e.target.value),
-                    })
-                  }
-                  maxLength={10}
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
+                <div className="grid md:grid-cols-2 gap-5">
+                  <label className="space-y-2 block">
+                    <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                      Race date
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="dd/MM/yyyy"
+                      value={editRace.date}
+                      onChange={(e) =>
+                        setEditRace({
+                          ...editRace,
+                          date:
+                            formatDateInput(e.target.value),
+                        })
+                      }
+                      maxLength={10}
+                      className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                    />
+                  </label>
 
-                <input
-                  type="time"
-                  value={editRace.time}
-                  onChange={(e) =>
-                    setEditRace({
-                      ...editRace,
-                      time:
-                        e.target.value,
-                    })
-                  }
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
+                  <label className="space-y-2 block">
+                    <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                      Race time
+                    </span>
+                    <input
+                      type="time"
+                      value={editRace.time}
+                      onChange={(e) =>
+                        setEditRace({
+                          ...editRace,
+                          time:
+                            e.target.value,
+                        })
+                      }
+                      className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                    />
+                  </label>
+                </div>
               </div>
 
               <div className="flex gap-4 mt-8">
@@ -1007,6 +1129,174 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
                 <button
                   onClick={updateRace}
+                  className="flex-1 py-4 bg-[#d4af37] rounded-2xl text-white font-bold"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {deleteRaceTarget && (
+          <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-[60] p-4">
+            <div className="bg-[#12304f] p-8 rounded-3xl w-full max-w-lg border border-red-500/30">
+              <div className="flex items-center gap-3 text-red-300 mb-4">
+                <Trash2 className="w-6 h-6" />
+                <h2 className="text-2xl font-black text-white">
+                  Delete Race?
+                </h2>
+              </div>
+
+              <p className="text-gray-300 leading-relaxed">
+                Are you sure you want to delete <span className="font-bold text-white">{deleteRaceTarget.name}</span>? This action cannot be undone.
+              </p>
+
+              <div className="flex gap-4 mt-8">
+                <button
+                  onClick={() => setDeleteRaceTarget(null)}
+                  className="flex-1 py-4 bg-white/10 rounded-2xl text-white"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={confirmDeleteRace}
+                  className="flex-1 flex items-center justify-center gap-2 py-4 bg-red-600 hover:bg-red-700 rounded-2xl text-white font-bold"
+                >
+                  <Trash2 className="w-5 h-5" />
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {deleteTournamentTarget && (
+          <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-[60] p-4">
+            <div className="bg-[#12304f] p-8 rounded-3xl w-full max-w-lg border border-red-500/30">
+              <div className="flex items-center gap-3 text-red-300 mb-4">
+                <Trash2 className="w-6 h-6" />
+                <h2 className="text-2xl font-black text-white">
+                  Delete Tournament?
+                </h2>
+              </div>
+
+              <p className="text-gray-300 leading-relaxed">
+                Are you sure you want to delete <span className="font-bold text-white">{deleteTournamentTarget.name}</span>? This will delete the tournament and all races, entries, registrations, referee assignments and reports under it.
+              </p>
+
+              <div className="flex gap-4 mt-8">
+                <button
+                  onClick={() => setDeleteTournamentTarget(null)}
+                  className="flex-1 py-4 bg-white/10 rounded-2xl text-white"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={confirmDeleteTournament}
+                  className="flex-1 flex items-center justify-center gap-2 py-4 bg-red-600 hover:bg-red-700 rounded-2xl text-white font-bold"
+                >
+                  <Trash2 className="w-5 h-5" />
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {editTournament && (
+          <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#12304f] p-8 rounded-3xl w-full max-w-2xl border border-white/10">
+              <h2 className="text-3xl font-black text-white mb-2">
+                Edit Tournament
+              </h2>
+
+              <p className="text-gray-400 mb-6">
+                Update tournament name and schedule dates.
+              </p>
+
+              {tournamentMessage && (
+                <div className={`mb-5 rounded-xl border px-4 py-3 font-semibold ${messageToneClasses(tournamentMessage)}`}>
+                  {tournamentMessage}
+                </div>
+              )}
+
+              <div className="grid md:grid-cols-2 gap-5">
+                <label className="space-y-2 md:col-span-2">
+                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                    Tournament name
+                  </span>
+                  <input
+                    type="text"
+                    value={editTournament.name}
+                    onChange={(event) =>
+                      setEditTournament({
+                        ...editTournament,
+                        name: event.target.value,
+                      })
+                    }
+                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                  />
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                    Start date
+                  </span>
+                  <input
+                    type="date"
+                    value={editTournament.startDate || ''}
+                    onChange={(event) =>
+                      setEditTournament({
+                        ...editTournament,
+                        startDate: event.target.value,
+                      })
+                    }
+                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                  />
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                    End date
+                  </span>
+                  <input
+                    type="date"
+                    value={editTournament.finalDate || ''}
+                    onChange={(event) =>
+                      setEditTournament({
+                        ...editTournament,
+                        finalDate: event.target.value,
+                      })
+                    }
+                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                  />
+                </label>
+              </div>
+
+              <div className="flex gap-4 mt-8">
+                <button
+                  onClick={requestDeleteTournament}
+                  className="flex-1 flex items-center justify-center gap-2 py-4 bg-red-600 hover:bg-red-700 rounded-2xl text-white font-bold"
+                >
+                  <Trash2 className="w-5 h-5" />
+                  Delete
+                </button>
+
+                <button
+                  onClick={() => {
+                    setEditTournament(null);
+                    setTournamentMessage('');
+                  }}
+                  className="flex-1 py-4 bg-white/10 rounded-2xl text-white"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={handleUpdateTournament}
                   className="flex-1 py-4 bg-[#d4af37] rounded-2xl text-white font-bold"
                 >
                   Save
