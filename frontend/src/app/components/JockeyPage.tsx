@@ -61,6 +61,9 @@ export default function JockeyPage({
   const [message, setMessage] = useState('');
   const [participationExpanded, setParticipationExpanded] = useState(false);
   const [assignedExpanded, setAssignedExpanded] = useState(false);
+  const [expandedHorseInfoKeys, setExpandedHorseInfoKeys] = useState<Set<string>>(
+    new Set()
+  );
 
   const loadPortal = () => {
     getJockeyPortal()
@@ -73,6 +76,7 @@ export default function JockeyPage({
         setInvitations(data.invitations);
         setParticipationExpanded(false);
         setAssignedExpanded(false);
+        setExpandedHorseInfoKeys(new Set());
         setBio(data.profile?.bio || '');
         setCertificate(data.profile?.certificate || '');
         setCompetitionLevel(data.profile?.competitionLevel || '');
@@ -142,7 +146,25 @@ export default function JockeyPage({
       race &&
         ['published', 'in-progress', 'finished', 'completed'].includes(race.status)
     );
-  const renderHorseInformation = (horse?: HorseRecord, ratingSnapshot?: number) => {
+  const toggleHorseInfo = (key: string) => {
+    setExpandedHorseInfoKeys((current) => {
+      const next = new Set(current);
+
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+
+      return next;
+    });
+  };
+
+  const renderHorseInformation = (
+    horse?: HorseRecord,
+    ratingSnapshot?: number,
+    informationKey?: string
+  ) => {
     if (!horse) {
       return (
         <div className="mt-4 rounded-xl border border-white/10 bg-[#0b223d] p-4 text-gray-400 text-sm">
@@ -165,9 +187,22 @@ export default function JockeyPage({
       { label: 'Speed', value: numberLabel(horse.speedRating), icon: Gauge },
       { label: 'Stamina', value: numberLabel(horse.staminaRating), icon: HeartPulse },
     ];
+    const compactLabels = new Set([
+      'Breed',
+      'Age',
+      'Sex',
+      'Color',
+      'Horse Weight',
+      'Official Rating',
+    ]);
+    const expandKey = informationKey || horse.id;
+    const isExpanded = expandedHorseInfoKeys.has(expandKey);
+    const visibleProfileItems = isExpanded
+      ? profileItems
+      : profileItems.filter(({ label }) => compactLabels.has(label));
 
     return (
-      <div className="mt-4 rounded-xl border border-white/10 bg-[#0b223d] p-4">
+      <div className="relative mt-4 rounded-xl border border-white/10 bg-[#0b223d] p-4 pb-7">
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="text-gray-300 text-xs uppercase font-bold">
             Horse Information
@@ -179,7 +214,7 @@ export default function JockeyPage({
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          {profileItems.map(({ label, value, icon: Icon }) => (
+          {visibleProfileItems.map(({ label, value, icon: Icon }) => (
             <div
               key={label}
               className="rounded-lg border border-white/10 bg-white/5 px-3 py-2"
@@ -196,21 +231,47 @@ export default function JockeyPage({
           ))}
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-gray-300">
-            Health: <span className="font-bold text-white">{horse.healthStatus || 'Not set'}</span>
-          </div>
+        {isExpanded && (
+          <>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-gray-300">
+                Health: <span className="font-bold text-white">{horse.healthStatus || 'Not set'}</span>
+              </div>
 
-          <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-gray-300">
-            Species: <span className="font-bold text-white">{horse.species || 'Not set'}</span>
-          </div>
-        </div>
+              <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-gray-300">
+                Species: <span className="font-bold text-white">{horse.species || 'Not set'}</span>
+              </div>
+            </div>
 
-        {horse.profileNotes && (
-          <p className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-300">
-            {horse.profileNotes}
-          </p>
+            {horse.profileNotes && (
+              <p className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-300">
+                {horse.profileNotes}
+              </p>
+            )}
+          </>
         )}
+
+        <button
+          type="button"
+          onClick={() => toggleHorseInfo(expandKey)}
+          aria-label={
+            isExpanded
+              ? `Collapse full information for ${horse.name}`
+              : `Expand full information for ${horse.name}`
+          }
+          title={
+            isExpanded
+              ? `Collapse full information for ${horse.name}`
+              : `Expand full information for ${horse.name}`
+          }
+          className="absolute left-1/2 bottom-0 flex h-8 w-8 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border border-[#d4af37]/40 bg-[#071a2f] text-[#d4af37] shadow-lg shadow-black/20 hover:bg-[#12304f] focus:outline-none focus:ring-2 focus:ring-[#d4af37]/60"
+        >
+          {isExpanded ? (
+            <ChevronUp className="h-4 w-4" />
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )}
+        </button>
       </div>
     );
   };
@@ -382,7 +443,7 @@ export default function JockeyPage({
                       </div>
                     )}
 
-                    {renderHorseInformation(horse)}
+                    {renderHorseInformation(horse, undefined, `invitation-${invitation.id}`)}
 
                     {invitation.status === 'accepted' && (
                       <div className="text-yellow-400 text-sm mt-2 font-semibold">
@@ -453,7 +514,7 @@ export default function JockeyPage({
                         </span>
                       </div>
 
-                      {renderHorseInformation(horse, entry.ratingSnapshot)}
+                      {renderHorseInformation(horse, entry.ratingSnapshot, `entry-${entry.id}`)}
 
                       <div className="mt-4 rounded-xl border border-white/10 bg-[#0b223d] p-4">
                         <div className="flex items-center gap-2 text-gray-400 text-xs uppercase font-bold mb-3">
