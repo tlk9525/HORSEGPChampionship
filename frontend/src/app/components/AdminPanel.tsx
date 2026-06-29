@@ -527,6 +527,53 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                       </div>
                     </div>
 
+                    <div className="mb-5 rounded-2xl border border-white/10 bg-[#0b2540] p-4">
+                      <div className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[#d4af37]">
+                        <FileText className="h-4 w-4" />
+                        Review information
+                      </div>
+
+                      <div className="grid gap-4 xl:grid-cols-2">
+                        {item.reviewSections.map((section) => (
+                          <div
+                            key={`${item.id}-${section.title}`}
+                            className="rounded-xl border border-white/10 bg-[#071a2f] p-4"
+                          >
+                            <h4 className="mb-3 text-base font-black text-white">
+                              {section.title}
+                            </h4>
+
+                            <dl className="space-y-2">
+                              {section.fields.map((field) => (
+                                <div
+                                  key={`${section.title}-${field.label}`}
+                                  className="grid grid-cols-[minmax(110px,0.8fr)_minmax(0,1.2fr)] gap-3 text-sm"
+                                >
+                                  <dt className="text-gray-500">{field.label}</dt>
+                                  <dd className="break-words text-right font-semibold text-gray-200">
+                                    {field.value}
+                                  </dd>
+                                </div>
+                              ))}
+                            </dl>
+                          </div>
+                        ))}
+                      </div>
+
+                      {item.warnings.length > 0 && (
+                        <div className="mt-4 space-y-2">
+                          {item.warnings.map((warning) => (
+                            <div
+                              key={warning}
+                              className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-300"
+                            >
+                              Check before approval: {warning}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex gap-4">
 
                       <button

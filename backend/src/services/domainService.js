@@ -1,4 +1,9 @@
-import { ACTIVE_TOURNAMENT_STATUSES, USER_ROLES } from '../config/constants.js';
+import {
+  ACTIVE_TOURNAMENT_STATUSES,
+  RACE_CLASSES,
+  USER_ROLES,
+} from '../config/constants.js';
+import { officialHorseRating } from './handicapService.js';
 
 // Lấy tên chủ ngựa (owner) từ userId, trả về 'Unknown Owner' nếu không tìm thấy
 export const ownerName = (db, userId) =>
@@ -176,6 +181,153 @@ export const canRefereeRace = (race, user, db) =>
   user?.role === USER_ROLES.ADMIN ||
   raceRefereeIds(db, race).includes(user?.id);
 
+const textValue = (value, fallback = 'Not provided') => {
+  const normalized = String(value ?? '').trim();
+  return normalized || fallback;
+};
+
+const weightValue = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0
+    ? `${Math.round(parsed)}lb`
+    : 'Not provided';
+};
+
+const approvalField = (label, value) => ({
+  label,
+  value: textValue(value),
+});
+
+const raceReviewSection = (db, raceId) => {
+  const race = db.races.find((item) => item.id === raceId);
+  if (!race) {
+    return {
+      title: 'Race',
+      fields: [approvalField('Race', 'Race record not found')],
+    };
+  }
+
+  const raceLabel = [race.raceNumber, race.name].filter(Boolean).join(' - ');
+  const schedule = [race.date || race.raceDate, race.time || race.raceTime]
+    .filter(Boolean)
+    .join(' at ');
+  const conditions = [race.raceClass, race.distance, race.surface]
+    .filter(Boolean)
+    .join(' • ');
+
+  return {
+    title: 'Race',
+    fields: [
+      approvalField('Tournament', tournamentName(db, race.tournamentId)),
+      approvalField('Race', raceLabel),
+      approvalField('Schedule', schedule),
+      approvalField('Class / Distance / Surface', conditions),
+      approvalField('Venue', race.venue),
+    ],
+  };
+};
+
+const horseReviewSection = (db, horseId) => {
+  const horse = db.horses.find((item) => item.id === horseId);
+  if (!horse) {
+    return {
+      title: 'Horse',
+      fields: [approvalField('Horse', 'Horse record not found')],
+    };
+  }
+
+  return {
+    title: 'Horse',
+    fields: [
+      approvalField('Horse', horse.name),
+      approvalField('Official Rating', officialHorseRating(horse)),
+      approvalField(
+        'Initial Attributes',
+        `Speed ${textValue(horse.speedRating, '-')} • Stamina ${textValue(horse.staminaRating, '-')} • Form ${textValue(horse.formRating, '-')} • Health ${textValue(horse.healthRating, '-')}`
+      ),
+      approvalField(
+        'Profile',
+        [horse.breed, horse.age ? `${horse.age} years` : '', horse.sex]
+          .filter(Boolean)
+          .join(' • ')
+      ),
+      approvalField('Horse Weight', weightValue(horse.weightLb)),
+      approvalField('Health Status', horse.healthStatus),
+      approvalField(
+        'Veterinary Certificate',
+        horse.veterinaryCertificateUrl ? 'Provided' : 'Missing'
+      ),
+    ],
+  };
+};
+
+const jockeyReviewSection = (db, jockeyUserId) => {
+  const user = db.users.find((item) => item.id === jockeyUserId);
+  const profile = (db.jockeyProfiles || []).find(
+    (item) => item.userId === jockeyUserId
+  );
+
+  return {
+    title: 'Jockey',
+    fields: [
+      approvalField('Jockey', user?.name || 'Unknown Jockey'),
+      approvalField('Email', user?.email),
+      approvalField('Weight', weightValue(profile?.weightLb)),
+      approvalField('Competition Level', profile?.competitionLevel),
+      approvalField('Certificate', profile?.certificate),
+      approvalField('Profile Status', profile?.status || 'Profile missing'),
+    ],
+  };
+};
+
+const ownerReviewSection = (db, ownerUserId) => {
+  const owner = db.users.find((item) => item.id === ownerUserId);
+
+  return {
+    title: 'Owner',
+    fields: [
+      approvalField('Owner', owner?.name || 'Unknown Owner'),
+      approvalField('Email', owner?.email),
+      approvalField('Account Status', owner?.status),
+    ],
+  };
+};
+
+const approvalWarnings = (db, { horseId, jockeyUserId, raceId } = {}) => {
+  const warnings = [];
+  const horse = horseId
+    ? db.horses.find((item) => item.id === horseId)
+    : null;
+  const race = raceId
+    ? db.races.find((item) => item.id === raceId)
+    : null;
+  const jockeyProfile = jockeyUserId
+    ? (db.jockeyProfiles || []).find((item) => item.userId === jockeyUserId)
+    : null;
+
+  if (horse && !horse.veterinaryCertificateUrl) {
+    warnings.push('Horse veterinary certificate has not been provided.');
+  }
+
+  if (jockeyUserId && !jockeyProfile) {
+    warnings.push('Jockey profile is missing.');
+  } else if (jockeyProfile && !jockeyProfile.certificate) {
+    warnings.push('Jockey certificate has not been provided.');
+  }
+
+  if (horse && race?.raceClass && RACE_CLASSES[race.raceClass]) {
+    const rating = officialHorseRating(horse);
+    const { min, max } = RACE_CLASSES[race.raceClass];
+    if (rating < min || rating > max) {
+      warnings.push(
+        `Horse rating ${rating} is outside ${race.raceClass} eligibility (${min}-${max}).`
+      );
+    }
+  }
+
+  return warnings;
+};
+
 // Tạo danh sách các mục cần phê duyệt: ngựa chờ, tài khoản chờ, đăng ký jockey, và đăng ký race
 export const formatApprovals = (db) => [
   ...db.horses
@@ -188,6 +340,11 @@ export const formatApprovals = (db) => [
       detail: `Owner: ${ownerName(db, horse.ownerUserId)}`,
       date: horse.createdAt || 'Submitted',
       targetUserId: horse.ownerUserId,
+      reviewSections: [
+        ownerReviewSection(db, horse.ownerUserId),
+        horseReviewSection(db, horse.id),
+      ],
+      warnings: approvalWarnings(db, { horseId: horse.id }),
     })),
   ...db.users
     .filter(
@@ -203,6 +360,24 @@ export const formatApprovals = (db) => [
       detail: `Email: ${user.email} • Role: ${user.role}`,
       date: user.createdAt || 'Submitted',
       targetUserId: user.id,
+      reviewSections: [
+        {
+          title: 'Account',
+          fields: [
+            approvalField('Full Name', user.name),
+            approvalField('Email', user.email),
+            approvalField('Requested Role', user.role),
+            approvalField('Current Status', user.status),
+          ],
+        },
+        ...(user.role === USER_ROLES.JOCKEY
+          ? [jockeyReviewSection(db, user.id)]
+          : []),
+      ],
+      warnings:
+        user.role === USER_ROLES.JOCKEY
+          ? approvalWarnings(db, { jockeyUserId: user.id })
+          : [],
     })),
   ...(db.jockeyRaceRegistrations || [])
     .filter((registration) => registration.status === 'pending')
@@ -214,6 +389,14 @@ export const formatApprovals = (db) => [
       detail: `Race: ${raceName(db, registration.raceId)}`,
       date: registration.createdAt,
       targetUserId: registration.jockeyUserId,
+      reviewSections: [
+        jockeyReviewSection(db, registration.jockeyUserId),
+        raceReviewSection(db, registration.raceId),
+      ],
+      warnings: approvalWarnings(db, {
+        jockeyUserId: registration.jockeyUserId,
+        raceId: registration.raceId,
+      }),
     })),
   ...(db.horseRaceRegistrations || [])
     .filter(
@@ -230,6 +413,15 @@ export const formatApprovals = (db) => [
       detail: `Race: ${raceName(db, registration.raceId)} • Owner: ${ownerName(db, registration.ownerUserId)}`,
       date: registration.createdAt,
       targetUserId: registration.ownerUserId,
+      reviewSections: [
+        ownerReviewSection(db, registration.ownerUserId),
+        horseReviewSection(db, registration.horseId),
+        raceReviewSection(db, registration.raceId),
+      ],
+      warnings: approvalWarnings(db, {
+        horseId: registration.horseId,
+        raceId: registration.raceId,
+      }),
     })),
   ...(db.jockeyInvitations || [])
     .filter(
@@ -246,5 +438,16 @@ export const formatApprovals = (db) => [
         db.races.find((race) => race.id === invitation.raceId)?.date ||
         'Race schedule',
       targetUserId: invitation.ownerUserId,
+      reviewSections: [
+        ownerReviewSection(db, invitation.ownerUserId),
+        horseReviewSection(db, invitation.horseId),
+        jockeyReviewSection(db, invitation.jockeyUserId),
+        raceReviewSection(db, invitation.raceId),
+      ],
+      warnings: approvalWarnings(db, {
+        horseId: invitation.horseId,
+        jockeyUserId: invitation.jockeyUserId,
+        raceId: invitation.raceId,
+      }),
     })),
 ];

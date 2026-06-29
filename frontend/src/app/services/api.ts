@@ -16,6 +16,14 @@ export interface ApprovalItem {
   detail: string;
   date: string;
   targetUserId: string;
+  reviewSections: Array<{
+    title: string;
+    fields: Array<{
+      label: string;
+      value: string;
+    }>;
+  }>;
+  warnings: string[];
 }
 
 export interface NotificationItem {
@@ -396,10 +404,6 @@ export const updateHorse = async (
     weightLb?: string | number;
     heightCm?: string | number;
     baseHandicap?: string | number;
-    speedRating?: string | number;
-    staminaRating?: string | number;
-    formRating?: string | number;
-    healthRating?: string | number;
     healthStatus?: string;
     profileNotes?: string;
     veterinaryCertificateUrl?: string;

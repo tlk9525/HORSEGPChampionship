@@ -250,7 +250,7 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     return c.json({ horse, horseCount: ownerHorses.length + 1, maxHorses: MAX_OWNER_HORSES }, 201);
   });
 
-  // Cập nhật thông tin ngựa đã tồn tại (owner hoặc admin)
+  // Cập nhật thông tin hồ sơ. Các thành phần rating chỉ được nhập khi tạo ngựa.
   app.post('/horses/:id', async (c) => {
     const user = c.get('user');
     const db = c.get('db');
@@ -270,23 +270,32 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     if (!name || !breed || !age || Number(age) <= 0) {
       return c.json({ message: 'Horse name, breed and age are required' }, 400);
     }
-    if (!validRatingComponents([speedRating, staminaRating, formRating, healthRating])) {
-      return c.json({ message: 'All rating components must be between 0 and 100' }, 400);
+
+    const attemptsRatingChange = [
+      [speedRating, horse.speedRating],
+      [staminaRating, horse.staminaRating],
+      [formRating, horse.formRating],
+      [healthRating, horse.healthRating],
+    ].some(
+      ([nextValue, storedValue]) =>
+        nextValue !== undefined &&
+        nextValue !== null &&
+        nextValue !== '' &&
+        Number(nextValue) !== Number(storedValue)
+    );
+    if (attemptsRatingChange) {
+      return c.json(
+        {
+          message:
+            'Performance rating attributes are locked after horse registration.',
+        },
+        400
+      );
     }
 
     horse.name = name; horse.breed = breed; horse.species = species || '';
     horse.age = Number(age); horse.sex = sex || ''; horse.color = color || '';
     horse.weightLb = Number(weightLb) || 0; horse.heightCm = Number(heightCm) || 0;
-    horse.speedRating = numeric(speedRating, 75); horse.staminaRating = numeric(staminaRating, 75);
-    horse.formRating = numeric(formRating, 75); horse.healthRating = numeric(healthRating, 80);
-    const hasOfficialRating =
-      horse.overallRating !== null &&
-      horse.overallRating !== undefined &&
-      horse.overallRating !== '' &&
-      Number.isFinite(Number(horse.overallRating));
-    if (!hasOfficialRating) {
-      horse.overallRating = horseOverallRating({ speedRating, staminaRating, formRating, healthRating });
-    }
     horse.healthStatus = healthStatus || ''; horse.profileNotes = profileNotes || '';
     horse.veterinaryCertificateUrl = veterinaryCertificateUrl || '';
     horse.updatedAt = new Date().toISOString();

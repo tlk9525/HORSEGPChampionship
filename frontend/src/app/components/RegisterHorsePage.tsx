@@ -153,7 +153,7 @@ export default function RegisterHorsePage({
 
     setIsSubmitting(true);
 
-    const payload = {
+    const profilePayload = {
       name,
       breed,
       species,
@@ -162,18 +162,20 @@ export default function RegisterHorsePage({
       color,
       weightLb,
       heightCm,
-      speedRating,
-      staminaRating,
-      formRating,
-      healthRating,
       healthStatus,
       profileNotes,
       veterinaryCertificateUrl,
     };
 
     const request = mode === 'edit' && activeHorse
-      ? updateHorse(activeHorse.id, payload).then(() => null)
-      : createHorse(payload).then(({ horseCount, maxHorses }) => ({
+      ? updateHorse(activeHorse.id, profilePayload).then(() => null)
+      : createHorse({
+          ...profilePayload,
+          speedRating,
+          staminaRating,
+          formRating,
+          healthRating,
+        }).then(({ horseCount, maxHorses }) => ({
           horseCount,
           maxHorses,
         }));
@@ -362,10 +364,12 @@ export default function RegisterHorsePage({
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
                 <div>
                   <h2 className="text-xl font-black text-white">
-                    Performance Rating
+                    {isEdit ? 'Performance Rating (Locked)' : 'Performance Rating'}
                   </h2>
                   <p className="text-gray-400 text-sm mt-1">
-                    Attribute scores set the initial rating. Race results update the official rating afterward.
+                    {isEdit
+                      ? 'These attributes were set when the horse was registered and cannot be edited. Official rating changes only through approved race results.'
+                      : 'Enter these attributes once to set the initial rating. They are locked after horse registration.'}
                   </p>
                 </div>
 
@@ -435,31 +439,54 @@ export default function RegisterHorsePage({
                 </div>
               )}
 
-              <div className="grid md:grid-cols-4 gap-4">
-                {[
-                  ['Speed', speedRating, setSpeedRating],
-                  ['Stamina', staminaRating, setStaminaRating],
-                  ['Current Form', formRating, setFormRating],
-                  ['Health', healthRating, setHealthRating],
-                ].map(([label, value, setter]) => (
-                  <div key={String(label)}>
-                    <label className="block text-gray-300 mb-2">
-                      {String(label)}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="1"
-                      value={String(value)}
-                      onChange={(event) =>
-                        (setter as (next: string) => void)(event.target.value)
-                      }
-                      className={fieldClass}
-                    />
-                  </div>
-                ))}
-              </div>
+              {isEdit ? (
+                <div className="grid md:grid-cols-4 gap-4">
+                  {[
+                    ['Speed', speedRating],
+                    ['Stamina', staminaRating],
+                    ['Current Form', formRating],
+                    ['Health', healthRating],
+                  ].map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="rounded-xl border border-white/10 bg-[#071a2f] p-4"
+                    >
+                      <div className="text-gray-400 text-xs uppercase font-bold">
+                        {label}
+                      </div>
+                      <div className="text-white text-xl font-black mt-1">
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-4 gap-4">
+                  {[
+                    ['Speed', speedRating, setSpeedRating],
+                    ['Stamina', staminaRating, setStaminaRating],
+                    ['Current Form', formRating, setFormRating],
+                    ['Health', healthRating, setHealthRating],
+                  ].map(([label, value, setter]) => (
+                    <div key={String(label)}>
+                      <label className="block text-gray-300 mb-2">
+                        {String(label)}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={String(value)}
+                        onChange={(event) =>
+                          (setter as (next: string) => void)(event.target.value)
+                        }
+                        className={fieldClass}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>

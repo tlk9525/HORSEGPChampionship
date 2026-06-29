@@ -87,15 +87,52 @@ test('owner profile update preserves an official Class 5 rating of zero', async 
       name: 'Horse',
       breed: 'Arabian',
       age: 3,
-      speedRating: 90,
-      staminaRating: 90,
-      formRating: 90,
-      healthRating: 90,
     }),
   });
 
   assert.equal(response.status, 200);
   assert.equal(db.horses[0].overallRating, 0);
+});
+
+test('owner cannot change performance rating attributes after horse registration', async () => {
+  const db = makeDb({
+    id: 'race-1',
+    tournamentId: 'tournament-1',
+    status: 'registration-open',
+    raceClass: 'Open',
+  });
+  Object.assign(db.horses[0], {
+    breed: 'Arabian',
+    age: 3,
+    speedRating: 75,
+    staminaRating: 75,
+    formRating: 75,
+    healthRating: 75,
+  });
+  const app = new Hono();
+  app.route('/', createOwnerRoutes(async () => db, async () => undefined));
+
+  const response = await app.request('/horses/horse-1', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer owner-token',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: 'Horse',
+      breed: 'Arabian',
+      age: 3,
+      speedRating: 99,
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.match(
+    (await response.json()).message,
+    /rating attributes are locked/i
+  );
+  assert.equal(db.horses[0].speedRating, 75);
+  assert.equal(db.horses[0].overallRating, 50);
 });
 
 test('owner jockey selection creates a pending invitation after horse approval', async () => {
