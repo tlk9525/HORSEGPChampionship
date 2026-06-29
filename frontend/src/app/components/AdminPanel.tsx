@@ -1037,59 +1037,75 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
               )}
 
               <div className="grid md:grid-cols-2 gap-5">
-                <input
-                  type="text"
-                  placeholder="Tournament name"
-                  value={tournamentForm.name}
-                  onChange={(event) =>
-                    setTournamentForm({
-                      ...tournamentForm,
-                      name: event.target.value,
-                    })
-                  }
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
+                <label className="space-y-2">
+                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                    Tournament name
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Giải Demo Tiếng Việt"
+                    value={tournamentForm.name}
+                    onChange={(event) =>
+                      setTournamentForm({
+                        ...tournamentForm,
+                        name: event.target.value,
+                      })
+                    }
+                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                  />
+                </label>
 
+                <label className="space-y-2">
+                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                    Start date
+                  </span>
+                  <input
+                    type="date"
+                    value={tournamentForm.startDate}
+                    onChange={(event) =>
+                      setTournamentForm({
+                        ...tournamentForm,
+                        startDate: event.target.value,
+                      })
+                    }
+                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                  />
+                </label>
 
+                <label className="space-y-2">
+                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                    End date
+                  </span>
+                  <input
+                    type="date"
+                    value={tournamentForm.finalDate}
+                    onChange={(event) =>
+                      setTournamentForm({
+                        ...tournamentForm,
+                        finalDate: event.target.value,
+                      })
+                    }
+                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                  />
+                </label>
 
-                <input
-                  type="date"
-                  placeholder="Start date"
-                  value={tournamentForm.startDate}
-                  onChange={(event) =>
-                    setTournamentForm({
-                      ...tournamentForm,
-                      startDate: event.target.value,
-                    })
-                  }
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
-
-                <input
-                  type="date"
-                  placeholder="Final date"
-                  value={tournamentForm.finalDate}
-                  onChange={(event) =>
-                    setTournamentForm({
-                      ...tournamentForm,
-                      finalDate: event.target.value,
-                    })
-                  }
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
-
-                <input
-                  type="text"
-                  placeholder="Location"
-                  value={tournamentForm.location}
-                  onChange={(event) =>
-                    setTournamentForm({
-                      ...tournamentForm,
-                      location: event.target.value,
-                    })
-                  }
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
+                <label className="space-y-2">
+                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                    Location
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Sân đua Đại học"
+                    value={tournamentForm.location}
+                    onChange={(event) =>
+                      setTournamentForm({
+                        ...tournamentForm,
+                        location: event.target.value,
+                      })
+                    }
+                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                  />
+                </label>
 
               </div>
 

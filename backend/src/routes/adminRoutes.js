@@ -36,6 +36,18 @@ import {
 // Helpers nội bộ
 const nonRejectedEntry = (entry) => entry.status !== 'rejected';
 
+const tournamentHasEnded = (tournament, at = new Date()) => {
+  if (!tournament?.finalDate) return false;
+
+  const finalDate = String(tournament.finalDate).slice(0, 10);
+  const tournamentEndsAt = new Date(`${finalDate}T23:59:59.999Z`);
+
+  return (
+    Number.isFinite(tournamentEndsAt.getTime()) &&
+    at.getTime() > tournamentEndsAt.getTime()
+  );
+};
+
 const registrationPair = (registration, invitation) => ({
   horseId: registration?.horseId || invitation?.horseId,
   jockeyUserId: registration?.jockeyUserId || invitation?.jockeyUserId,
@@ -646,14 +658,7 @@ export const createAdminRoutes = (getDb, writeDb) => {
       );
 
       const tournament = db.tournaments.find((item) => item.id === race.tournamentId);
-      const racesInTournament = (db.races || []).filter(
-        (item) => item.tournamentId === race.tournamentId
-      );
-      if (
-        tournament &&
-        racesInTournament.length > 0 &&
-        racesInTournament.every((item) => item.status === 'completed')
-      ) {
+      if (tournament && tournamentHasEnded(tournament)) {
         tournament.status = 'completed';
         tournament.updatedAt = race.updatedAt;
       }
