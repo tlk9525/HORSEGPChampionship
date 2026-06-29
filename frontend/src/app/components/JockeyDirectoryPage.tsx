@@ -29,6 +29,7 @@ export default function JockeyDirectoryPage() {
   const [selectedJockeyId, setSelectedJockeyId] = useState('');
   const [query, setQuery] = useState('');
   const [message, setMessage] = useState('');
+  const [jockeyListExpanded, setJockeyListExpanded] = useState(false);
   const [assignmentsExpanded, setAssignmentsExpanded] = useState(false);
 
   useEffect(() => {
@@ -60,6 +61,14 @@ export default function JockeyDirectoryPage() {
         .includes(normalized)
     );
   }, [jockeys, query]);
+
+  useEffect(() => {
+    setJockeyListExpanded(false);
+  }, [query]);
+
+  const visibleJockeys = jockeyListExpanded
+    ? filteredJockeys
+    : filteredJockeys.slice(0, 8);
 
   const selectedJockey =
     jockeys.find((jockey) => jockey.userId === selectedJockeyId) ||
@@ -109,6 +118,12 @@ export default function JockeyDirectoryPage() {
               />
             </div>
 
+            <div className="mb-3 flex items-center justify-between gap-3 text-sm text-gray-400">
+              <span>
+                Showing {visibleJockeys.length}/{filteredJockeys.length} profiles
+              </span>
+            </div>
+
             <div className="space-y-3">
               {filteredJockeys.length === 0 && (
                 <div className="rounded-xl border border-white/10 bg-[#071a2f] p-4 text-gray-500">
@@ -116,7 +131,7 @@ export default function JockeyDirectoryPage() {
                 </div>
               )}
 
-              {filteredJockeys.map((jockey) => (
+              {visibleJockeys.map((jockey) => (
                 <button
                   key={jockey.id}
                   onClick={() => {
@@ -147,6 +162,20 @@ export default function JockeyDirectoryPage() {
                 </button>
               ))}
             </div>
+
+            {filteredJockeys.length > 8 && (
+              <button
+                onClick={() => setJockeyListExpanded((current) => !current)}
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/10 px-4 py-3 text-[#d4af37] font-bold hover:bg-[#d4af37]/20 transition-all"
+              >
+                {jockeyListExpanded ? 'Show Less' : `View All ${filteredJockeys.length}`}
+                {jockeyListExpanded ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </button>
+            )}
           </div>
 
           <div className="bg-[#102a46] border border-white/10 rounded-2xl p-8">

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Award,
   Clock,
+  Search,
 } from 'lucide-react';
 import {
   RaceEntryRecord,
@@ -18,6 +19,7 @@ export default function ResultsPage() {
   const [entries, setEntries] = useState<RaceEntryRecord[]>([]);
   const [tournaments, setTournaments] = useState<TournamentRecord[]>([]);
   const [selectedTournamentId, setSelectedTournamentId] = useState('');
+  const [raceSearch, setRaceSearch] = useState('');
   const [message, setMessage] = useState('');
 
   useEffect(() => {
@@ -64,18 +66,48 @@ export default function ResultsPage() {
     [entries, raceIds]
   );
 
-  const recentResults = completedRaces
-    .map((race) => {
-      const raceEntries = tournamentEntries
-        .filter((entry) => entry.raceId === race.id && entry.position)
-        .sort((a, b) => Number(a.position || 99) - Number(b.position || 99));
+  const recentResults = useMemo(
+    () =>
+      completedRaces
+        .map((race) => {
+          const raceEntries = tournamentEntries
+            .filter((entry) => entry.raceId === race.id && entry.position)
+            .sort((a, b) => Number(a.position || 99) - Number(b.position || 99));
 
-      return {
-        race,
-        entries: raceEntries,
-      };
-    })
-    .filter((item) => item.entries.length > 0);
+          return {
+            race,
+            entries: raceEntries,
+          };
+        })
+        .filter((item) => item.entries.length > 0),
+    [completedRaces, tournamentEntries]
+  );
+
+  const visibleResults = useMemo(() => {
+    const normalized = raceSearch.trim().toLowerCase();
+
+    if (!normalized) return recentResults;
+
+    return recentResults.filter(({ race, entries: raceEntries }) => {
+      const searchableText = [
+        race.raceNumber,
+        race.name,
+        race.date,
+        race.time,
+        ...raceEntries.slice(0, 3).flatMap((entry) => [
+          entry.horseName,
+          entry.jockeyName,
+          entry.finishTime,
+          String(entry.position || ''),
+        ]),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return searchableText.includes(normalized);
+    });
+  }, [raceSearch, recentResults]);
 
   return (
     <div className="min-h-screen bg-[#071a2f] pt-24 pb-12">
@@ -93,7 +125,10 @@ export default function ResultsPage() {
 
           <select
             value={selectedTournamentId}
-            onChange={(event) => setSelectedTournamentId(event.target.value)}
+            onChange={(event) => {
+              setSelectedTournamentId(event.target.value);
+              setRaceSearch('');
+            }}
             className="bg-[#12304f] border border-white/10 rounded-xl px-4 py-3 text-white min-w-[280px]"
           >
             {tournaments.map((tournament) => (
@@ -127,9 +162,27 @@ export default function ResultsPage() {
         </div>
 
         <div className="mb-8">
-          <h2 className="text-2xl font-black text-white mb-6">
-            Recent Race Results
-          </h2>
+          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-2xl font-black text-white">
+                Recent Race Results
+              </h2>
+
+              <p className="text-gray-400 text-sm mt-1">
+                Showing {visibleResults.length}/{recentResults.length} races
+              </p>
+            </div>
+
+            <div className="relative w-full lg:max-w-md">
+              <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-500" />
+              <input
+                value={raceSearch}
+                onChange={(event) => setRaceSearch(event.target.value)}
+                placeholder="Search race, horse, jockey, time"
+                className="w-full rounded-xl border border-white/10 bg-[#12304f] py-3 pl-12 pr-4 text-white outline-none focus:border-[#d4af37]"
+              />
+            </div>
+          </div>
 
           <div className="space-y-6">
             {recentResults.length === 0 && (
@@ -138,7 +191,13 @@ export default function ResultsPage() {
               </div>
             )}
 
-            {recentResults.map(({ race, entries: raceEntries }) => {
+            {recentResults.length > 0 && visibleResults.length === 0 && (
+              <div className="bg-[#12304f] border border-white/10 rounded-2xl p-6 text-gray-400">
+                No race results match this search in the selected tournament.
+              </div>
+            )}
+
+            {visibleResults.map(({ race, entries: raceEntries }) => {
               const winner = raceEntries[0];
 
               return (

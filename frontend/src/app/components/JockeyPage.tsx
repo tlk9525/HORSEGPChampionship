@@ -44,6 +44,7 @@ export default function JockeyPage({
   const [competitionLevel, setCompetitionLevel] = useState('');
   const [weightLb, setWeightLb] = useState('');
   const [message, setMessage] = useState('');
+  const [participationExpanded, setParticipationExpanded] = useState(false);
   const [assignedExpanded, setAssignedExpanded] = useState(false);
 
   const loadPortal = () => {
@@ -55,6 +56,7 @@ export default function JockeyPage({
         setRaces(data.races);
         setRaceEntries(data.raceEntries);
         setInvitations(data.invitations);
+        setParticipationExpanded(false);
         setAssignedExpanded(false);
         setBio(data.profile?.bio || '');
         setCertificate(data.profile?.certificate || '');
@@ -109,6 +111,10 @@ export default function JockeyPage({
     tournaments.find((tournament) => tournament.id === tournamentId);
   const needsJockeyResponse = (invitation: JockeyInvitation) =>
     invitation.status === 'pending';
+
+  const visibleInvitations = participationExpanded
+    ? invitations
+    : invitations.slice(0, 4);
 
   const visibleAssignedEntries = assignedExpanded
     ? raceEntries
@@ -229,9 +235,31 @@ export default function JockeyPage({
           </div>
 
           <div className="bg-[#12304f] border border-white/10 rounded-2xl p-8">
-            <h2 className="text-3xl font-black text-white mb-6">
-              Race Participation
-            </h2>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-3xl font-black text-white">
+                  Race Participation
+                </h2>
+
+                <p className="text-gray-400 text-sm mt-1">
+                  Showing {visibleInvitations.length}/{invitations.length} requests
+                </p>
+              </div>
+
+              {invitations.length > 4 && (
+                <button
+                  onClick={() => setParticipationExpanded((current) => !current)}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/10 px-4 py-2 text-[#d4af37] font-bold hover:bg-[#d4af37]/20 transition-all"
+                >
+                  {participationExpanded ? 'Show Less' : `View All ${invitations.length}`}
+                  {participationExpanded ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </button>
+              )}
+            </div>
 
             <div className="space-y-4">
               {invitations.length === 0 && (
@@ -240,7 +268,7 @@ export default function JockeyPage({
                 </div>
               )}
 
-              {invitations.map((invitation) => (
+              {visibleInvitations.map((invitation) => (
                 <div
                   key={invitation.id}
                   className="rounded-xl bg-[#071a2f] border border-white/10 p-4"
