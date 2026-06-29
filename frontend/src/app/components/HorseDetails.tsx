@@ -1,6 +1,8 @@
 import {
   Activity,
   ArrowLeft,
+  ChevronDown,
+  ChevronUp,
   FileText,
   Gauge,
   HeartPulse,
@@ -37,6 +39,7 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
   const { horseId } = useParams();
   const [loadedHorse, setLoadedHorse] = useState<HorseRecord | null>(null);
   const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
+  const [raceHistoryExpanded, setRaceHistoryExpanded] = useState(false);
   const [message, setMessage] = useState('');
   const activeHorse = horse || loadedHorse;
 
@@ -58,6 +61,7 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
             .filter((entry) => entry.horseId === activeHorseId)
             .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
         );
+        setRaceHistoryExpanded(false);
       })
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : 'Unable to load horse')
@@ -101,6 +105,9 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
     ['Health Status', activeHorse.healthStatus || 'Not set', HeartPulse],
     ['Jockey Pairing', statusLabel(activeHorse.jockeyConfirmation), ShieldCheck],
   ];
+  const visibleRaceEntries = raceHistoryExpanded
+    ? raceEntries
+    : raceEntries.slice(0, 5);
 
   return (
     <div className="min-h-screen bg-[#071a2f] pt-24 pb-12">
@@ -192,19 +199,31 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-[#0b223d] p-8">
-              <h2 className="text-3xl font-bold text-white mb-5">
-                Notes
-              </h2>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
+                <div>
+                  <h2 className="text-3xl font-bold text-white">
+                    Race History
+                  </h2>
 
-              <p className="text-gray-300 leading-8">
-                {activeHorse.profileNotes || 'No profile notes have been added yet.'}
-              </p>
-            </div>
+                  <p className="text-gray-400 text-sm mt-1">
+                    Showing {visibleRaceEntries.length}/{raceEntries.length} entries
+                  </p>
+                </div>
 
-            <div className="rounded-2xl border border-white/10 bg-[#0b223d] p-8">
-              <h2 className="text-3xl font-bold text-white mb-5">
-                Race History
-              </h2>
+                {raceEntries.length > 5 && (
+                  <button
+                    onClick={() => setRaceHistoryExpanded((current) => !current)}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/10 px-4 py-2 text-[#d4af37] font-bold hover:bg-[#d4af37]/20 transition-all"
+                  >
+                    {raceHistoryExpanded ? 'Show Less' : `View All ${raceEntries.length}`}
+                    {raceHistoryExpanded ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
+                  </button>
+                )}
+              </div>
 
               <div className="space-y-4">
                 {raceEntries.length === 0 && (
@@ -213,7 +232,7 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
                   </div>
                 )}
 
-                {raceEntries.map((entry) => (
+                {visibleRaceEntries.map((entry) => (
                   <div
                     key={entry.id}
                     className="rounded-xl border border-white/10 bg-[#12304f] p-5"
@@ -250,6 +269,16 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
           </div>
 
           <div className="space-y-8">
+            <div className="rounded-2xl border border-white/10 bg-[#0b223d] p-8">
+              <h2 className="text-2xl font-bold text-white mb-5">
+                Notes
+              </h2>
+
+              <p className="text-gray-300 leading-8">
+                {activeHorse.profileNotes || 'No profile notes have been added yet.'}
+              </p>
+            </div>
+
             <div className="rounded-2xl border border-white/10 bg-[#0b223d] p-8">
               <h2 className="text-2xl font-bold text-white mb-6">
                 Documents
