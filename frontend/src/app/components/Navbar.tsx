@@ -74,6 +74,7 @@ export default function Navbar({
     { name: 'Jockey Profiles', page: 'jockey-profiles', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
     { name: 'Jockey Portal', page: 'jockeys', roles: ['jockey'] },
     { name: 'Live Race', page: 'live-race', roles: ['admin', 'referee', 'spectator'] },
+    { name: 'Simulation Demo', page: 'simulation-demo', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
     { name: 'Results', page: 'results', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'], public: true },
     { name: 'Admin', page: 'admin', roles: ['admin'] },
   ];
