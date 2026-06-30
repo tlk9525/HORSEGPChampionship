@@ -132,6 +132,11 @@ export default function RaceDetails() {
   );
 
   const showData = canShowRaceCardData(selectedRace) && selectedEntries.length > 0;
+  const showResultColumns = Boolean(
+    selectedRace &&
+      (['finished', 'completed'].includes(selectedRace.status) ||
+        ['submitted', 'official'].includes(selectedRace.resultStatus || ''))
+  );
 
   const rows = selectedEntries.map((entry, index) => {
     const horse = horses.find((item) => item.id === entry.horseId);
@@ -157,6 +162,7 @@ export default function RaceDetails() {
       : ratingForHorse(horse);
     const ratingChange = Math.round(Number(entry.ratingChange || 0));
     const postRaceRating = Number(entry.postRaceRating || 0);
+    const finishPosition = Number(entry.position);
 
     return {
       id: entry.id,
@@ -173,6 +179,11 @@ export default function RaceDetails() {
           ? lbValue(entry.jockeyWeightLb)
           : lbValue(jockeyProfile?.weightLb),
       draw: entry.lane || 'TBD',
+      finishPosition:
+        Number.isInteger(finishPosition) && finishPosition > 0
+          ? finishPosition
+          : null,
+      finishTime: entry.finishTime || '-',
       owner: entry.ownerName || 'Owner pending',
       rating: formatRating(rating),
       ratingChange,
@@ -394,7 +405,7 @@ export default function RaceDetails() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1350px]">
+                <table className={`w-full ${showResultColumns ? 'min-w-[1520px]' : 'min-w-[1350px]'}`}>
                   <thead className="bg-[#071a2f] border-b border-white/10">
                     <tr>
                       <th className="py-4 px-3 text-left text-gray-400 uppercase text-xs">Horse No.</th>
@@ -405,6 +416,12 @@ export default function RaceDetails() {
                       <th className="py-4 px-3 text-left text-gray-400 uppercase text-xs">Jockey</th>
                       <th className="py-4 px-3 text-center text-gray-400 uppercase text-xs">Jockey Wt. (lb)</th>
                       <th className="py-4 px-3 text-center text-gray-400 uppercase text-xs">Draw</th>
+                      {showResultColumns && (
+                        <>
+                          <th className="py-4 px-3 text-center text-gray-400 uppercase text-xs">Pos.</th>
+                          <th className="py-4 px-3 text-center text-gray-400 uppercase text-xs">Finish Time</th>
+                        </>
+                      )}
                       <th className="py-4 px-3 text-left text-gray-400 uppercase text-xs">Owner</th>
                       <th className="py-4 px-3 text-center text-gray-400 uppercase text-xs">Rtg.</th>
                       <th className="py-4 px-3 text-center text-gray-400 uppercase text-xs">Rtg +/-</th>
@@ -465,6 +482,26 @@ export default function RaceDetails() {
                             {row.draw}
                           </div>
                         </td>
+
+                        {showResultColumns && (
+                          <>
+                            <td className="py-5 px-3 text-center">
+                              <div
+                                className={`inline-flex min-w-10 h-10 px-3 rounded-lg items-center justify-center font-black border ${
+                                  row.finishPosition === 1
+                                    ? 'bg-[#d4af37] text-[#071a2f] border-[#d4af37]'
+                                    : 'bg-[#12304f] text-white border-white/10'
+                                }`}
+                              >
+                                {row.finishPosition || '-'}
+                              </div>
+                            </td>
+
+                            <td className="py-5 px-3 text-center text-white font-mono font-bold">
+                              {row.finishTime}
+                            </td>
+                          </>
+                        )}
 
                         <td className="py-5 px-3 text-gray-300">
                           {row.owner}
