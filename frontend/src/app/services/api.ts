@@ -119,6 +119,8 @@ export interface RaceRecord {
   registrationClosesAt?: string;
   resultStatus?: string;
   awardsPublished?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface TournamentRecord {
