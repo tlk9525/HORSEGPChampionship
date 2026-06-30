@@ -1,151 +1,153 @@
-# Horse Racing Tournament Business Flow and Role Permissions
+# Luồng nghiệp vụ và phân quyền vai trò
 
-## 1. Overall Business Flow
+Tài liệu này mô tả luồng chính của hệ thống giải đua ngựa và quyền hạn của từng vai trò. Các tên trạng thái kỹ thuật như `raceEntries`, `preRaceStatus`, `resultStatus` được giữ nguyên để đối chiếu với code và cơ sở dữ liệu.
 
-1. Admin creates a Tournament.
-2. Admin creates multiple Races under that Tournament, for example 10 races.
-3. Each Race has its own independent registration lifecycle.
-4. Admin opens registration for a Race.
-5. Owner registers an approved Horse for that Race.
-6. Jockey registers availability for the same Race, or Owner invites a Jockey who is available for that Race.
-7. Jockey accepts or rejects the riding invitation.
-8. Admin approves the Horse race registration or Owner-Jockey pairing.
-9. When registration closes, the system automatically snapshots horse rating, calculates assigned weight, randomizes lane assignment, and creates the start list.
-10. Admin publishes the start list.
-11. Referee performs check-in for assigned races, including horse, jockey, equipment, and carried-weight checks.
-12. Referee marks each participant as Ready, Absent, Scratched, or Incident as needed.
-13. Admin starts the Race after at least one participant is Ready and all participants are checked.
-14. Admin finishes the Race.
-15. Referee records position, finish time, notes, violations, and penalties.
-16. Referee submits draft results for Admin review.
-17. Admin approves official results.
-18. The system updates horse rating from official results.
-19. The Race moves to Completed.
+## 1. Luồng nghiệp vụ tổng quát
 
-## 2. Role Permissions
+1. Admin tạo một giải đấu.
+2. Admin tạo nhiều cuộc đua thuộc giải đấu đó, ví dụ 10 cuộc đua.
+3. Mỗi cuộc đua có vòng đời đăng ký riêng.
+4. Admin mở đăng ký cho từng cuộc đua.
+5. Owner đăng ký một ngựa đã được duyệt vào cuộc đua đang mở.
+6. Jockey đăng ký khả dụng cho cùng cuộc đua, hoặc Owner mời một jockey đang khả dụng cho cuộc đua đó.
+7. Jockey chấp nhận hoặc từ chối lời mời cưỡi ngựa.
+8. Admin duyệt đăng ký ngựa hoặc duyệt cặp Owner - Jockey.
+9. Khi đóng đăng ký, hệ thống tự động lưu rating hiện tại của ngựa, tính trọng lượng được chỉ định, bốc cổng chạy và tạo danh sách xuất phát.
+10. Admin công bố danh sách xuất phát.
+11. Referee kiểm tra các cuộc đua được phân công, gồm ngựa, jockey, trang bị và điều kiện sẵn sàng.
+12. Referee đánh dấu từng thí sinh là sẵn sàng, vắng mặt, bị gạch khỏi danh sách hoặc có sự cố.
+13. Admin bắt đầu cuộc đua sau khi các thí sinh đã được kiểm tra và có ít nhất một thí sinh sẵn sàng.
+14. Admin kết thúc cuộc đua.
+15. Referee ghi vị trí về đích, thời gian hoàn thành, ghi chú, vi phạm và hình phạt nếu có.
+16. Referee nộp kết quả nháp cho Admin xem xét.
+17. Admin duyệt kết quả chính thức.
+18. Hệ thống cập nhật rating của ngựa từ kết quả chính thức.
+19. Cuộc đua chuyển sang trạng thái hoàn tất.
 
-### Admin
+## 2. Quyền hạn theo vai trò
 
-- Create and manage Tournaments.
-- Create and configure Races.
-- Select Race Class and assigned weight bounds.
-- Assign Referees.
-- Approve Owner, Jockey, Horse, Jockey race registration, Horse race registration, and Owner-Jockey pairing requests.
-- Open and close Race registration.
-- Publish the start list.
-- Start and finish a Race.
-- Approve official results.
+### Quản trị viên (Admin)
 
-### Owner
+- Tạo và quản lý giải đấu.
+- Tạo và cấu hình cuộc đua.
+- Chọn hạng đua và khoảng trọng lượng được chỉ định.
+- Phân công trọng tài.
+- Duyệt tài khoản Owner, Jockey, hồ sơ ngựa, đăng ký jockey theo cuộc đua, đăng ký ngựa theo cuộc đua và cặp Owner - Jockey.
+- Mở và đóng đăng ký cuộc đua.
+- Công bố danh sách xuất phát.
+- Bắt đầu và kết thúc cuộc đua.
+- Duyệt kết quả chính thức.
 
-- Register an Owner account.
-- Create Horse profiles.
-- Register an approved Horse into an open Race.
-- Invite or select a Jockey who is available for the same Race.
-- Submit Horse race registration requests.
-- Cannot start or finish races.
-- Cannot submit or approve results.
+### Chủ ngựa (Owner)
+
+- Đăng ký tài khoản chủ ngựa.
+- Tạo hồ sơ ngựa.
+- Đăng ký ngựa đã được duyệt vào cuộc đua đang mở.
+- Mời hoặc chọn jockey đang khả dụng cho cùng cuộc đua.
+- Gửi yêu cầu đăng ký ngựa vào cuộc đua.
+- Không được bắt đầu hoặc kết thúc cuộc đua.
+- Không được nộp hoặc duyệt kết quả.
 
 ### Jockey
 
-- Register a Jockey account.
-- Create and maintain a Jockey profile, including weight, certificate, and experience.
-- Register availability for a Race.
-- Accept or reject Owner invitations.
-- Cannot create official Race Entries alone.
-- Cannot manage races.
-- Cannot submit or approve results.
+- Đăng ký tài khoản jockey.
+- Tạo và cập nhật hồ sơ jockey, gồm cân nặng, chứng chỉ và kinh nghiệm.
+- Đăng ký khả dụng cho một cuộc đua.
+- Chấp nhận hoặc từ chối lời mời từ Owner.
+- Không thể tự tạo entry chính thức trong danh sách xuất phát.
+- Không được quản lý cuộc đua.
+- Không được nộp hoặc duyệt kết quả.
 
-### Referee
+### Trọng tài (Referee)
 
-- View assigned Races.
-- Perform check-in.
-- Mark participants Ready, Absent, Scratched, or Incident.
-- Record position, finish time, notes, violations, and penalties after Admin finishes the Race.
-- Submit draft results for Admin review.
-- Cannot start or finish races.
-- Cannot approve official results.
+- Xem các cuộc đua được phân công.
+- Thực hiện kiểm tra trước cuộc đua.
+- Đánh dấu thí sinh là sẵn sàng, vắng mặt, bị gạch khỏi danh sách hoặc có sự cố.
+- Ghi vị trí, thời gian hoàn thành, ghi chú, vi phạm và hình phạt sau khi Admin kết thúc cuộc đua.
+- Nộp kết quả nháp cho Admin xem xét.
+- Không được bắt đầu hoặc kết thúc cuộc đua.
+- Không được duyệt kết quả chính thức.
 
-### System
+### Hệ thống (System)
 
-- Applies top weight and minimum weight from Race Class.
-- Snapshots Horse Rating when registration closes.
-- Calculates Assigned Weight.
-- Assigns random lanes.
-- Generates the start list.
-- Updates Horse Rating only after Admin approves official results.
+- Áp dụng mức trọng lượng cao nhất và thấp nhất theo hạng đua.
+- Lưu snapshot rating của ngựa khi đóng đăng ký.
+- Tính trọng lượng được chỉ định.
+- Bốc cổng chạy ngẫu nhiên.
+- Tạo danh sách xuất phát.
+- Chỉ cập nhật rating của ngựa sau khi Admin duyệt kết quả chính thức.
 
-### Spectator
+### Khán giả (Spectator)
 
-- View public Tournaments.
-- View Race Cards.
-- View published start lists.
-- View live race status.
-- View official results.
+- Xem danh sách giải đấu công khai.
+- Xem race card.
+- Xem danh sách xuất phát đã công bố.
+- Xem trạng thái cuộc đua trực tiếp.
+- Xem kết quả chính thức.
 
-## 3. Race Lifecycle
+## 3. Vòng đời cuộc đua
 
-Race state is separate from entry approval, check-in, and result state.
-
-```text
-Draft
-Registration Open
-Registration Closed
-Published
-Check-in
-In Progress
-Finished
-Results Submitted
-Completed
-Cancelled
-```
-
-Implementation note: the current app represents `Check-in` through `published` Race status plus per-entry `preRaceStatus`. It represents `Results Submitted` through Race `status = finished` plus `resultStatus = submitted`.
-
-## 4. Race Registration Approval Lifecycle
-
-Registration approval state describes whether the horse and selected jockey are accepted into the race.
+Trạng thái cuộc đua được tách riêng với trạng thái phê duyệt entry, trạng thái kiểm tra trước cuộc đua và trạng thái kết quả.
 
 ```text
-Pending Jockey Acceptance
-Pending Admin Approval
-Approved
-Rejected
-Cancelled
+Nháp
+Mở đăng ký
+Đóng đăng ký
+Công bố danh sách xuất phát
+Kiểm tra trước cuộc đua
+Đang chạy
+Đã kết thúc
+Đã nộp kết quả nháp
+Hoàn tất
+Đã hủy
 ```
 
-## 5. Check-in Status
+Ghi chú triển khai: hệ thống hiện biểu diễn bước `Check-in` bằng trạng thái Race `published` kết hợp với `preRaceStatus` của từng entry. Bước `Results Submitted` được biểu diễn bằng Race `status = finished` kết hợp với `resultStatus = submitted`.
 
-Check-in status belongs to each Race Entry.
+## 4. Vòng đời phê duyệt đăng ký cuộc đua
+
+Trạng thái phê duyệt cho biết ngựa và jockey đã được chấp nhận vào cuộc đua hay chưa.
 
 ```text
-Pending Check-in
-Ready
-Absent
-Incident
-Scratched
+Chờ jockey xác nhận
+Chờ Admin duyệt
+Đã duyệt
+Từ chối
+Đã hủy
 ```
 
-## 6. Result Status
+## 5. Trạng thái kiểm tra trước cuộc đua
 
-Result status belongs to the Race and each Race Entry.
+Trạng thái kiểm tra thuộc về từng entry trong cuộc đua.
 
 ```text
-Draft
-Submitted
-Official
-Disqualified
+Chờ kiểm tra
+Sẵn sàng
+Vắng mặt
+Có sự cố
+Bị gạch khỏi danh sách chạy
 ```
 
-## 7. Important Business Rules
+## 6. Trạng thái kết quả
 
-- A Tournament contains many Races.
-- Horses register for individual Races, not for the Tournament globally.
-- Each Race has its own registration window and approval process.
-- A Horse cannot enter another active Race in the same Tournament until its current Race is Completed or Cancelled.
-- A Jockey must be available or approved for the same Race before Owner can select them.
-- Referee submits draft results only.
-- Admin approval is required before results become official and before Horse Rating changes.
-- `horseRaceRegistrations` handles approval before a row is created in the official start list.
-- `raceEntries` is the official start-list row after Admin approval.
-- `Scratched` is used after publishing or during check-in because of absence, health, equipment, weight, or other referee/admin decision.
+Trạng thái kết quả thuộc về cuộc đua và từng entry.
+
+```text
+Nháp
+Đã nộp
+Chính thức
+Bị loại
+```
+
+## 7. Quy tắc nghiệp vụ quan trọng
+
+- Một giải đấu có nhiều cuộc đua.
+- Ngựa đăng ký theo từng cuộc đua riêng lẻ, không đăng ký chung cho toàn giải đấu.
+- Mỗi cuộc đua có cửa sổ đăng ký và quy trình phê duyệt riêng.
+- Một ngựa không được tham gia cuộc đua đang hoạt động khác trong cùng giải đấu cho đến khi cuộc đua hiện tại hoàn tất hoặc bị hủy.
+- Jockey phải khả dụng hoặc đã được duyệt cho cùng cuộc đua trước khi Owner có thể chọn.
+- Referee chỉ nộp kết quả nháp.
+- Cần Admin duyệt trước khi kết quả trở thành chính thức và trước khi rating của ngựa thay đổi.
+- `horseRaceRegistrations` xử lý bước phê duyệt trước khi tạo dòng trong danh sách xuất phát chính thức.
+- `raceEntries` là dòng chính thức trong danh sách xuất phát sau khi Admin duyệt.
+- `Scratched` được dùng sau khi công bố danh sách xuất phát hoặc trong bước kiểm tra vì lý do vắng mặt, sức khỏe, trang bị, cân nặng hoặc quyết định khác của Referee/Admin.

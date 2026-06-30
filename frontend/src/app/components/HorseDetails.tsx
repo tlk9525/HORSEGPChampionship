@@ -29,7 +29,7 @@ import {
   RaceEntryRecord,
   getBootstrap,
 } from '../services/api';
-import { statusLabel } from '../utils/domain';
+import { formatWeightLb, statusLabel } from '../utils/domain';
 import { officialHorseRating } from '../utils/rating';
 
 interface HorseDetailsProps {
@@ -221,7 +221,7 @@ export default function HorseDetails({
     ['Sex', activeHorse.sex || 'Not set', ShieldCheck],
     ['Color', activeHorse.color || 'Not set', FileText],
     ['Age', `${activeHorse.age} years`, Activity],
-    ['Weight', value(activeHorse.weightLb, 'lb'), Scale],
+    ['Weight', formatWeightLb(activeHorse.weightLb), Scale],
     ['Official Rating', value(overall(activeHorse)), Trophy],
     ['Speed Rating', value(activeHorse.speedRating), Gauge],
     ['Stamina Rating', value(activeHorse.staminaRating), Activity],

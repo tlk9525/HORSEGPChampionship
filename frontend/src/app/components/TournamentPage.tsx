@@ -19,7 +19,7 @@ import {
   getBootstrap,
   joinRaceAsJockey,
 } from '../services/api';
-import { statusLabel } from '../utils/domain';
+import { formatWeightLb, statusLabel } from '../utils/domain';
 import { messageToneClasses } from '../utils/messageTone';
 
 interface TournamentPageProps {
@@ -442,7 +442,7 @@ export default function TournamentPage({
                         Assigned Wt. (lb)
                       </div>
                       <p className="text-white font-semibold mt-2">
-                        {Number(race.handicapMin ?? 115).toFixed(0)} - {Number(race.handicapMax ?? 135).toFixed(0)} lb
+                        {formatWeightLb(race.handicapMin ?? 115)} - {formatWeightLb(race.handicapMax ?? 135)}
                       </p>
                     </div>
                   </div>
@@ -511,7 +511,7 @@ export default function TournamentPage({
                                       : 'bg-[#071a2f]/40 border-white/10'
                                   }`}
                                 >
-                                  Gate {entry.lane || '-'} • {entry.horseName || 'Horse'} • Jockey: {entry.jockeyName || 'Jockey pending'}{isCurrentJockey ? ' (You)' : ''} • Rating {entry.ratingSnapshot ?? 'TBD'} • Assigned Wt. {Number(entry.handicap || 0).toFixed(0)}lb
+                                  Gate {entry.lane || '-'} • {entry.horseName || 'Horse'} • Jockey: {entry.jockeyName || 'Jockey pending'}{isCurrentJockey ? ' (You)' : ''} • Rating {entry.ratingSnapshot ?? 'TBD'} • Assigned Wt. {formatWeightLb(entry.handicap)}
                                 </span>
                               );
                             })}

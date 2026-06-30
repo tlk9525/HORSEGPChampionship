@@ -16,7 +16,7 @@ import {
   recordRaceResult,
   submitRaceResults,
 } from '../services/api';
-import { statusLabel } from '../utils/domain';
+import { formatWeightLb, statusLabel } from '../utils/domain';
 import { messageToneClasses } from '../utils/messageTone';
 
 export default function LiveRace() {
@@ -414,7 +414,7 @@ export default function LiveRace() {
                           </div>
 
                           <div className="text-gray-400 mt-1">
-                            Jockey: {entry.jockeyName} • Rating {entry.ratingSnapshot ?? 'TBD'} • Assigned Wt. {Number(entry.handicap || 0).toFixed(0)}lb
+                            Jockey: {entry.jockeyName} • Rating {entry.ratingSnapshot ?? 'TBD'} • Assigned Wt. {formatWeightLb(entry.handicap)}
                           </div>
 
                           <div className="text-[#d4af37] font-bold mt-2">

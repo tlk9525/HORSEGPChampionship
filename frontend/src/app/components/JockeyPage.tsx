@@ -25,7 +25,7 @@ import {
   getJockeyPortal,
   saveJockeyProfile,
 } from '../services/api';
-import { statusLabel } from '../utils/domain';
+import { formatWeightLb, statusLabel } from '../utils/domain';
 import { messageToneClasses } from '../utils/messageTone';
 
 interface JockeyPageProps {
@@ -178,7 +178,7 @@ export default function JockeyPage({
       { label: 'Age', value: numberLabel(horse.age, ' years'), icon: Activity },
       { label: 'Sex', value: horse.sex || 'Not set', icon: ShieldCheck },
       { label: 'Color', value: horse.color || 'Not set', icon: ShieldCheck },
-      { label: 'Horse Weight', value: numberLabel(horse.weightLb, 'lb'), icon: Scale },
+      { label: 'Horse Weight', value: formatWeightLb(horse.weightLb), icon: Scale },
       {
         label: 'Official Rating',
         value: ratingSnapshot ?? horseRatingLabel(horse),
@@ -541,7 +541,7 @@ export default function JockeyPage({
                             <div>
                               <p className="text-gray-500 text-xs">Assigned Wt. (lb)</p>
                               <p className="text-white text-2xl font-black">
-                                {Number(entry.handicap || 0).toFixed(0)}lb
+                                {formatWeightLb(entry.handicap)}
                               </p>
                             </div>
                           </div>

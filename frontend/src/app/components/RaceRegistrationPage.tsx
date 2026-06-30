@@ -10,17 +10,12 @@ import {
   submitHorseRaceRegistration,
 } from '../services/api';
 import { useParams } from 'react-router-dom';
-import { statusLabel } from '../utils/domain';
+import { formatWeightLb, statusLabel } from '../utils/domain';
 import { messageToneClasses } from '../utils/messageTone';
 
 interface RaceRegistrationPageProps {
   onNavigate: (page: string) => void;
 }
-
-const formatWeightLb = (weightLb?: number) => {
-  const parsed = Number(weightLb || 0);
-  return parsed > 0 ? `${parsed.toFixed(0)}lb` : '-';
-};
 
 export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPageProps) {
   const fieldClass =

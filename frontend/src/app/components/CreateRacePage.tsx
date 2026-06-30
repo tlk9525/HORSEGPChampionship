@@ -164,7 +164,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
       Number(form.handicapMax) > 135 ||
       Number(form.handicapMin) > Number(form.handicapMax)
     ) {
-      setMessage('Assigned weight must stay between 110lb and 135lb.');
+      setMessage('Assigned weight must stay between 110 lb and 135 lb.');
       return;
     }
 

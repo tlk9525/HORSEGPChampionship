@@ -17,13 +17,8 @@ import {
   RaceEntryRecord,
   getBootstrap,
 } from '../services/api';
-import { statusLabel } from '../utils/domain';
+import { formatWeightLb, statusLabel } from '../utils/domain';
 import { officialHorseRating } from '../utils/rating';
-
-const formatWeightLb = (weightLb?: number) => {
-  const parsed = Number(weightLb || 0);
-  return parsed > 0 ? `${parsed.toFixed(0)}lb` : '-';
-};
 
 export default function HorseDirectoryPage() {
   const navigate = useNavigate();

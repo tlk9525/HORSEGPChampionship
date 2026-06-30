@@ -20,7 +20,7 @@ import {
   TournamentRecord,
   getBootstrap,
 } from '../services/api';
-import { statusLabel } from '../utils/domain';
+import { formatWeightLb, statusLabel } from '../utils/domain';
 import { officialHorseRating } from '../utils/rating';
 
 const raceSortValue = (race: RaceRecord) => {
@@ -449,7 +449,7 @@ export default function RaceDetails() {
                         </td>
 
                         <td className="py-5 px-3 text-center text-white font-semibold">
-                          {row.assignedWeightLb}lb
+                          {formatWeightLb(row.assignedWeightLb)}
                         </td>
 
                         <td className="py-5 px-3 text-gray-300 font-semibold">
@@ -457,7 +457,7 @@ export default function RaceDetails() {
                         </td>
 
                         <td className="py-5 px-3 text-center text-white font-semibold">
-                          {row.jockeyWeightLb === '-' ? '-' : `${row.jockeyWeightLb}lb`}
+                          {formatWeightLb(row.jockeyWeightLb)}
                         </td>
 
                         <td className="py-5 px-3 text-center">
@@ -491,7 +491,7 @@ export default function RaceDetails() {
                         </td>
 
                         <td className="py-5 px-3 text-center text-white">
-                          {row.horseWeightLb === '0' ? '-' : `${row.horseWeightLb}lb`}
+                          {formatWeightLb(row.horseWeightLb)}
                         </td>
 
                       </tr>

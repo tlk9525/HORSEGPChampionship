@@ -12,7 +12,7 @@ import {
   RaceEntryRecord,
   getOwnerPortal,
 } from '../services/api';
-import { statusLabel } from '../utils/domain';
+import { formatWeightLb, statusLabel } from '../utils/domain';
 import { messageToneClasses } from '../utils/messageTone';
 import { officialHorseRating } from '../utils/rating';
 
@@ -176,7 +176,7 @@ export default function HorseManagement({
                   </p>
 
                   <p className="text-gray-500 mt-1">
-                    {horse.species || 'Species not set'} • {horse.weightLb || 0}lb • Official Rating {horseRating(horse)}
+                    {horse.species || 'Species not set'} • {formatWeightLb(horse.weightLb)} • Official Rating {horseRating(horse)}
                   </p>
                 </div>
 

@@ -16,12 +16,7 @@ import {
   RaceEntryRecord,
   getBootstrap,
 } from '../services/api';
-import { statusLabel } from '../utils/domain';
-
-const formatWeightLb = (weightLb?: number) => {
-  const parsed = Number(weightLb || 0);
-  return parsed > 0 ? `${parsed.toFixed(0)}lb` : '-';
-};
+import { formatWeightLb, statusLabel } from '../utils/domain';
 
 export default function JockeyDirectoryPage() {
   const [jockeys, setJockeys] = useState<JockeyProfileRecord[]>([]);
@@ -316,7 +311,7 @@ export default function JockeyDirectoryPage() {
                             </span>
 
                             <span className="rounded-lg border border-white/10 bg-[#071a2f]/30 px-3 py-1 text-sm text-gray-300">
-                              Assigned Wt. {Number(entry.handicap || 0).toFixed(0)}lb
+                              Assigned Wt. {formatWeightLb(entry.handicap)}
                             </span>
                           </div>
                         </div>
