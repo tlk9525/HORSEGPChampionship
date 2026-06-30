@@ -520,7 +520,7 @@ export default function RaceSimulationDemo() {
 
               <div className="mt-5 h-2 overflow-hidden rounded-full bg-black/30">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-cyan-400 via-[#d4af37] to-orange-400 transition-[width] duration-100"
+                  className="h-full rounded-full bg-gradient-to-r from-cyan-400 via-[#d4af37] to-orange-400"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>
@@ -565,7 +565,7 @@ export default function RaceSimulationDemo() {
                         />
                         <div
                           data-runner-marker={runner.id}
-                          className="absolute top-1/2 z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-lg transition-[left] duration-100"
+                          className="absolute top-1/2 z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-lg"
                           style={{
                             left: `${runner.progress * 100}%`,
                             backgroundColor: runner.silkColor,
