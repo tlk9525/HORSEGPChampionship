@@ -227,7 +227,6 @@ export default function HorseDetails({
     ['Stamina Rating', value(activeHorse.staminaRating), Activity],
     ['Form Rating', value(activeHorse.formRating), Trophy],
     ['Health Rating', value(activeHorse.healthRating), HeartPulse],
-    ['Overall Rating', overall(activeHorse), Gauge],
   ];
   const compactProfileLabels = new Set([
     'Breed',
@@ -235,7 +234,6 @@ export default function HorseDetails({
     'Age',
     'Weight',
     'Official Rating',
-    'Overall Rating',
   ]);
   const visibleProfileCards = profileExpanded
     ? profileCards
@@ -306,11 +304,6 @@ export default function HorseDetails({
                 <span className="px-4 py-2 bg-[#071a2f]/50 border border-white/10 rounded-lg text-white font-semibold text-sm">
                   Official Rating {overall(activeHorse)}
                 </span>
-
-                <span className="px-4 py-2 bg-[#071a2f]/50 border border-white/10 rounded-lg text-white font-semibold text-sm">
-                  Rating {overall(activeHorse)}
-                </span>
-
               </div>
 
               <h1 className="text-5xl font-black text-white mb-3">
@@ -585,11 +578,6 @@ export default function HorseDetails({
 
                 <div className="flex justify-between gap-4">
                   <span className="text-gray-400">Official Rating</span>
-                  <span className="text-white font-bold">{overall(activeHorse)}</span>
-                </div>
-
-                <div className="flex justify-between gap-4">
-                  <span className="text-gray-400">Overall rating</span>
                   <span className="text-white font-bold">{overall(activeHorse)}</span>
                 </div>
               </div>
