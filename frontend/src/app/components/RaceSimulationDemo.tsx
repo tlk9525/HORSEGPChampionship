@@ -12,6 +12,12 @@ import {
 } from 'lucide-react';
 
 type RaceStatus = 'ready' | 'running' | 'paused' | 'finished';
+type RaceSurface = 'Turf' | 'Dirt' | 'Synthetic';
+
+interface RaceCheckpoint {
+  distanceMeters: number;
+  timeSeconds: number;
+}
 
 interface DemoRunner {
   id: string;
@@ -27,10 +33,13 @@ interface DemoRunner {
   phase: number;
   performanceScore: number;
   finishTimeSeconds: number;
+  checkpoints: RaceCheckpoint[];
 }
 
 interface RacePlan {
   seed: number;
+  distanceMeters: number;
+  surface: RaceSurface;
   durationSeconds: number;
   runners: DemoRunner[];
 }
@@ -52,6 +61,12 @@ const demoField = [
   ['Royal Flame', 'Thanh Tùng', '#f97316', 84, 130, 88, 83, 86],
   ['Purple Crown', 'Khánh Duy', '#a855f7', 80, 126, 83, 85, 78],
 ] as const;
+
+const baseSpeedBySurface: Record<RaceSurface, number> = {
+  Turf: 17,
+  Dirt: 16,
+  Synthetic: 16.5,
+};
 
 const mulberry32 = (seed: number) => {
   let value = seed;
@@ -77,9 +92,12 @@ const formatRaceTime = (seconds: number) => {
   return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
 };
 
-const createRacePlan = (seed: number): RacePlan => {
+const createRacePlan = (
+  seed: number,
+  distanceMeters: number,
+  surface: RaceSurface
+): RacePlan => {
   const random = mulberry32(seed);
-  const targetDuration = 60 + Math.floor(random() * 61);
 
   const scoredRunners = demoField.map((runner, index) => {
     const [
@@ -116,20 +134,87 @@ const createRacePlan = (seed: number): RacePlan => {
       phase: random() * Math.PI * 2,
       performanceScore,
       finishTimeSeconds: 0,
+      checkpoints: [] as RaceCheckpoint[],
     };
   });
 
-  const sortedScores = [...scoredRunners].sort(
-    (a, b) => b.performanceScore - a.performanceScore
-  );
+  const fieldAverageScore =
+    scoredRunners.reduce((total, runner) => total + runner.performanceScore, 0) /
+    scoredRunners.length;
+  const baseFinishTime = distanceMeters / baseSpeedBySurface[surface];
+  const checkpointSize = distanceMeters <= 1200 ? 50 : 100;
 
-  sortedScores.forEach((runner, index) => {
-    runner.finishTimeSeconds =
-      targetDuration - (sortedScores.length - 1 - index) * 0.72 + random() * 0.18;
+  scoredRunners.forEach((runner) => {
+    const abilitySpeedFactor =
+      1 + (runner.performanceScore - fieldAverageScore) * 0.004;
+    const desiredFinishTime =
+      baseFinishTime / abilitySpeedFactor + (random() - 0.5) * 0.12;
+    const rawCheckpoints: RaceCheckpoint[] = [
+      { distanceMeters: 0, timeSeconds: 0 },
+    ];
+    let rawElapsed = 0;
+
+    for (
+      let checkpointDistance = checkpointSize;
+      checkpointDistance <= distanceMeters;
+      checkpointDistance += checkpointSize
+    ) {
+      const segmentEnd = Math.min(checkpointDistance, distanceMeters);
+      const segmentStart = rawCheckpoints.at(-1)?.distanceMeters ?? 0;
+      const segmentDistance = segmentEnd - segmentStart;
+      const raceProgress = (segmentStart + segmentDistance / 2) / distanceMeters;
+      const accelerationFactor =
+        raceProgress < 0.12 ? 0.7 + raceProgress * 2.5 : 1;
+      const staminaFactor =
+        raceProgress > 0.65
+          ? 1 +
+            ((runner.stamina - 80) / 420) *
+              ((raceProgress - 0.65) / 0.35)
+          : 1;
+      const closingKick =
+        raceProgress > 0.84
+          ? 1 +
+            ((runner.form - 80) / 300) *
+              ((raceProgress - 0.84) / 0.16)
+          : 1;
+      const tacticalVariation =
+        1 + Math.sin(raceProgress * Math.PI * 4 + runner.phase) * 0.012;
+      const segmentSpeed =
+        baseSpeedBySurface[surface] *
+        accelerationFactor *
+        staminaFactor *
+        closingKick *
+        tacticalVariation;
+
+      rawElapsed += segmentDistance / segmentSpeed;
+      rawCheckpoints.push({
+        distanceMeters: segmentEnd,
+        timeSeconds: rawElapsed,
+      });
+    }
+
+    if (rawCheckpoints.at(-1)?.distanceMeters !== distanceMeters) {
+      const segmentStart = rawCheckpoints.at(-1)?.distanceMeters ?? 0;
+      rawElapsed +=
+        (distanceMeters - segmentStart) / baseSpeedBySurface[surface];
+      rawCheckpoints.push({
+        distanceMeters,
+        timeSeconds: rawElapsed,
+      });
+    }
+
+    const timeScale = desiredFinishTime / rawElapsed;
+    runner.finishTimeSeconds = desiredFinishTime;
+    runner.checkpoints = rawCheckpoints.map((checkpoint) => ({
+      ...checkpoint,
+      timeSeconds: checkpoint.timeSeconds * timeScale,
+    }));
   });
 
   return {
     seed,
+    distanceMeters,
+    surface,
     durationSeconds: Math.max(
       ...scoredRunners.map((runner) => runner.finishTimeSeconds)
     ),
@@ -141,17 +226,26 @@ const progressForRunner = (runner: DemoRunner, elapsedSeconds: number) => {
   if (elapsedSeconds <= 0) return 0;
   if (elapsedSeconds >= runner.finishTimeSeconds) return 1;
 
-  const baseProgress = elapsedSeconds / runner.finishTimeSeconds;
-  const phaseMovement =
-    Math.sin(baseProgress * Math.PI * 5 + runner.phase) *
-    Math.sin(baseProgress * Math.PI) *
-    0.018;
-  const closingKick =
-    baseProgress > 0.72
-      ? ((runner.form - 80) / 1000) * ((baseProgress - 0.72) / 0.28)
-      : 0;
+  const nextCheckpointIndex = runner.checkpoints.findIndex(
+    (checkpoint) => checkpoint.timeSeconds >= elapsedSeconds
+  );
 
-  return clamp(baseProgress + phaseMovement + closingKick, 0, 0.995);
+  if (nextCheckpointIndex <= 0) return 0;
+
+  const previousCheckpoint = runner.checkpoints[nextCheckpointIndex - 1];
+  const nextCheckpoint = runner.checkpoints[nextCheckpointIndex];
+  const checkpointDuration =
+    nextCheckpoint.timeSeconds - previousCheckpoint.timeSeconds;
+  const checkpointProgress =
+    checkpointDuration > 0
+      ? (elapsedSeconds - previousCheckpoint.timeSeconds) / checkpointDuration
+      : 1;
+  const currentDistance =
+    previousCheckpoint.distanceMeters +
+    (nextCheckpoint.distanceMeters - previousCheckpoint.distanceMeters) *
+      checkpointProgress;
+
+  return clamp(currentDistance / runner.checkpoints.at(-1)!.distanceMeters, 0, 1);
 };
 
 const statusLabel: Record<RaceStatus, string> = {
@@ -163,12 +257,17 @@ const statusLabel: Record<RaceStatus, string> = {
 
 export default function RaceSimulationDemo() {
   const [seed, setSeed] = useState(20260630);
+  const [distanceMeters, setDistanceMeters] = useState(1600);
+  const [surface, setSurface] = useState<RaceSurface>('Turf');
   const [status, setStatus] = useState<RaceStatus>('ready');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [refereeDrafts, setRefereeDrafts] = useState<RefereeDraft[]>([]);
   const previousFrameRef = useRef<number | null>(null);
-  const plan = useMemo(() => createRacePlan(seed), [seed]);
+  const plan = useMemo(
+    () => createRacePlan(seed, distanceMeters, surface),
+    [distanceMeters, seed, surface]
+  );
 
   useEffect(() => {
     if (status !== 'running') {
@@ -227,7 +326,7 @@ export default function RaceSimulationDemo() {
     { label: 'Status', value: statusLabel[status], Icon: Gauge },
     { label: 'Elapsed', value: formatRaceTime(elapsedSeconds), Icon: Clock3 },
     {
-      label: 'Playback duration',
+      label: 'Race duration (1×)',
       value: formatRaceTime(plan.durationSeconds),
       Icon: Clock3,
     },
@@ -287,25 +386,67 @@ export default function RaceSimulationDemo() {
               Saigon Championship
             </h1>
             <p className="mt-2 max-w-3xl text-gray-400">
-              Visual preview for a seeded 1–2 minute race. Results stay provisional
-              until a referee reviews them.
+              Distance-based checkpoint simulation. Results stay provisional until
+              a referee reviews them.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {[1, 2, 4].map((speed) => (
-              <button
-                key={speed}
-                onClick={() => setPlaybackSpeed(speed)}
-                className={`rounded-xl border px-4 py-2 text-sm font-black transition ${
-                  playbackSpeed === speed
-                    ? 'border-[#d4af37] bg-[#d4af37] text-[#071a2f]'
-                    : 'border-white/10 bg-white/5 text-gray-300 hover:bg-white/10'
-                }`}
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="text-xs font-bold uppercase tracking-wider text-gray-400">
+              Distance
+              <select
+                value={distanceMeters}
+                disabled={status === 'running'}
+                onChange={(event) => {
+                  setDistanceMeters(Number(event.target.value));
+                  resetRace();
+                }}
+                className="mt-1 block rounded-xl border border-white/10 bg-[#0d2945] px-4 py-2.5 text-sm font-black text-white disabled:opacity-50"
               >
-                {speed}×
-              </button>
-            ))}
+                {[1000, 1200, 1600, 2000, 2400].map((distance) => (
+                  <option key={distance} value={distance}>
+                    {distance.toLocaleString()}m
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="text-xs font-bold uppercase tracking-wider text-gray-400">
+              Surface
+              <select
+                value={surface}
+                disabled={status === 'running'}
+                onChange={(event) => {
+                  setSurface(event.target.value as RaceSurface);
+                  resetRace();
+                }}
+                className="mt-1 block rounded-xl border border-white/10 bg-[#0d2945] px-4 py-2.5 text-sm font-black text-white disabled:opacity-50"
+              >
+                {(['Turf', 'Dirt', 'Synthetic'] as RaceSurface[]).map(
+                  (surfaceOption) => (
+                    <option key={surfaceOption} value={surfaceOption}>
+                      {surfaceOption}
+                    </option>
+                  )
+                )}
+              </select>
+            </label>
+
+            <div className="flex gap-2">
+              {[1, 2, 4].map((speed) => (
+                <button
+                  key={speed}
+                  onClick={() => setPlaybackSpeed(speed)}
+                  className={`rounded-xl border px-4 py-2.5 text-sm font-black transition ${
+                    playbackSpeed === speed
+                      ? 'border-[#d4af37] bg-[#d4af37] text-[#071a2f]'
+                      : 'border-white/10 bg-white/5 text-gray-300 hover:bg-white/10'
+                  }`}
+                >
+                  {speed}×
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -330,10 +471,11 @@ export default function RaceSimulationDemo() {
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="text-sm font-black uppercase tracking-[0.2em] text-[#d4af37]">
-                    1,600m • Turf • Demo Race
+                    {plan.distanceMeters.toLocaleString()}m • {plan.surface} • Demo Race
                   </div>
                   <div className="mt-1 text-sm text-gray-400">
-                    Live order changes are visual only on this branch.
+                    Checkpoints every {plan.distanceMeters <= 1200 ? 50 : 100}m •
+                    live order is visual only on this branch.
                   </div>
                 </div>
 
@@ -387,7 +529,6 @@ export default function RaceSimulationDemo() {
             <div className="space-y-2 p-3 sm:p-5">
               {liveRunners.map((runner) => {
                 const rank = rankByRunnerId.get(runner.id);
-                const markerLeft = Math.min(runner.progress * 96, 96);
 
                 return (
                   <div
@@ -417,17 +558,23 @@ export default function RaceSimulationDemo() {
                           'linear-gradient(90deg, transparent 24.7%, rgba(255,255,255,.12) 25%, transparent 25.3%, transparent 49.7%, rgba(255,255,255,.12) 50%, transparent 50.3%, transparent 74.7%, rgba(255,255,255,.12) 75%, transparent 75.3%)',
                       }}
                     >
-                      <div className="absolute inset-y-0 right-[2%] w-1 bg-[repeating-linear-gradient(0deg,#fff_0_4px,#111_4px_8px)] opacity-70" />
-                      <div
-                        className="absolute top-1/2 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-lg transition-[left] duration-100"
-                        style={{
-                          left: `${markerLeft}%`,
-                          backgroundColor: runner.silkColor,
-                          boxShadow: `0 0 18px ${runner.silkColor}80`,
-                        }}
-                        title={`${runner.horseName}: ${Math.round(runner.progress * 100)}%`}
-                      >
-                        <span className="text-base">♞</span>
+                      <div className="absolute inset-y-0 left-[18px] right-[18px]">
+                        <div
+                          data-finish-line
+                          className="absolute inset-y-0 right-0 z-20 w-1 translate-x-1/2 bg-[repeating-linear-gradient(0deg,#fff_0_4px,#111_4px_8px)] opacity-80"
+                        />
+                        <div
+                          data-runner-marker={runner.id}
+                          className="absolute top-1/2 z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-lg transition-[left] duration-100"
+                          style={{
+                            left: `${runner.progress * 100}%`,
+                            backgroundColor: runner.silkColor,
+                            boxShadow: `0 0 18px ${runner.silkColor}80`,
+                          }}
+                          title={`${runner.horseName}: ${Math.round(runner.progress * 100)}%`}
+                        >
+                          <span className="text-base">♞</span>
+                        </div>
                       </div>
                     </div>
 
