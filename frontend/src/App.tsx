@@ -81,7 +81,7 @@ const pageFromPath = (pathname: string) => {
   if (path === '/jockeys/me') return 'jockeys';
   if (path === '/jockeys') return 'jockey-profiles';
   if (path === '/live-race' || path.startsWith('/live-race/')) return 'live-race';
-  if (path === '/simulation-demo') return 'simulation-demo';
+  if (path === '/simulation-demo' || path.startsWith('/simulation-demo/')) return 'simulation-demo';
   if (path === '/results') return 'results';
   if (path === '/admin') return 'admin';
   if (path === '/admin/races/new') return 'create-race';
@@ -135,7 +135,9 @@ export default function App() {
       'live-race': selectedRaceId
         ? `/live-race/${selectedRaceId}`
         : '/live-race',
-      'simulation-demo': '/simulation-demo',
+      'simulation-demo': selectedRaceId
+        ? `/simulation-demo/${selectedRaceId}`
+        : '/simulation-demo',
       results: '/results',
       admin: '/admin',
       'create-race': '/admin/races/new',
@@ -299,7 +301,14 @@ export default function App() {
             <Route path="/jockeys/me" element={<Navigate to="/jockey-portal" replace />} />
             <Route path="/live-race" element={<LiveRace />} />
             <Route path="/live-race/:raceId" element={<LiveRace />} />
-            <Route path="/simulation-demo" element={<RaceSimulationDemo />} />
+            <Route
+              path="/simulation-demo"
+              element={<RaceSimulationDemo currentUser={currentUser} />}
+            />
+            <Route
+              path="/simulation-demo/:raceId"
+              element={<RaceSimulationDemo currentUser={currentUser} />}
+            />
             <Route path="/results" element={<ResultsPage />} />
             <Route
               path="/admin"
