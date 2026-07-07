@@ -11,6 +11,12 @@ const silkPalette = [
   '#f472b6',
 ];
 
+const baseSpeedBySurface = {
+  Turf: 17,
+  Dirt: 16,
+  Synthetic: 16.5,
+};
+
 const parseDistanceMeters = (distance) => {
   const parsed = Number(String(distance ?? '').replace(/[^\d.]/g, ''));
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 1600;
@@ -99,6 +105,29 @@ const buildCheckpoints = (distanceMeters, finishTimeSeconds, positionIndex) => {
   return checkpoints;
 };
 
+const formatFinishTime = (seconds) => {
+  const safeSeconds = Math.max(0, seconds);
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = Math.floor(safeSeconds % 60);
+  const milliseconds = Math.floor((safeSeconds % 1) * 1000);
+
+  return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
+};
+
+const buildVisualFinishTimeSeconds = (
+  distanceMeters,
+  surface,
+  positionIndex,
+  fieldSize
+) => {
+  const winnerSeconds = Math.max(35, (distanceMeters / baseSpeedBySurface[surface]) * 0.98);
+  const spreadSeconds = Math.min(6.5, Math.max(2.2, 1.2 + fieldSize * 0.22 + distanceMeters / 2500));
+  const normalizedPosition = fieldSize > 1 ? positionIndex / (fieldSize - 1) : 0;
+  const easing = Math.pow(normalizedPosition, 1.15);
+
+  return winnerSeconds + spreadSeconds * easing;
+};
+
 export const buildOfficialReplayTimeline = ({ race, entries, horses = [] }) => {
   const competingEntries = [...(entries || [])]
     .filter(
@@ -119,12 +148,51 @@ export const buildOfficialReplayTimeline = ({ race, entries, horses = [] }) => {
 
   const distanceMeters = parseDistanceMeters(race?.distance);
   const surface = normalizeRaceSurface(race?.surface);
-  const durationSeconds = competingEntries.reduce((max, entry) => {
-    const value = finishTimeToSeconds(entry.finishTime);
-    return Number.isFinite(value) ? Math.max(max, value) : max;
+  const recordedFinishTimes = competingEntries.map((entry) =>
+    finishTimeToSeconds(entry.finishTime)
+  );
+  const recordedSpread = recordedFinishTimes.length > 0
+    ? Math.max(...recordedFinishTimes) - Math.min(...recordedFinishTimes)
+    : Number.POSITIVE_INFINITY;
+  const largestRecordedGap = recordedFinishTimes.reduce((maxGap, value, index) => {
+    if (index === 0 || !Number.isFinite(value) || !Number.isFinite(recordedFinishTimes[index - 1])) {
+      return maxGap;
+    }
+    return Math.max(maxGap, value - recordedFinishTimes[index - 1]);
   }, 0);
+  const useRecordedTiming = recordedFinishTimes.every(Number.isFinite) && recordedSpread <= 20 && largestRecordedGap <= 10;
+  const fieldSize = competingEntries.length;
 
   const horseById = new Map((horses || []).map((horse) => [horse.id, horse]));
+  const runners = competingEntries.map((entry, index) => {
+    const horse = horseById.get(entry.horseId);
+    const positionIndex = Math.max(0, Number(entry.position || index + 1) - 1);
+    const recordedFinishTimeSeconds = finishTimeToSeconds(entry.finishTime);
+    const finishTimeSeconds = useRecordedTiming
+      ? recordedFinishTimeSeconds
+      : buildVisualFinishTimeSeconds(distanceMeters, surface, positionIndex, fieldSize);
+    const checkpoints = buildCheckpoints(distanceMeters, finishTimeSeconds, positionIndex);
+
+    return {
+      entryId: entry.id,
+      lane: entry.lane || index + 1,
+      horseName: entry.horseName || horse?.name || `Horse ${index + 1}`,
+      jockeyName: entry.jockeyName || `Jockey ${index + 1}`,
+      silkColor: silkPalette[index % silkPalette.length],
+      rating: Number(entry.ratingSnapshot || horse?.overallRating || 0),
+      carriedWeight: Number(entry.handicap || 0),
+      speed: Number(horse?.speedRating || entry.ratingSnapshot || 0),
+      stamina: Number(horse?.staminaRating || entry.ratingSnapshot || 0),
+      form: Number(horse?.formRating || entry.ratingSnapshot || 0),
+      phase: 0,
+      performanceScore: Math.max(0, competingEntries.length - positionIndex),
+      finishTimeSeconds,
+      position: Number(entry.position || index + 1),
+      finishTime: useRecordedTiming ? entry.finishTime || '' : formatFinishTime(finishTimeSeconds),
+      officialFinishTime: entry.finishTime || '',
+      checkpoints,
+    };
+  });
 
   return {
     version: 1,
@@ -132,30 +200,7 @@ export const buildOfficialReplayTimeline = ({ race, entries, horses = [] }) => {
     raceId: race.id,
     distanceMeters,
     surface,
-    durationSeconds,
-    runners: competingEntries.map((entry, index) => {
-      const horse = horseById.get(entry.horseId);
-      const finishTimeSeconds = finishTimeToSeconds(entry.finishTime);
-      const positionIndex = Math.max(0, Number(entry.position || index + 1) - 1);
-
-      return {
-        entryId: entry.id,
-        lane: entry.lane || index + 1,
-        horseName: entry.horseName || horse?.name || `Horse ${index + 1}`,
-        jockeyName: entry.jockeyName || `Jockey ${index + 1}`,
-        silkColor: silkPalette[index % silkPalette.length],
-        rating: Number(entry.ratingSnapshot || horse?.overallRating || 0),
-        carriedWeight: Number(entry.handicap || 0),
-        speed: Number(horse?.speedRating || entry.ratingSnapshot || 0),
-        stamina: Number(horse?.staminaRating || entry.ratingSnapshot || 0),
-        form: Number(horse?.formRating || entry.ratingSnapshot || 0),
-        phase: 0,
-        performanceScore: Math.max(0, competingEntries.length - positionIndex),
-        finishTimeSeconds,
-        position: Number(entry.position || index + 1),
-        finishTime: entry.finishTime || '',
-        checkpoints: buildCheckpoints(distanceMeters, finishTimeSeconds, positionIndex),
-      };
-    }),
+    durationSeconds: runners.reduce((max, runner) => Math.max(max, runner.finishTimeSeconds), 0),
+    runners,
   };
 };

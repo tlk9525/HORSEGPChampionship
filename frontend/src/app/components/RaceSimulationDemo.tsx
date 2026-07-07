@@ -16,7 +16,11 @@ import {
   RaceRecord,
   getBootstrap,
 } from '../services/api';
-import { formatRaceSimulationTime, progressForRunner } from '../utils/raceSimulation';
+import {
+  formatRaceSimulationTime,
+  normalizeOfficialReplayRunners,
+  progressForRunner,
+} from '../utils/raceSimulation';
 
 type ReplayStatus = 'ready' | 'running' | 'paused' | 'finished';
 
@@ -107,6 +111,10 @@ export default function RaceSimulationDemo() {
     [selectedEntries]
   );
   const replayTimelineRunners = selectedRace?.replayTimeline?.runners || [];
+  const normalizedReplayTimelineRunners = useMemo(
+    () => normalizeOfficialReplayRunners(replayTimelineRunners, selectedRace),
+    [replayTimelineRunners, selectedRace?.distance, selectedRace?.surface]
+  );
 
   const maxFinishSeconds = useMemo(
     () =>
@@ -131,7 +139,9 @@ export default function RaceSimulationDemo() {
   const officialRows = useMemo(
     () => {
       if (replayTimelineRunners.length > 0) {
-        return replayTimelineRunners.map((runner) => ({
+        return [...normalizedReplayTimelineRunners]
+          .sort((a, b) => Number(a.lane || 999) - Number(b.lane || 999))
+          .map((runner) => ({
           ...runner,
           id: runner.entryId,
           positionValue: runner.position,
@@ -139,20 +149,22 @@ export default function RaceSimulationDemo() {
         }));
       }
 
-      return replayEntries.map((entry) => ({
-        ...entry,
-        id: entry.id,
-        positionValue: entry.positionValue,
-        progress:
-          maxFinishSeconds > 0
-            ? Math.min(elapsedSeconds / entry.finishSeconds, 1)
-            : 0,
-      }));
+      return [...replayEntries]
+        .sort((a, b) => Number(a.lane || 999) - Number(b.lane || 999))
+        .map((entry) => ({
+          ...entry,
+          id: entry.id,
+          positionValue: entry.positionValue,
+          progress:
+            maxFinishSeconds > 0
+              ? Math.min(elapsedSeconds / entry.finishSeconds, 1)
+              : 0,
+        }));
     },
-    [elapsedSeconds, maxFinishSeconds, replayEntries, replayTimelineRunners]
+    [elapsedSeconds, maxFinishSeconds, normalizedReplayTimelineRunners, replayEntries, replayTimelineRunners]
   );
   const officialFieldCount = replayTimelineRunners.length > 0
-    ? replayTimelineRunners.length
+    ? normalizedReplayTimelineRunners.length
     : replayEntries.length;
 
   useEffect(() => {
