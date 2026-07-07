@@ -309,7 +309,13 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   const handleRaceAction = (
     raceId: string,
-    action: 'close-registration' | 'publish' | 'start-race' | 'finish-race' | 'complete-results'
+    action:
+      | 'close-registration'
+      | 'publish'
+      | 'start-race'
+      | 'finish-race'
+      | 'complete-results'
+      | 'cancel-race'
   ) => {
     adminRaceAction(raceId, action)
       .then((result) => {
@@ -874,6 +880,15 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                                         Approve Results / Complete Race
                                       </button>
                                     )}
+
+                                    <button
+                                      onClick={() => handleRaceAction(race.id, 'cancel-race')}
+                                      disabled={['in-progress', 'finished', 'completed', 'cancelled'].includes(race.status)}
+                                      className="flex items-center gap-2 px-4 py-2 bg-red-600/10 text-red-300 rounded-xl hover:bg-red-600/20 transition-all border border-red-600/30 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      <XCircle className="w-4 h-4" />
+                                      Cancel Race
+                                    </button>
 
                                     <button
                                       onClick={() =>
