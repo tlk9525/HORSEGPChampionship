@@ -42,61 +42,46 @@ const getPool = () => {
   return pool;
 };
 
+const requiredRuntimeTables = [
+  'users',
+  'tournaments',
+  'horses',
+  'races',
+  'raceRefereeAssignments',
+  'raceActionLogs',
+  'jockeyProfiles',
+  'jockeyRaceRegistrations',
+  'jockeyInvitations',
+  'horseRaceRegistrations',
+  'raceEntries',
+  'refereeReports',
+  'notifications',
+  'sessions',
+];
+
 const ensureRuntimeSchema = async () => {
   if (!runtimeSchemaPromise) {
     runtimeSchemaPromise = (async () => {
-      const client = await getPool().connect();
+      const { rows } = await getPool().query(
+        `
+          SELECT "tableName"
+          FROM unnest($1::text[]) AS required("tableName")
+          WHERE to_regclass($2 || '.' || quote_ident("tableName")) IS NULL
+        `,
+        [requiredRuntimeTables, 'public']
+      );
 
-      try {
-        await client.query('BEGIN');
-        await client.query(`
-          CREATE TABLE IF NOT EXISTS "raceActionLogs" (
-            "id" VARCHAR(64) PRIMARY KEY,
-            "raceId" VARCHAR(64) NOT NULL REFERENCES "races" ("id") ON DELETE CASCADE,
-            "userId" VARCHAR(64) REFERENCES "users" ("id") ON DELETE SET NULL,
-            "action" VARCHAR(64) NOT NULL,
-            "fromStatus" VARCHAR(64),
-            "toStatus" VARCHAR(64),
-            "details" TEXT,
-            "createdAt" TIMESTAMPTZ NOT NULL
-          )
-        `);
-        await client.query(`
-          CREATE INDEX IF NOT EXISTS "idx_race_action_logs_race"
-          ON "raceActionLogs" ("raceId", "createdAt")
-        `);
-        await client.query(`
-          CREATE TABLE IF NOT EXISTS "refereeReports" (
-            "id" VARCHAR(64) PRIMARY KEY,
-            "raceId" VARCHAR(64) NOT NULL REFERENCES "races" ("id") ON DELETE CASCADE,
-            "raceEntryId" VARCHAR(64) REFERENCES "raceEntries" ("id") ON DELETE SET NULL,
-            "refereeUserId" VARCHAR(64) NOT NULL REFERENCES "users" ("id") ON DELETE CASCADE,
-            "reportType" VARCHAR(64) NOT NULL DEFAULT 'incident',
-            "description" TEXT NOT NULL,
-            "violation" TEXT,
-            "status" VARCHAR(32) NOT NULL DEFAULT 'submitted'
-              CHECK ("status" IN ('draft', 'submitted', 'reviewed', 'dismissed')),
-            "createdAt" TIMESTAMPTZ NOT NULL,
-            "reviewedAt" TIMESTAMPTZ
-          )
-        `);
-        await client.query(`
-          CREATE INDEX IF NOT EXISTS "idx_referee_reports_race"
-          ON "refereeReports" ("raceId", "status")
-        `);
-        await client.query(`
-          CREATE INDEX IF NOT EXISTS "idx_referee_reports_referee"
-          ON "refereeReports" ("refereeUserId", "status")
-        `);
-        await client.query('COMMIT');
-      } catch (error) {
-        await client.query('ROLLBACK');
-        runtimeSchemaPromise = undefined;
-        throw error;
-      } finally {
-        client.release();
+      if (rows.length) {
+        throw new Error(
+          'Database schema is missing tables: ' +
+            rows.map((row) => row.tableName).join(', ') +
+            '. Run npm run db:init.'
+        );
       }
-    })();
+    })().catch((error) => {
+      runtimeSchemaPromise = undefined;
+      throw error;
+    });
   }
 
   return runtimeSchemaPromise;
@@ -168,9 +153,9 @@ export const readDb = async () => {
     horses,
     races,
     jockeyProfiles,
-    jockeyTournamentRegistrations,
+    jockeyRaceRegistrations,
     jockeyInvitations,
-    horseTournamentRegistrations,
+    horseRaceRegistrations,
     raceEntries,
     raceRefereeAssignments,
     raceActionLogs,
@@ -189,7 +174,7 @@ export const readDb = async () => {
       { column: 'id' },
     ]),
     selectAll('jockeyProfiles', [{ column: 'id' }]),
-    selectAll('jockeyTournamentRegistrations', [
+    selectAll('jockeyRaceRegistrations', [
       { column: 'createdAt', direction: 'DESC' },
       { column: 'id' },
     ]),
@@ -197,7 +182,7 @@ export const readDb = async () => {
       { column: 'createdAt', direction: 'DESC' },
       { column: 'id' },
     ]),
-    selectAll('horseTournamentRegistrations', [
+    selectAll('horseRaceRegistrations', [
       { column: 'createdAt', direction: 'DESC' },
       { column: 'id' },
     ]),
@@ -263,9 +248,9 @@ export const readDb = async () => {
     horses,
     races: racesWithAssignments,
     jockeyProfiles,
-    jockeyTournamentRegistrations,
+    jockeyRaceRegistrations,
     jockeyInvitations,
-    horseTournamentRegistrations,
+    horseRaceRegistrations,
     raceEntries: raceEntries.map((entry) => ({
       ...entry,
       ownerConfirmed: bool(entry.ownerConfirmed),
@@ -352,9 +337,9 @@ const tableDeleteOrder = [
   'raceActionLogs',
   'refereeReports',
   'raceEntries',
-  'horseTournamentRegistrations',
+  'horseRaceRegistrations',
   'jockeyInvitations',
-  'jockeyTournamentRegistrations',
+  'jockeyRaceRegistrations',
   'jockeyProfiles',
   'raceRefereeAssignments',
   'races',
@@ -400,7 +385,6 @@ export const writeDb = async (db) => {
         'id',
         'name',
         'status',
-        'registrationWindow',
         'startDate',
         'finalDate',
         'location',
@@ -426,7 +410,7 @@ export const writeDb = async (db) => {
         'age',
         'sex',
         'color',
-        'weightKg',
+        'weightLb',
         'heightCm',
         'baseHandicap',
         'speedRating',
@@ -448,14 +432,14 @@ export const writeDb = async (db) => {
         species: horse.species || '',
         sex: horse.sex || '',
         color: horse.color || '',
-        weightKg: horse.weightKg ?? 0,
+        weightLb: horse.weightLb ?? 0,
         heightCm: horse.heightCm ?? 0,
         baseHandicap: horse.baseHandicap ?? 0,
         speedRating: horse.speedRating ?? 75,
         staminaRating: horse.staminaRating ?? 75,
         formRating: horse.formRating ?? 75,
-        healthRating: horse.healthRating ?? 80,
-        overallRating: horse.overallRating ?? 76,
+        healthRating: horse.healthRating ?? 75,
+        overallRating: horse.overallRating ?? 75,
         healthStatus: horse.healthStatus || '',
         profileNotes: horse.profileNotes || '',
         createdAt: horse.createdAt || null,
@@ -484,7 +468,6 @@ export const writeDb = async (db) => {
         'participants',
         'ownerConfirmed',
         'jockeyConfirmed',
-        'registrationPeriodMinutes',
         'registrationOpensAt',
         'registrationClosesAt',
         'resultStatus',
@@ -497,13 +480,12 @@ export const writeDb = async (db) => {
         ...race,
         raceDate: race.raceDate || race.date || null,
         raceTime: race.raceTime || race.time || null,
-        registrationPeriodMinutes: race.registrationPeriodMinutes || 10,
         registrationOpensAt: race.registrationOpensAt || null,
         registrationClosesAt: race.registrationClosesAt || null,
         resultStatus: race.resultStatus || 'draft',
         awardsPublished: race.awardsPublished ?? false,
-        handicapMin: race.handicapMin ?? 0,
-        handicapMax: race.handicapMax ?? 0,
+        handicapMin: race.handicapMin ?? 115,
+        handicapMax: race.handicapMax ?? 135,
         raceNumber: race.raceNumber || '',
         createdAt: race.createdAt || null,
         updatedAt: race.updatedAt || race.createdAt || null,
@@ -518,7 +500,7 @@ export const writeDb = async (db) => {
         'bio',
         'certificate',
         'competitionLevel',
-        'weight',
+        'weightLb',
         'status',
         'updatedAt',
       ],
@@ -529,9 +511,9 @@ export const writeDb = async (db) => {
     );
 
     await writeRows(
-      'jockeyTournamentRegistrations',
-      ['id', 'tournamentId', 'jockeyUserId', 'status', 'createdAt', 'reviewedAt'],
-      (db.jockeyTournamentRegistrations || []).map((registration) => ({
+      'jockeyRaceRegistrations',
+      ['id', 'raceId', 'jockeyUserId', 'status', 'createdAt', 'reviewedAt'],
+      (db.jockeyRaceRegistrations || []).map((registration) => ({
         ...registration,
         reviewedAt: registration.reviewedAt || null,
       }))
@@ -561,10 +543,11 @@ export const writeDb = async (db) => {
     );
 
     await writeRows(
-      'horseTournamentRegistrations',
+      'horseRaceRegistrations',
       [
         'id',
         'tournamentId',
+        'raceId',
         'horseId',
         'ownerUserId',
         'jockeyUserId',
@@ -574,8 +557,10 @@ export const writeDb = async (db) => {
         'createdAt',
         'reviewedAt',
       ],
-      (db.horseTournamentRegistrations || []).map((registration) => ({
+      (db.horseRaceRegistrations || []).map((registration) => ({
         ...registration,
+        raceId: registration.raceId || null,
+        jockeyUserId: registration.jockeyUserId || null,
         invitationId: registration.invitationId || null,
         status: registration.status || 'pending-jockey',
         notes: registration.notes || '',
@@ -626,6 +611,8 @@ export const writeDb = async (db) => {
         'lane',
         'handicap',
         'ratingSnapshot',
+        'ratingChange',
+        'postRaceRating',
         'ownerConfirmed',
         'jockeyConfirmed',
         'preRaceStatus',
@@ -642,6 +629,8 @@ export const writeDb = async (db) => {
         lane: entry.lane ?? null,
         handicap: entry.handicap ?? 0,
         ratingSnapshot: entry.ratingSnapshot ?? 0,
+        ratingChange: entry.ratingChange ?? 0,
+        postRaceRating: entry.postRaceRating ?? 0,
         ownerConfirmed: entry.ownerConfirmed ?? false,
         jockeyConfirmed: entry.jockeyConfirmed ?? false,
         preRaceStatus: entry.preRaceStatus || 'pending',
@@ -741,41 +730,6 @@ export const writeDb = async (db) => {
   }
 };
 
-// Cập nhật trực tiếp trạng thái publish kết quả để tránh lệch state sau khi reload trang.
-export const persistOfficialRaceResults = async (raceId, updatedAt = nowIso()) => {
-  await ensureRuntimeSchema();
-
-  const client = await getPool().connect();
-
-  try {
-    await client.query('BEGIN');
-    await client.query(
-      `UPDATE "races"
-       SET "status" = 'finished',
-           "resultStatus" = 'official',
-           "awardsPublished" = TRUE,
-           "updatedAt" = $2
-       WHERE "id" = $1`,
-      [raceId, updatedAt]
-    );
-    await client.query(
-      `UPDATE "raceEntries"
-       SET "resultStatus" = CASE
-         WHEN "preRaceStatus" = 'absent' OR "disqualified" = TRUE THEN 'disqualified'
-         ELSE 'official'
-       END
-       WHERE "raceId" = $1 AND "status" = 'approved'`,
-      [raceId]
-    );
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  } finally {
-    client.release();
-  }
-};
-
 // Cập nhật một kết quả race entry bằng row-level update để tránh writeDb ghi lại toàn bộ database.
 export const persistRaceEntryResult = async (entry, report = null) => {
   await ensureRuntimeSchema();
@@ -863,17 +817,21 @@ export const persistRaceEntryReadiness = async (entry) => {
   await getPool().query(
     `UPDATE "raceEntries"
      SET "preRaceStatus" = $2,
-         "disqualified" = $3
+         "disqualified" = $3,
+         "status" = $4,
+         "resultStatus" = $5
      WHERE "id" = $1`,
     [
       entry.id,
       entry.preRaceStatus || 'pending',
       Boolean(entry.disqualified),
+      entry.status || 'approved',
+      entry.resultStatus || 'draft',
     ]
   );
 };
 
-// Lưu các thay đổi của Start Race/Publish Results trong một transaction nhỏ, không rewrite toàn DB.
+// Lưu các thay đổi vận hành race trong một transaction nhỏ, không rewrite toàn DB.
 export const persistRefereeRaceAction = async ({
   race,
   raceEntries = [],

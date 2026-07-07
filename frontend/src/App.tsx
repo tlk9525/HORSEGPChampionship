@@ -20,6 +20,7 @@ import TournamentDetails from './app/components/TournamentDetails';
 
 import HorseManagement from './app/components/HorseManagement';
 import HorseDetails from './app/components/HorseDetails';
+import HorseDirectoryPage from './app/components/HorseDirectoryPage';
 import RegisterHorsePage from './app/components/RegisterHorsePage';
 import RaceRegistrationPage from './app/components/RaceRegistrationPage';
 
@@ -27,8 +28,8 @@ import JockeyPage from './app/components/JockeyPage';
 import JockeyDirectoryPage from './app/components/JockeyDirectoryPage';
 
 import LiveRace from './app/components/LiveRace';
+import RaceSimulationDemo from './app/components/RaceSimulationDemo';
 import ResultsPage from './app/components/ResultsPage';
-import RankingsPage from './app/components/RankingsPage';
 import AdminPanel from './app/components/AdminPanel';
 import CreateRacePage from './app/components/CreateRacePage';
 
@@ -51,13 +52,14 @@ const protectedPages: Record<string, string[]> = {
   'create-race': ['admin'],
   horses: ['admin', 'owner'],
   'register-horse': ['owner'],
-  'tournament-registration': ['owner'],
+  'race-registration': ['owner'],
   'edit-horse': ['owner'],
-  'horse-details': ['admin', 'owner'],
+  'horse-details': ['admin', 'owner', 'jockey', 'referee', 'spectator'],
+  'horse-profiles': ['admin', 'owner', 'jockey', 'referee', 'spectator'],
   'jockey-profiles': ['admin', 'owner', 'jockey', 'referee', 'spectator'],
   jockeys: ['jockey'],
   'live-race': ['admin', 'referee', 'spectator'],
-  rankings: ['admin', 'owner', 'jockey', 'referee', 'spectator'],
+  'simulation-demo': ['admin', 'owner', 'jockey', 'referee', 'spectator'],
 };
 
 const pageFromPath = (pathname: string) => {
@@ -67,10 +69,11 @@ const pageFromPath = (pathname: string) => {
   if (path === '/login') return 'login';
   if (path === '/register') return 'register';
   if (path === '/tournaments') return 'tournaments';
-  if (path === '/tournaments/register-horse') return 'tournament-registration';
+  if (/^\/races\/[^/]+\/register$/.test(path)) return 'race-registration';
   if (path.startsWith('/tournaments/')) return 'tournament-details';
   if (path === '/races' || path.startsWith('/races/')) return 'race-details';
   if (path === '/horses') return 'horses';
+  if (path === '/horse-profiles') return 'horse-profiles';
   if (path === '/horses/new') return 'register-horse';
   if (/^\/horses\/[^/]+\/edit$/.test(path)) return 'edit-horse';
   if (/^\/horses\/[^/]+$/.test(path)) return 'horse-details';
@@ -78,8 +81,8 @@ const pageFromPath = (pathname: string) => {
   if (path === '/jockeys/me') return 'jockeys';
   if (path === '/jockeys') return 'jockey-profiles';
   if (path === '/live-race' || path.startsWith('/live-race/')) return 'live-race';
+  if (path === '/simulation-demo' || path.startsWith('/simulation-demo/')) return 'simulation-demo';
   if (path === '/results') return 'results';
-  if (path === '/rankings') return 'rankings';
   if (path === '/admin') return 'admin';
   if (path === '/admin/races/new') return 'create-race';
 
@@ -117,10 +120,13 @@ export default function App() {
         : '/races',
       horses: '/horses',
       'register-horse': '/horses/new',
-      'tournament-registration': '/tournaments/register-horse',
+      'race-registration': selectedRaceId
+        ? `/races/${selectedRaceId}/register`
+        : '/tournaments',
       'horse-details': selectedHorseId
         ? `/horses/${selectedHorseId}`
         : '/horses',
+      'horse-profiles': '/horse-profiles',
       'edit-horse': selectedHorseId
         ? `/horses/${selectedHorseId}/edit`
         : '/horses',
@@ -129,8 +135,10 @@ export default function App() {
       'live-race': selectedRaceId
         ? `/live-race/${selectedRaceId}`
         : '/live-race',
+      'simulation-demo': selectedRaceId
+        ? `/simulation-demo/${selectedRaceId}`
+        : '/simulation-demo',
       results: '/results',
-      rankings: '/rankings',
       admin: '/admin',
       'create-race': '/admin/races/new',
       login: '/login',
@@ -251,18 +259,20 @@ export default function App() {
                 />
               }
             />
+            <Route path="/horse-profiles" element={<HorseDirectoryPage />} />
             <Route
               path="/horses/new"
               element={<RegisterHorsePage onNavigate={navigate} />}
             />
             <Route
-              path="/tournaments/register-horse"
+              path="/races/:raceId/register"
               element={<RaceRegistrationPage onNavigate={navigate} />}
             />
             <Route
               path="/horses/:horseId"
               element={
                 <HorseDetails
+                  currentUser={currentUser}
                   horse={selectedHorse}
                   onNavigate={navigate}
                 />
@@ -291,8 +301,15 @@ export default function App() {
             <Route path="/jockeys/me" element={<Navigate to="/jockey-portal" replace />} />
             <Route path="/live-race" element={<LiveRace />} />
             <Route path="/live-race/:raceId" element={<LiveRace />} />
+            <Route
+              path="/simulation-demo"
+              element={<RaceSimulationDemo currentUser={currentUser} />}
+            />
+            <Route
+              path="/simulation-demo/:raceId"
+              element={<RaceSimulationDemo currentUser={currentUser} />}
+            />
             <Route path="/results" element={<ResultsPage />} />
-            <Route path="/rankings" element={<RankingsPage />} />
             <Route
               path="/admin"
               element={<AdminPanel onNavigate={navigate} />}
@@ -312,7 +329,6 @@ export default function App() {
                       { replace: true }
                     );
                   }}
-                  onNavigate={navigate}
                 />
               }
             />
@@ -328,7 +344,6 @@ export default function App() {
                       { replace: true }
                     );
                   }}
-                  onNavigate={navigate}
                 />
               }
             />

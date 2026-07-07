@@ -16,6 +16,12 @@ const positiveWords = [
   'updated',
 ];
 
+const positivePhrases = [
+  'registration submitted',
+  'request submitted',
+  'results submitted',
+];
+
 const negativeWords = [
   'absent',
   'blocked',
@@ -37,6 +43,10 @@ const validationWords = ['required'];
 // Xác định điệu cảm của một thông điệp: 'error' nếu có từ âm, 'success' nếu tích cực, 'info' cho tổng quát
 export const messageTone = (text: string) => {
   const normalized = text.toLowerCase();
+
+  if (positivePhrases.some((phrase) => normalized.includes(phrase))) {
+    return 'success';
+  }
 
   if (negativeWords.some((word) => normalized.includes(word))) {
     return 'error';

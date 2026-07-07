@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import {
   ApprovalItem,
-  HorseTournamentRegistration,
+  HorseRaceRegistration,
   RaceEntryRecord,
   RaceRecord,
   TournamentRecord,
@@ -26,9 +26,11 @@ import {
   createTournament,
   decideApproval,
   deleteRace,
+  deleteTournament,
   getApprovals,
   getBootstrap,
   updateRace as persistRace,
+  updateTournament,
 } from '../services/api';
 import { statusLabel } from '../utils/domain';
 import { messageToneClasses } from '../utils/messageTone';
@@ -55,6 +57,19 @@ const formatDateInput = (value: string) => {
 };
 
 const dateInputToIso = (value: string) => {
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+    const isValidDate =
+      date.getUTCFullYear() === Number(year) &&
+      date.getUTCMonth() === Number(month) - 1 &&
+      date.getUTCDate() === Number(day);
+
+    return isValidDate ? value : '';
+  }
+
   const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
 
   if (!match) return '';
@@ -69,6 +84,21 @@ const dateInputToIso = (value: string) => {
   return isValidDate ? `${year}-${month}-${day}` : '';
 };
 
+const raceStatusBadgeClass = (status: string) => {
+  const classes: Record<string, string> = {
+    draft: 'bg-gray-600/20 border border-gray-600/30 text-gray-300',
+    'registration-open': 'bg-emerald-600/20 border border-emerald-600/30 text-emerald-400',
+    'registration-closed': 'bg-yellow-600/20 border border-yellow-600/30 text-yellow-500',
+    published: 'bg-sky-600/20 border border-sky-600/30 text-sky-400',
+    'in-progress': 'bg-[#d4af37]/20 border border-[#d4af37]/30 text-[#f6d77a]',
+    finished: 'bg-violet-600/20 border border-violet-600/30 text-violet-400',
+    completed: 'bg-white/10 border border-white/20 text-white',
+    cancelled: 'bg-red-600/20 border border-red-600/30 text-red-400',
+  };
+
+  return classes[status] || classes.draft;
+};
+
 export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   const [pendingApprovals, setPendingApprovals] = useState<ApprovalItem[]>([]);
@@ -77,19 +107,24 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   const [totalUsers, setTotalUsers] = useState(0);
   const [tournaments, setTournaments] = useState<TournamentRecord[]>([]);
   const [races, setRaces] = useState<RaceRecord[]>([]);
-  const [pairings, setPairings] = useState<HorseTournamentRegistration[]>([]);
+  const [pairings, setPairings] = useState<HorseRaceRegistration[]>([]);
   const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
+  const [maxRaceFieldSize, setMaxRaceFieldSize] = useState(10);
   const [maxRacesPerTournament, setMaxRacesPerTournament] = useState(10);
   const [showCreateTournament, setShowCreateTournament] = useState(false);
   const [tournamentMessage, setTournamentMessage] = useState('');
-  const [scheduleExpanded, setScheduleExpanded] = useState(false);
+  const [editTournament, setEditTournament] = useState<TournamentRecord | null>(null);
+  const [deleteTournamentTarget, setDeleteTournamentTarget] = useState<TournamentRecord | null>(null);
+
+  const [expandedTournaments, setExpandedTournaments] = useState<Record<string, boolean>>({});
+  const toggleTournament = (tournamentId: string) => {
+    setExpandedTournaments((prev) => ({ ...prev, [tournamentId]: !prev[tournamentId] }));
+  };
   const [tournamentForm, setTournamentForm] = useState({
     name: '',
-    registrationWindow: '',
     startDate: '',
     finalDate: '',
     location: '',
-    prizePool: '',
   });
 
   const loadApprovals = () => {
@@ -112,8 +147,9 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     getBootstrap()
       .then((data) => {
         setRaces(data.races || []);
-        setPairings(data.horseTournamentRegistrations || []);
+        setPairings(data.horseRaceRegistrations || []);
         setRaceEntries(data.raceEntries || []);
+        setMaxRaceFieldSize(data.limits?.maxRaceFieldSize || 10);
         setMaxRacesPerTournament(data.limits?.maxRacesPerTournament || 10);
         setTotalUsers(data.users.length);
         setTournaments(data.tournaments || []);
@@ -146,6 +182,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   const registeredPairKeys = pairings.filter(
     (pairing) =>
       pairing.status === 'approved' &&
+      Boolean(pairing.jockeyUserId) &&
       activeTournamentIds.has(pairing.tournamentId)
   ).map((pairing) => `${pairing.horseId}:${pairing.jockeyUserId}`);
   const activeRaceIds = new Set(
@@ -195,7 +232,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     },
   ];
 
-  const visibleRaces = scheduleExpanded ? races : races.slice(0, 4);
+
   const canCreateRace = tournaments.some(
     (tournament) =>
       tournament.status !== 'completed' &&
@@ -208,10 +245,8 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   const [editRace, setEditRace] =
     useState<RaceRecord | null>(null);
-
-  const tournamentNameById = (tournamentId?: string | null) =>
-    tournaments.find((tournament) => tournament.id === tournamentId)?.name ||
-    'No tournament selected';
+  const [deleteRaceTarget, setDeleteRaceTarget] =
+    useState<RaceRecord | null>(null);
 
   const updateRace = () => {
     if (!editRace) return;
@@ -219,7 +254,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     const raceDate = editRace.date ? dateInputToIso(editRace.date) : '';
 
     if (editRace.date && !raceDate) {
-      setApprovalMessage('Race date must use dd/MM/yyyy format.');
+      setApprovalMessage('Race date must be valid.');
       return;
     }
 
@@ -242,19 +277,22 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       );
   };
 
-  const removeRace = () => {
-    if (!editRace) return;
-    if (!window.confirm(`Delete ${editRace.name}? This action cannot be undone.`)) {
-      return;
-    }
+  const requestDeleteRace = (race: RaceRecord) => {
+    setDeleteRaceTarget(race);
+  };
 
-    deleteRace(editRace.id)
+  const confirmDeleteRace = () => {
+    if (!deleteRaceTarget) return;
+
+    const race = deleteRaceTarget;
+    deleteRace(race.id)
       .then(() => {
-        setRaces((current) => current.filter((race) => race.id !== editRace.id));
+        setRaces((current) => current.filter((item) => item.id !== race.id));
         setRaceEntries((current) =>
-          current.filter((entry) => entry.raceId !== editRace.id)
+          current.filter((entry) => entry.raceId !== race.id)
         );
-        setEditRace(null);
+        if (editRace?.id === race.id) setEditRace(null);
+        setDeleteRaceTarget(null);
         setApprovalMessage('Race deleted.');
       })
       .catch((error) =>
@@ -264,11 +302,13 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       );
   };
 
+  const removeRace = () => {
+    if (!editRace) return;
+    requestDeleteRace(editRace);
+  };
+
   const handleRaceAction = (
     raceId: string,
-<<<<<<< Updated upstream
-    action: 'close-registration' | 'publish'
-=======
     action:
       | 'close-registration'
       | 'publish'
@@ -276,13 +316,22 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       | 'finish-race'
       | 'complete-results'
       | 'cancel-race'
->>>>>>> Stashed changes
   ) => {
     adminRaceAction(raceId, action)
       .then((result) => {
         setRaces((current) =>
           current.map((race) => (race.id === result.race.id ? result.race : race))
         );
+        if (Array.isArray(result.entries)) {
+          setRaceEntries((current) => {
+            const updatedEntryIds = new Set(result.entries.map((entry) => entry.id));
+
+            return [
+              ...current.filter((entry) => !updatedEntryIds.has(entry.id)),
+              ...result.entries,
+            ];
+          });
+        }
         setApprovalMessage(`Race status updated to ${statusLabel(result.race.status)}.`);
       })
       .catch((error) =>
@@ -292,6 +341,36 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       );
   };
 
+  const raceReadiness = (raceId: string) => {
+    const entries = raceEntries.filter(
+      (entry) => entry.raceId === raceId && entry.status === 'approved'
+    );
+    const ready = entries.filter(
+      (entry) => entry.preRaceStatus === 'ready' && !entry.disqualified
+    ).length;
+    const unchecked = entries.filter(
+      (entry) => !['ready', 'absent'].includes(entry.preRaceStatus) && !entry.disqualified
+    ).length;
+
+    return { total: entries.length, ready, unchecked };
+  };
+
+  const approvedPairCount = (raceId: string) => {
+    const entries = raceEntries.filter(
+      (entry) =>
+        entry.raceId === raceId &&
+        entry.status === 'approved' &&
+        entry.horseId &&
+        entry.jockeyUserId
+    );
+
+    return Math.min(
+      entries.length,
+      new Set(entries.map((entry) => entry.horseId)).size,
+      new Set(entries.map((entry) => entry.jockeyUserId)).size
+    );
+  };
+
   const handleCreateTournament = () => {
     setTournamentMessage('');
     const startDate = dateInputToIso(tournamentForm.startDate);
@@ -299,13 +378,17 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       ? dateInputToIso(tournamentForm.finalDate)
       : '';
 
-    if (!tournamentForm.name || !tournamentForm.startDate || !tournamentForm.location) {
+    if (
+      !tournamentForm.name ||
+      !tournamentForm.startDate ||
+      !tournamentForm.location
+    ) {
       setTournamentMessage('Tournament name, start date and location are required.');
       return;
     }
 
     if (!startDate || (tournamentForm.finalDate && !finalDate)) {
-      setTournamentMessage('Dates must use dd/MM/yyyy format.');
+      setTournamentMessage('Tournament dates must be valid.');
       return;
     }
 
@@ -319,11 +402,9 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
         setTournamentMessage('Tournament created and registration opened.');
         setTournamentForm({
           name: '',
-          registrationWindow: '',
           startDate: '',
           finalDate: '',
           location: '',
-          prizePool: '',
         });
         setTimeout(() => {
           setShowCreateTournament(false);
@@ -333,6 +414,83 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       .catch((error) =>
         setTournamentMessage(
           error instanceof Error ? error.message : 'Unable to create tournament'
+        )
+      );
+  };
+
+  const handleUpdateTournament = () => {
+    if (!editTournament) return;
+
+    setTournamentMessage('');
+
+    const startDate = dateInputToIso(editTournament.startDate || '');
+    const finalDate = editTournament.finalDate
+      ? dateInputToIso(editTournament.finalDate)
+      : '';
+
+    if (!editTournament.name || !editTournament.startDate) {
+      setTournamentMessage('Tournament name and start date are required.');
+      return;
+    }
+
+    if (!startDate || (editTournament.finalDate && !finalDate)) {
+      setTournamentMessage('Tournament dates must be valid.');
+      return;
+    }
+
+    updateTournament(editTournament.id, {
+      name: editTournament.name,
+      startDate,
+      finalDate,
+      location: editTournament.location,
+    })
+      .then((result) => {
+        setTournaments(result.tournaments);
+        setEditTournament(null);
+        setTournamentMessage('');
+        setApprovalMessage('Tournament saved.');
+      })
+      .catch((error) =>
+        setTournamentMessage(
+          error instanceof Error ? error.message : 'Unable to save tournament'
+        )
+      );
+  };
+
+  const requestDeleteTournament = () => {
+    if (!editTournament) return;
+    setDeleteTournamentTarget(editTournament);
+  };
+
+  const confirmDeleteTournament = () => {
+    if (!deleteTournamentTarget) return;
+
+    deleteTournament(deleteTournamentTarget.id)
+      .then((result) => {
+        const deletedRaceIds = new Set(result.raceIds);
+
+        setTournaments(result.tournaments);
+        setRaces((current) =>
+          current.filter((race) => race.tournamentId !== result.tournamentId)
+        );
+        setRaceEntries((current) =>
+          current.filter((entry) => !deletedRaceIds.has(entry.raceId))
+        );
+        setPairings((current) =>
+          current.filter(
+            (pairing) =>
+              pairing.tournamentId !== result.tournamentId &&
+              !deletedRaceIds.has(pairing.raceId)
+          )
+        );
+        setEditTournament(null);
+        setDeleteTournamentTarget(null);
+        setTournamentMessage('');
+        setApprovalMessage('Tournament deleted.');
+      })
+      .catch((error) =>
+        setTournamentMessage(
+          error instanceof Error ? error.message : 'Unable to delete tournament'
         )
       );
   };
@@ -466,6 +624,53 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                       </div>
                     </div>
 
+                    <div className="mb-5 rounded-2xl border border-white/10 bg-[#0b2540] p-4">
+                      <div className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.18em] text-[#d4af37]">
+                        <FileText className="h-4 w-4" />
+                        Review information
+                      </div>
+
+                      <div className="grid gap-4 xl:grid-cols-2">
+                        {item.reviewSections.map((section) => (
+                          <div
+                            key={`${item.id}-${section.title}`}
+                            className="rounded-xl border border-white/10 bg-[#071a2f] p-4"
+                          >
+                            <h4 className="mb-3 text-base font-black text-white">
+                              {section.title}
+                            </h4>
+
+                            <dl className="space-y-2">
+                              {section.fields.map((field) => (
+                                <div
+                                  key={`${section.title}-${field.label}`}
+                                  className="grid grid-cols-[minmax(110px,0.8fr)_minmax(0,1.2fr)] gap-3 text-sm"
+                                >
+                                  <dt className="text-gray-500">{field.label}</dt>
+                                  <dd className="break-words text-right font-semibold text-gray-200">
+                                    {field.value}
+                                  </dd>
+                                </div>
+                              ))}
+                            </dl>
+                          </div>
+                        ))}
+                      </div>
+
+                      {item.warnings.length > 0 && (
+                        <div className="mt-4 space-y-2">
+                          {item.warnings.map((warning) => (
+                            <div
+                              key={warning}
+                              className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-300"
+                            >
+                              Check before approval: {warning}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex gap-4">
 
                       <button
@@ -501,24 +706,11 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                   </h2>
 
                   <p className="text-gray-400 mt-2">
-                    Showing {visibleRaces.length}/{races.length} races
+                    Showing {tournaments.length} tournaments
                   </p>
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  {races.length > 4 && (
-                    <button
-                      onClick={() => setScheduleExpanded((current) => !current)}
-                      className="flex items-center gap-2 px-5 py-3 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/10 text-[#d4af37] font-bold hover:bg-[#d4af37]/20 transition-all"
-                    >
-                      {scheduleExpanded ? 'Show Less' : 'View All'}
-                      {scheduleExpanded ? (
-                        <ChevronUp className="w-5 h-5" />
-                      ) : (
-                        <ChevronDown className="w-5 h-5" />
-                      )}
-                    </button>
-                  )}
 
                   <button
                     onClick={() => canCreateRace && onNavigate('create-race')}
@@ -536,101 +728,57 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                 </div>
               </div>
 
-              <div className="space-y-5">
+              <div className="space-y-6">
+                {tournaments
+                  .map((tournament) => {
+                    const tournamentRaces = races.filter((r) => r.tournamentId === tournament.id);
+                    const isExpanded = expandedTournaments[tournament.id];
 
-                {visibleRaces.map((race) => (
-
-                  <div
-                    key={race.id}
-                    className="bg-[#071a2f] border border-white/10 rounded-2xl p-5"
-                  >
-
-                    <div className="flex items-center justify-between">
-
-                      <div>
-
-                        <div className="flex items-center gap-3 mb-2">
-                          <span className="px-3 py-1 rounded-xl bg-blue-600/15 border border-blue-600/30 text-blue-300 text-xs font-bold">
-                            {race.raceNumber || 'Race'}
-                          </span>
-
-                          <h3 className="text-2xl font-bold text-white">
-                            {race.name}
-                          </h3>
-
-                          <span
-                            className={`px-3 py-1 rounded-xl text-xs font-bold ${
-                              race.status ===
-                              'scheduled'
-                                ? 'bg-green-600/20 border border-green-600/30 text-green-500'
-                                : 'bg-yellow-600/20 border border-yellow-600/30 text-yellow-500'
-                            }`}
+                    return (
+                      <div key={tournament.id} className="bg-[#071a2f] border border-white/10 rounded-2xl overflow-hidden">
+                        <div className="flex items-center justify-between gap-4 p-5 hover:bg-white/5 transition-colors">
+                          <button
+                            onClick={() => toggleTournament(tournament.id)}
+                            className="flex-1 flex items-center justify-between gap-4 text-left"
                           >
-                            {statusLabel(race.status)}
-                          </span>
-                        </div>
+                            <div>
+                              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                                {tournament.name}
+                                <span className="text-xs font-semibold px-2 py-1 bg-[#d4af37]/20 text-[#d4af37] rounded-lg">
+                                  {tournamentRaces.length} races
+                                </span>
+                              </h3>
+                            </div>
+                            {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
+                          </button>
 
-                        <div className="mb-3 text-sm text-gray-300">
-                          Tournament:{' '}
-                          <span className="text-white font-semibold">
-                            {tournamentNameById(race.tournamentId)}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-4 text-gray-400">
-
-                          <span>
-                            {race.date}
-                          </span>
-
-                          <span>•</span>
-
-                          <span>
-                            {race.time}
-                          </span>
-
-                          <span>•</span>
-
-                          <span>
-                            {race.participants}{' '}
-                            participants
-                          </span>
-
-                          {'referee' in race && (
-                            <>
-                              <span>•</span>
-
-                              <span>
-                                {race.referee}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex gap-3">
-
-                        {race.status === 'registration-open' && (
                           <button
                             onClick={() =>
-                              handleRaceAction(race.id, 'close-registration')
+                              setEditTournament({
+                                ...tournament,
+                                startDate: tournament.startDate || '',
+                                finalDate: tournament.finalDate || '',
+                              })
                             }
-                            disabled={Boolean(
-                              race.registrationClosesAt &&
-                              Date.now() < new Date(race.registrationClosesAt).getTime()
-                            )}
-<<<<<<< Updated upstream
-                            title={
-                              race.registrationClosesAt &&
-                              Date.now() < new Date(race.registrationClosesAt).getTime()
-                                ? `Registration closes at ${new Date(race.registrationClosesAt).toLocaleString()}`
-                                : undefined
-                            }
-                            className="flex items-center gap-2 px-4 py-2 bg-yellow-500/10 text-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl hover:bg-yellow-500/20 transition-all border border-yellow-500/30"
+                            className="flex items-center gap-2 px-4 py-2 bg-[#d4af37]/10 text-[#d4af37] rounded-xl hover:bg-[#d4af37] hover:text-white transition-all border border-[#d4af37]/30 text-sm font-semibold"
                           >
-                            Close Registration
+                            <Pencil className="w-4 h-4" />
+                            Edit
                           </button>
-=======
+                        </div>
+
+                        {isExpanded && (
+                          <div className="p-5 border-t border-white/10 space-y-4 bg-[#0a1e35]/50">
+                            {tournamentRaces.length === 0 && (
+                              <div className="bg-[#071a2f] border border-dashed border-white/15 rounded-xl p-5">
+                                <p className="text-white font-bold">
+                                  No races yet
+                                </p>
+                                <p className="text-gray-400 text-sm mt-1">
+                                  This tournament is visible in Admin and ready for race creation.
+                                </p>
+                              </div>
+                            )}
 
                             {tournamentRaces.map((race) => (
                               <div
@@ -768,49 +916,40 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                               </div>
                             ))}
                           </div>
->>>>>>> Stashed changes
                         )}
-
-                        {race.status === 'registration-closed' && (
-                          <button
-                            onClick={() =>
-                              handleRaceAction(race.id, 'publish')
-                            }
-                            className="flex items-center gap-2 px-4 py-2 bg-green-600/10 text-green-400 rounded-xl hover:bg-green-600/20 transition-all border border-green-600/30"
-                          >
-                            Publish
-                          </button>
-                        )}
-
-                        <button
-                          onClick={() =>
-                            setEditRace({
-                              ...race,
-                              date: formatDateInput(race.date || ''),
-                            })
-                          }
-                          disabled={!['registration-open', 'registration-closed'].includes(race.status)}
-                          className="flex items-center gap-2 px-4 py-2 bg-[#d4af37]/10 text-[#d4af37] rounded-xl hover:bg-[#d4af37] hover:text-white transition-all border border-[#d4af37]/30"
-                        >
-                          <Pencil className="w-4 h-4" />
-                          Edit
-                        </button>
-
-                        <button
-                          onClick={() =>
-                            setShowViewModal(
-                              race
-                            )
-                          }
-                          className="flex items-center gap-2 px-4 py-2 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-all"
-                        >
-                          <Eye className="w-4 h-4" />
-                          View
-                        </button>
                       </div>
+                    );
+                  })}
+                
+                {/* Fallback for races without a tournament */}
+                {races.filter((r) => !r.tournamentId || !tournaments.some((t) => t.id === r.tournamentId)).length > 0 && (
+                  <div className="bg-[#071a2f] border border-white/10 rounded-2xl p-5">
+                    <h3 className="text-xl font-bold text-white mb-4">Other Races</h3>
+                    <div className="space-y-4">
+                      {races.filter((r) => !r.tournamentId || !tournaments.some((t) => t.id === r.tournamentId)).map((race) => (
+                        <div key={race.id} className="bg-[#0a1e35]/50 border border-white/10 rounded-xl p-5">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="flex items-center gap-3 mb-2">
+                                <span className="px-3 py-1 rounded-xl bg-blue-600/15 border border-blue-600/30 text-blue-300 text-xs font-bold">
+                                  {race.raceNumber || 'Race'}
+                                </span>
+                                <h3 className="text-xl font-bold text-white">{race.name}</h3>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => setShowViewModal(race)}
+                              className="flex items-center gap-2 px-4 py-2 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-all text-sm font-semibold"
+                            >
+                              <Eye className="w-4 h-4" />
+                              View
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </div>
@@ -848,8 +987,8 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
                   {
                     icon: Calendar,
-                    label:
-                      'Open Registration',
+                    label: 'Race Builder',
+                    onClick: () => canCreateRace && onNavigate('create-race'),
                   },
 
                   {
@@ -934,47 +1073,64 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
               <div className="space-y-5">
 
-                <input
-                  type="text"
-                  value={editRace.name}
-                  onChange={(e) =>
-                    setEditRace({
-                      ...editRace,
-                      name:
-                        e.target.value,
-                    })
-                  }
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
+                <label className="space-y-2 block">
+                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                    Race name
+                  </span>
+                  <input
+                    type="text"
+                    value={editRace.name}
+                    onChange={(e) =>
+                      setEditRace({
+                        ...editRace,
+                        name:
+                          e.target.value,
+                      })
+                    }
+                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                  />
+                </label>
 
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="Race date (dd/MM/yyyy)"
-                  value={editRace.date}
-                  onChange={(e) =>
-                    setEditRace({
-                      ...editRace,
-                      date:
-                        formatDateInput(e.target.value),
-                    })
-                  }
-                  maxLength={10}
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
+                <div className="grid md:grid-cols-2 gap-5">
+                  <label className="space-y-2 block">
+                    <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                      Race date
+                    </span>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder="dd/MM/yyyy"
+                      value={editRace.date}
+                      onChange={(e) =>
+                        setEditRace({
+                          ...editRace,
+                          date:
+                            formatDateInput(e.target.value),
+                        })
+                      }
+                      maxLength={10}
+                      className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                    />
+                  </label>
 
-                <input
-                  type="time"
-                  value={editRace.time}
-                  onChange={(e) =>
-                    setEditRace({
-                      ...editRace,
-                      time:
-                        e.target.value,
-                    })
-                  }
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
+                  <label className="space-y-2 block">
+                    <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                      Race time
+                    </span>
+                    <input
+                      type="time"
+                      value={editRace.time}
+                      onChange={(e) =>
+                        setEditRace({
+                          ...editRace,
+                          time:
+                            e.target.value,
+                        })
+                      }
+                      className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                    />
+                  </label>
+                </div>
               </div>
 
               <div className="flex gap-4 mt-8">
@@ -1007,6 +1163,174 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
           </div>
         )}
 
+        {deleteRaceTarget && (
+          <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-[60] p-4">
+            <div className="bg-[#12304f] p-8 rounded-3xl w-full max-w-lg border border-red-500/30">
+              <div className="flex items-center gap-3 text-red-300 mb-4">
+                <Trash2 className="w-6 h-6" />
+                <h2 className="text-2xl font-black text-white">
+                  Delete Race?
+                </h2>
+              </div>
+
+              <p className="text-gray-300 leading-relaxed">
+                Are you sure you want to delete <span className="font-bold text-white">{deleteRaceTarget.name}</span>? This action cannot be undone.
+              </p>
+
+              <div className="flex gap-4 mt-8">
+                <button
+                  onClick={() => setDeleteRaceTarget(null)}
+                  className="flex-1 py-4 bg-white/10 rounded-2xl text-white"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={confirmDeleteRace}
+                  className="flex-1 flex items-center justify-center gap-2 py-4 bg-red-600 hover:bg-red-700 rounded-2xl text-white font-bold"
+                >
+                  <Trash2 className="w-5 h-5" />
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {deleteTournamentTarget && (
+          <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-[60] p-4">
+            <div className="bg-[#12304f] p-8 rounded-3xl w-full max-w-lg border border-red-500/30">
+              <div className="flex items-center gap-3 text-red-300 mb-4">
+                <Trash2 className="w-6 h-6" />
+                <h2 className="text-2xl font-black text-white">
+                  Delete Tournament?
+                </h2>
+              </div>
+
+              <p className="text-gray-300 leading-relaxed">
+                Are you sure you want to delete <span className="font-bold text-white">{deleteTournamentTarget.name}</span>? This will delete the tournament and all races, entries, registrations, referee assignments and reports under it.
+              </p>
+
+              <div className="flex gap-4 mt-8">
+                <button
+                  onClick={() => setDeleteTournamentTarget(null)}
+                  className="flex-1 py-4 bg-white/10 rounded-2xl text-white"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={confirmDeleteTournament}
+                  className="flex-1 flex items-center justify-center gap-2 py-4 bg-red-600 hover:bg-red-700 rounded-2xl text-white font-bold"
+                >
+                  <Trash2 className="w-5 h-5" />
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {editTournament && (
+          <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#12304f] p-8 rounded-3xl w-full max-w-2xl border border-white/10">
+              <h2 className="text-3xl font-black text-white mb-2">
+                Edit Tournament
+              </h2>
+
+              <p className="text-gray-400 mb-6">
+                Update tournament name and schedule dates.
+              </p>
+
+              {tournamentMessage && (
+                <div className={`mb-5 rounded-xl border px-4 py-3 font-semibold ${messageToneClasses(tournamentMessage)}`}>
+                  {tournamentMessage}
+                </div>
+              )}
+
+              <div className="grid md:grid-cols-2 gap-5">
+                <label className="space-y-2 md:col-span-2">
+                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                    Tournament name
+                  </span>
+                  <input
+                    type="text"
+                    value={editTournament.name}
+                    onChange={(event) =>
+                      setEditTournament({
+                        ...editTournament,
+                        name: event.target.value,
+                      })
+                    }
+                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                  />
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                    Start date
+                  </span>
+                  <input
+                    type="date"
+                    value={editTournament.startDate || ''}
+                    onChange={(event) =>
+                      setEditTournament({
+                        ...editTournament,
+                        startDate: event.target.value,
+                      })
+                    }
+                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                  />
+                </label>
+
+                <label className="space-y-2">
+                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                    End date
+                  </span>
+                  <input
+                    type="date"
+                    value={editTournament.finalDate || ''}
+                    onChange={(event) =>
+                      setEditTournament({
+                        ...editTournament,
+                        finalDate: event.target.value,
+                      })
+                    }
+                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                  />
+                </label>
+              </div>
+
+              <div className="flex gap-4 mt-8">
+                <button
+                  onClick={requestDeleteTournament}
+                  className="flex-1 flex items-center justify-center gap-2 py-4 bg-red-600 hover:bg-red-700 rounded-2xl text-white font-bold"
+                >
+                  <Trash2 className="w-5 h-5" />
+                  Delete
+                </button>
+
+                <button
+                  onClick={() => {
+                    setEditTournament(null);
+                    setTournamentMessage('');
+                  }}
+                  className="flex-1 py-4 bg-white/10 rounded-2xl text-white"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={handleUpdateTournament}
+                  className="flex-1 py-4 bg-[#d4af37] rounded-2xl text-white font-bold"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showCreateTournament && (
 
           <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-50 p-4">
@@ -1028,88 +1352,76 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
               )}
 
               <div className="grid md:grid-cols-2 gap-5">
-                <input
-                  type="text"
-                  placeholder="Tournament name"
-                  value={tournamentForm.name}
-                  onChange={(event) =>
-                    setTournamentForm({
-                      ...tournamentForm,
-                      name: event.target.value,
-                    })
-                  }
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
+                <label className="space-y-2">
+                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                    Tournament name
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Giải Demo Tiếng Việt"
+                    value={tournamentForm.name}
+                    onChange={(event) =>
+                      setTournamentForm({
+                        ...tournamentForm,
+                        name: event.target.value,
+                      })
+                    }
+                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                  />
+                </label>
 
-                <input
-                  type="text"
-                  placeholder="Registration window"
-                  value={tournamentForm.registrationWindow}
-                  onChange={(event) =>
-                    setTournamentForm({
-                      ...tournamentForm,
-                      registrationWindow: event.target.value,
-                    })
-                  }
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
+                <label className="space-y-2">
+                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                    Start date
+                  </span>
+                  <input
+                    type="date"
+                    value={tournamentForm.startDate}
+                    onChange={(event) =>
+                      setTournamentForm({
+                        ...tournamentForm,
+                        startDate: event.target.value,
+                      })
+                    }
+                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                  />
+                </label>
 
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="Start date (dd/MM/yyyy)"
-                  value={tournamentForm.startDate}
-                  onChange={(event) =>
-                    setTournamentForm({
-                      ...tournamentForm,
-                      startDate: formatDateInput(event.target.value),
-                    })
-                  }
-                  maxLength={10}
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
+                <label className="space-y-2">
+                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                    End date
+                  </span>
+                  <input
+                    type="date"
+                    value={tournamentForm.finalDate}
+                    onChange={(event) =>
+                      setTournamentForm({
+                        ...tournamentForm,
+                        finalDate: event.target.value,
+                      })
+                    }
+                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                  />
+                </label>
 
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="Final date (dd/MM/yyyy)"
-                  value={tournamentForm.finalDate}
-                  onChange={(event) =>
-                    setTournamentForm({
-                      ...tournamentForm,
-                      finalDate: formatDateInput(event.target.value),
-                    })
-                  }
-                  maxLength={10}
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
+                <label className="space-y-2">
+                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
+                    Location
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Sân đua Đại học"
+                    value={tournamentForm.location}
+                    onChange={(event) =>
+                      setTournamentForm({
+                        ...tournamentForm,
+                        location: event.target.value,
+                      })
+                    }
+                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
+                  />
+                </label>
 
-                <input
-                  type="text"
-                  placeholder="Location"
-                  value={tournamentForm.location}
-                  onChange={(event) =>
-                    setTournamentForm({
-                      ...tournamentForm,
-                      location: event.target.value,
-                    })
-                  }
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
-
-                <input
-                  type="number"
-                  min="0"
-                  placeholder="Prize pool"
-                  value={tournamentForm.prizePool}
-                  onChange={(event) =>
-                    setTournamentForm({
-                      ...tournamentForm,
-                      prizePool: event.target.value,
-                    })
-                  }
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                />
               </div>
 
               <div className="flex gap-4 mt-8">

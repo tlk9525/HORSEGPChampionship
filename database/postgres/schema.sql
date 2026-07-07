@@ -7,9 +7,9 @@ DROP TABLE IF EXISTS "sessions";
 DROP TABLE IF EXISTS "raceActionLogs";
 DROP TABLE IF EXISTS "refereeReports";
 DROP TABLE IF EXISTS "raceEntries";
-DROP TABLE IF EXISTS "horseTournamentRegistrations";
+DROP TABLE IF EXISTS "horseRaceRegistrations";
 DROP TABLE IF EXISTS "jockeyInvitations";
-DROP TABLE IF EXISTS "jockeyTournamentRegistrations";
+DROP TABLE IF EXISTS "jockeyRaceRegistrations";
 DROP TABLE IF EXISTS "jockeyProfiles";
 DROP TABLE IF EXISTS "raceRefereeAssignments";
 DROP TABLE IF EXISTS "races";
@@ -33,7 +33,6 @@ CREATE TABLE "tournaments" (
   "id" VARCHAR(64) PRIMARY KEY,
   "name" VARCHAR(255) NOT NULL,
   "status" VARCHAR(64) NOT NULL,
-  "registrationWindow" VARCHAR(128),
   "startDate" DATE,
   "finalDate" DATE,
   "location" VARCHAR(255),
@@ -50,14 +49,14 @@ CREATE TABLE "horses" (
   "age" INTEGER CHECK ("age" IS NULL OR "age" > 0),
   "sex" VARCHAR(64),
   "color" VARCHAR(128),
-  "weightKg" NUMERIC(7, 2) NOT NULL DEFAULT 0,
+  "weightLb" NUMERIC(7, 2) NOT NULL DEFAULT 0,
   "heightCm" NUMERIC(7, 2) NOT NULL DEFAULT 0,
   "baseHandicap" NUMERIC(6, 2) NOT NULL DEFAULT 0,
   "speedRating" NUMERIC(6, 2) NOT NULL DEFAULT 75,
   "staminaRating" NUMERIC(6, 2) NOT NULL DEFAULT 75,
   "formRating" NUMERIC(6, 2) NOT NULL DEFAULT 75,
-  "healthRating" NUMERIC(6, 2) NOT NULL DEFAULT 80,
-  "overallRating" NUMERIC(6, 2) NOT NULL DEFAULT 76,
+  "healthRating" NUMERIC(6, 2) NOT NULL DEFAULT 75,
+  "overallRating" NUMERIC(6, 2) NOT NULL DEFAULT 75,
   "healthStatus" VARCHAR(128),
   "profileNotes" TEXT,
   "ownerUserId" VARCHAR(64) NOT NULL,
@@ -85,14 +84,13 @@ CREATE TABLE "races" (
   "distance" VARCHAR(64),
   "surface" VARCHAR(64),
   "raceClass" VARCHAR(128),
-  "handicapMin" NUMERIC(6, 2) NOT NULL DEFAULT 0,
-  "handicapMax" NUMERIC(6, 2) NOT NULL DEFAULT 0,
+  "handicapMin" NUMERIC(6, 2) NOT NULL DEFAULT 110,
+  "handicapMax" NUMERIC(6, 2) NOT NULL DEFAULT 135,
   "totalPrize" NUMERIC(14, 2) NOT NULL DEFAULT 0,
   "status" VARCHAR(64) NOT NULL DEFAULT 'draft',
   "participants" INTEGER NOT NULL DEFAULT 0,
   "ownerConfirmed" INTEGER NOT NULL DEFAULT 0,
   "jockeyConfirmed" INTEGER NOT NULL DEFAULT 0,
-  "registrationPeriodMinutes" INTEGER NOT NULL DEFAULT 10,
   "registrationOpensAt" TIMESTAMPTZ,
   "registrationClosesAt" TIMESTAMPTZ,
   "resultStatus" VARCHAR(32) NOT NULL DEFAULT 'draft',
@@ -158,7 +156,7 @@ CREATE TABLE "jockeyProfiles" (
   "bio" TEXT,
   "certificate" TEXT,
   "competitionLevel" VARCHAR(128),
-  "weight" NUMERIC(6, 2) NOT NULL DEFAULT 0,
+  "weightLb" NUMERIC(6, 2) NOT NULL DEFAULT 0,
   "status" VARCHAR(32) NOT NULL DEFAULT 'draft' CHECK ("status" IN ('draft', 'pending', 'published', 'rejected', 'archived')),
   "updatedAt" TIMESTAMPTZ,
   CONSTRAINT "fk_jockey_profiles_user"
@@ -166,24 +164,24 @@ CREATE TABLE "jockeyProfiles" (
     ON DELETE CASCADE
 );
 
-CREATE TABLE "jockeyTournamentRegistrations" (
+CREATE TABLE "jockeyRaceRegistrations" (
   "id" VARCHAR(64) PRIMARY KEY,
-  "tournamentId" VARCHAR(64) NOT NULL,
+  "raceId" VARCHAR(64) NOT NULL,
   "jockeyUserId" VARCHAR(64) NOT NULL,
   "status" VARCHAR(32) NOT NULL DEFAULT 'pending' CHECK ("status" IN ('pending', 'approved', 'rejected')),
   "createdAt" TIMESTAMPTZ NOT NULL,
   "reviewedAt" TIMESTAMPTZ,
-  CONSTRAINT "uq_jockey_tournament_registration" UNIQUE ("tournamentId", "jockeyUserId"),
-  CONSTRAINT "fk_jockey_tournament_registrations_tournament"
-    FOREIGN KEY ("tournamentId") REFERENCES "tournaments" ("id")
+  CONSTRAINT "uq_jockey_race_registration" UNIQUE ("raceId", "jockeyUserId"),
+  CONSTRAINT "fk_jockey_race_registrations_race"
+    FOREIGN KEY ("raceId") REFERENCES "races" ("id")
     ON DELETE CASCADE,
-  CONSTRAINT "fk_jockey_tournament_registrations_jockey"
+  CONSTRAINT "fk_jockey_race_registrations_jockey"
     FOREIGN KEY ("jockeyUserId") REFERENCES "users" ("id")
     ON DELETE CASCADE
 );
 
-CREATE INDEX "idx_jockey_tournament_registrations_tournament"
-  ON "jockeyTournamentRegistrations" ("tournamentId", "status");
+CREATE INDEX "idx_jockey_race_registrations_race_status" 
+  ON "jockeyRaceRegistrations" ("raceId", "status");
 
 CREATE TABLE "jockeyInvitations" (
   "id" VARCHAR(64) PRIMARY KEY,
@@ -216,44 +214,49 @@ CREATE TABLE "jockeyInvitations" (
 CREATE INDEX "idx_jockey_invitations_jockey"
   ON "jockeyInvitations" ("jockeyUserId", "status");
 
-CREATE TABLE "horseTournamentRegistrations" (
+CREATE TABLE "horseRaceRegistrations" (
   "id" VARCHAR(64) PRIMARY KEY,
   "tournamentId" VARCHAR(64) NOT NULL,
+  "raceId" VARCHAR(64) NOT NULL,
   "horseId" VARCHAR(64) NOT NULL,
   "ownerUserId" VARCHAR(64) NOT NULL,
-  "jockeyUserId" VARCHAR(64) NOT NULL,
+  "jockeyUserId" VARCHAR(64),
   "invitationId" VARCHAR(64),
-  "status" VARCHAR(32) NOT NULL DEFAULT 'pending-jockey'
-    CHECK ("status" IN ('pending-jockey', 'pending-admin', 'approved', 'rejected', 'cancelled')),
+  "status" VARCHAR(32) NOT NULL DEFAULT 'pending-jockey',
   "notes" TEXT,
   "createdAt" TIMESTAMPTZ NOT NULL,
   "reviewedAt" TIMESTAMPTZ,
-  CONSTRAINT "uq_horse_tournament_registration"
-    UNIQUE ("tournamentId", "horseId"),
-  CONSTRAINT "uq_jockey_tournament_pairing"
-    UNIQUE ("tournamentId", "jockeyUserId"),
-  CONSTRAINT "fk_horse_tournament_registrations_tournament"
+  CONSTRAINT "uq_horse_race_registration"
+    UNIQUE ("raceId", "horseId"),
+  CONSTRAINT "uq_jockey_race_pairing"
+    UNIQUE ("raceId", "jockeyUserId"),
+  CONSTRAINT "chk_horse_race_registrations_status"
+    CHECK ("status" IN ('pending-jockey', 'pending-admin', 'approved', 'rejected', 'cancelled')),
+  CONSTRAINT "fk_horse_race_registrations_tournament"
     FOREIGN KEY ("tournamentId") REFERENCES "tournaments" ("id")
     ON DELETE CASCADE,
-  CONSTRAINT "fk_horse_tournament_registrations_horse"
+  CONSTRAINT "fk_horse_race_registrations_race"
+    FOREIGN KEY ("raceId") REFERENCES "races" ("id")
+    ON DELETE CASCADE,
+  CONSTRAINT "fk_horse_race_registrations_horse"
     FOREIGN KEY ("horseId") REFERENCES "horses" ("id")
     ON DELETE CASCADE,
-  CONSTRAINT "fk_horse_tournament_registrations_owner"
+  CONSTRAINT "fk_horse_race_registrations_owner"
     FOREIGN KEY ("ownerUserId") REFERENCES "users" ("id")
     ON DELETE CASCADE,
-  CONSTRAINT "fk_horse_tournament_registrations_jockey"
+  CONSTRAINT "fk_horse_race_registrations_jockey"
     FOREIGN KEY ("jockeyUserId") REFERENCES "users" ("id")
     ON DELETE CASCADE,
-  CONSTRAINT "fk_horse_tournament_registrations_invitation"
+  CONSTRAINT "fk_horse_race_registrations_invitation"
     FOREIGN KEY ("invitationId") REFERENCES "jockeyInvitations" ("id")
     ON DELETE SET NULL
 );
 
-CREATE INDEX "idx_horse_tournament_registrations_tournament"
-  ON "horseTournamentRegistrations" ("tournamentId", "status");
+CREATE INDEX "idx_horse_race_registrations_tournament"
+  ON "horseRaceRegistrations" ("tournamentId", "status");
 
-CREATE INDEX "idx_horse_tournament_registrations_owner"
-  ON "horseTournamentRegistrations" ("ownerUserId", "status");
+CREATE INDEX "idx_horse_race_registrations_owner"
+  ON "horseRaceRegistrations" ("ownerUserId", "status");
 
 CREATE TABLE "raceEntries" (
   "id" VARCHAR(64) PRIMARY KEY,
@@ -265,6 +268,8 @@ CREATE TABLE "raceEntries" (
   "lane" INTEGER,
   "handicap" NUMERIC(6, 2) NOT NULL DEFAULT 0,
   "ratingSnapshot" NUMERIC(6, 2) NOT NULL DEFAULT 0,
+  "ratingChange" NUMERIC(6, 2) NOT NULL DEFAULT 0,
+  "postRaceRating" NUMERIC(6, 2) NOT NULL DEFAULT 0,
   "ownerConfirmed" BOOLEAN NOT NULL DEFAULT FALSE,
   "jockeyConfirmed" BOOLEAN NOT NULL DEFAULT FALSE,
   "preRaceStatus" VARCHAR(32) NOT NULL DEFAULT 'pending',

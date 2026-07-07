@@ -6,11 +6,20 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   HorseRecord,
+  RaceEntryRecord,
+  RaceRecord,
   createHorse,
   getBootstrap,
   updateHorse,
 } from '../services/api';
 import { messageToneClasses } from '../utils/messageTone';
+import { initialHorseRating, officialHorseRating } from '../utils/rating';
+
+const formatRating = (value: number) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return '-';
+  return String(Math.round(parsed));
+};
 
 interface RegisterHorsePageProps {
   onNavigate: (page: string) => void;
@@ -25,19 +34,20 @@ export default function RegisterHorsePage({
 }: RegisterHorsePageProps) {
   const { horseId } = useParams();
   const [loadedHorse, setLoadedHorse] = useState<HorseRecord | null>(null);
+  const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
+  const [races, setRaces] = useState<RaceRecord[]>([]);
   const [name, setName] = useState('');
   const [breed, setBreed] = useState('');
   const [species, setSpecies] = useState('');
   const [age, setAge] = useState('');
   const [sex, setSex] = useState('');
   const [color, setColor] = useState('');
-  const [weightKg, setWeightKg] = useState('');
+  const [weightLb, setWeightLb] = useState('');
   const [heightCm, setHeightCm] = useState('');
-  const [baseHandicap, setBaseHandicap] = useState('');
   const [speedRating, setSpeedRating] = useState('75');
   const [staminaRating, setStaminaRating] = useState('75');
   const [formRating, setFormRating] = useState('75');
-  const [healthRating, setHealthRating] = useState('80');
+  const [healthRating, setHealthRating] = useState('75');
   const [healthStatus, setHealthStatus] = useState('');
   const [profileNotes, setProfileNotes] = useState('');
   const [veterinaryCertificateUrl, setVeterinaryCertificateUrl] = useState('');
@@ -51,25 +61,61 @@ export default function RegisterHorsePage({
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
   };
-  const overallRating = Number(
-    (
-      ratingValue(speedRating, 75) * 0.4 +
-      ratingValue(staminaRating, 75) * 0.25 +
-      ratingValue(formRating, 75) * 0.2 +
-      ratingValue(healthRating, 80) * 0.15
-    ).toFixed(2)
-  );
+  const overallRating = initialHorseRating({
+    speedRating: ratingValue(speedRating, 75),
+    staminaRating: ratingValue(staminaRating, 75),
+    formRating: ratingValue(formRating, 75),
+    healthRating: ratingValue(healthRating, 75),
+  });
+  const displayedRating = isEdit && activeHorse
+    ? officialHorseRating(activeHorse)
+    : overallRating;
+  const latestAdjustment = activeHorse
+    ? raceEntries
+        .filter((entry) => {
+          return (
+            entry.horseId === activeHorse.id &&
+            entry.resultStatus === 'official'
+          );
+        })
+        .map((entry) => {
+          const race = races.find((item) => item.id === entry.raceId);
+          const ratingSnapshot = Number(entry.ratingSnapshot ?? 0);
+          const ratingChange = Number(entry.ratingChange || 0);
+          const postRaceRating =
+            entry.postRaceRating === null || entry.postRaceRating === undefined
+              ? ratingSnapshot + ratingChange
+              : Number(entry.postRaceRating);
+          const sortTime = race
+            ? Date.parse(`${race.raceDate}T${race.raceTime || '00:00'}`)
+            : 0;
+
+          return {
+            raceName: race?.name || entry.raceName || 'Race',
+            ratingSnapshot,
+            ratingChange,
+            postRaceRating,
+            sortTime: Number.isFinite(sortTime) ? sortTime : 0,
+          };
+        })
+        .sort((a, b) => b.sortTime - a.sortTime)[0]
+    : null;
 
   useEffect(() => {
-    if (horse || mode !== 'edit' || !horseId) return;
+    if (mode !== 'edit') return;
 
     getBootstrap()
       .then((data) => {
-        const foundHorse = data.horses.find((item) => item.id === horseId) || null;
-        setLoadedHorse(foundHorse);
+        setRaceEntries(data.raceEntries || []);
+        setRaces(data.races || []);
 
-        if (!foundHorse) {
-          setMessage('Horse not found or not available for this account.');
+        if (!horse && horseId) {
+          const foundHorse = data.horses.find((item) => item.id === horseId) || null;
+          setLoadedHorse(foundHorse);
+
+          if (!foundHorse) {
+            setMessage('Horse not found or not available for this account.');
+          }
         }
       })
       .catch((error) =>
@@ -86,13 +132,12 @@ export default function RegisterHorsePage({
     setAge(activeHorse.age ? String(activeHorse.age) : '');
     setSex(activeHorse.sex || '');
     setColor(activeHorse.color || '');
-    setWeightKg(activeHorse.weightKg ? String(activeHorse.weightKg) : '');
+    setWeightLb(activeHorse.weightLb ? String(activeHorse.weightLb) : '');
     setHeightCm(activeHorse.heightCm ? String(activeHorse.heightCm) : '');
-    setBaseHandicap(activeHorse.baseHandicap ? String(activeHorse.baseHandicap) : '');
     setSpeedRating(activeHorse.speedRating ? String(activeHorse.speedRating) : '75');
     setStaminaRating(activeHorse.staminaRating ? String(activeHorse.staminaRating) : '75');
     setFormRating(activeHorse.formRating ? String(activeHorse.formRating) : '75');
-    setHealthRating(activeHorse.healthRating ? String(activeHorse.healthRating) : '80');
+    setHealthRating(activeHorse.healthRating ? String(activeHorse.healthRating) : '75');
     setHealthStatus(activeHorse.healthStatus || '');
     setProfileNotes(activeHorse.profileNotes || '');
     setVeterinaryCertificateUrl(activeHorse.veterinaryCertificateUrl || '');
@@ -108,29 +153,29 @@ export default function RegisterHorsePage({
 
     setIsSubmitting(true);
 
-    const payload = {
+    const profilePayload = {
       name,
       breed,
       species,
       age,
       sex,
       color,
-      weightKg,
+      weightLb,
       heightCm,
-      baseHandicap,
-      speedRating,
-      staminaRating,
-      formRating,
-      healthRating,
-      overallRating,
       healthStatus,
       profileNotes,
       veterinaryCertificateUrl,
     };
 
     const request = mode === 'edit' && activeHorse
-      ? updateHorse(activeHorse.id, payload).then(() => null)
-      : createHorse(payload).then(({ horseCount, maxHorses }) => ({
+      ? updateHorse(activeHorse.id, profilePayload).then(() => null)
+      : createHorse({
+          ...profilePayload,
+          speedRating,
+          staminaRating,
+          formRating,
+          healthRating,
+        }).then(({ horseCount, maxHorses }) => ({
           horseCount,
           maxHorses,
         }));
@@ -285,16 +330,16 @@ export default function RegisterHorsePage({
 
             <div>
               <label className="block text-gray-300 mb-2">
-                Weight (kg)
+                Weight (lb)
               </label>
 
               <input
                 type="number"
                 min="0"
                 step="0.1"
-                placeholder="485"
-                value={weightKg}
-                onChange={(event) => setWeightKg(event.target.value)}
+                placeholder="1100"
+                value={weightLb}
+                onChange={(event) => setWeightLb(event.target.value)}
                 className={fieldClass}
               />
             </div>
@@ -315,68 +360,133 @@ export default function RegisterHorsePage({
               />
             </div>
 
-            <div>
-              <label className="block text-gray-300 mb-2">
-                Base Handicap
-              </label>
-
-              <input
-                type="number"
-                min="0"
-                step="0.5"
-                placeholder="5"
-                value={baseHandicap}
-                onChange={(event) => setBaseHandicap(event.target.value)}
-                className={fieldClass}
-              />
-            </div>
-
             <div className="md:col-span-2 rounded-2xl border border-white/10 bg-[#12304f] p-5">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
                 <div>
                   <h2 className="text-xl font-black text-white">
-                    Performance Rating
+                    {isEdit ? 'Performance Rating (Locked)' : 'Performance Rating'}
                   </h2>
                   <p className="text-gray-400 text-sm mt-1">
-                    Used by Admin when closing registration to prepare handicap and line assignment.
+                    {isEdit
+                      ? 'These attributes were set when the horse was registered and cannot be edited. Official rating changes only through approved race results.'
+                      : 'Enter these attributes once to set the initial rating. They are locked after horse registration.'}
                   </p>
                 </div>
 
                 <div className="rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/10 px-4 py-3">
                   <div className="text-[#f6d77a] text-xs uppercase font-bold">
-                    Overall Rating
+                    {isEdit ? 'Official Rating' : 'Initial Rating Estimate'}
                   </div>
                   <div className="text-white text-2xl font-black">
-                    {overallRating}
+                    {formatRating(displayedRating)}
                   </div>
                 </div>
               </div>
 
-              <div className="grid md:grid-cols-4 gap-4">
-                {[
-                  ['Speed', speedRating, setSpeedRating],
-                  ['Stamina', staminaRating, setStaminaRating],
-                  ['Current Form', formRating, setFormRating],
-                  ['Health', healthRating, setHealthRating],
-                ].map(([label, value, setter]) => (
-                  <div key={String(label)}>
-                    <label className="block text-gray-300 mb-2">
-                      {String(label)}
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="1"
-                      value={String(value)}
-                      onChange={(event) =>
-                        (setter as (next: string) => void)(event.target.value)
-                      }
-                      className={fieldClass}
-                    />
+              {isEdit && (
+                <div className="grid md:grid-cols-3 gap-4 mb-5">
+                  <div className="rounded-xl border border-white/10 bg-[#071a2f] p-4">
+                    <div className="text-gray-400 text-xs uppercase font-bold">
+                      Current Official
+                    </div>
+                    <div className="text-white text-xl font-black mt-1">
+                      {formatRating(displayedRating)}
+                    </div>
                   </div>
-                ))}
-              </div>
+
+                  <div className="rounded-xl border border-white/10 bg-[#071a2f] p-4">
+                    <div className="text-gray-400 text-xs uppercase font-bold">
+                      Attribute Estimate
+                    </div>
+                    <div className="text-white text-xl font-black mt-1">
+                      {formatRating(overallRating)}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-[#071a2f] p-4">
+                    <div className="text-gray-400 text-xs uppercase font-bold">
+                      Last Race Adjustment
+                    </div>
+                    {latestAdjustment ? (
+                      <>
+                        <div className="text-white text-sm font-bold mt-1 truncate">
+                          {latestAdjustment.raceName}
+                        </div>
+                        <div className="text-gray-300 text-sm mt-1">
+                          {formatRating(latestAdjustment.ratingSnapshot)} to{' '}
+                          {formatRating(latestAdjustment.postRaceRating)}
+                          <span
+                            className={
+                              latestAdjustment.ratingChange > 0
+                                ? 'text-green-400 font-bold'
+                                : latestAdjustment.ratingChange < 0
+                                  ? 'text-red-400 font-bold'
+                                  : 'text-gray-400 font-bold'
+                            }
+                          >
+                            {' '}
+                            ({latestAdjustment.ratingChange > 0 ? '+' : ''}
+                            {formatRating(latestAdjustment.ratingChange)})
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-gray-300 text-sm mt-1">
+                        No race adjustment recorded yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {isEdit ? (
+                <div className="grid md:grid-cols-4 gap-4">
+                  {[
+                    ['Speed', speedRating],
+                    ['Stamina', staminaRating],
+                    ['Current Form', formRating],
+                    ['Health', healthRating],
+                  ].map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="rounded-xl border border-white/10 bg-[#071a2f] p-4"
+                    >
+                      <div className="text-gray-400 text-xs uppercase font-bold">
+                        {label}
+                      </div>
+                      <div className="text-white text-xl font-black mt-1">
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="grid md:grid-cols-4 gap-4">
+                  {[
+                    ['Speed', speedRating, setSpeedRating],
+                    ['Stamina', staminaRating, setStaminaRating],
+                    ['Current Form', formRating, setFormRating],
+                    ['Health', healthRating, setHealthRating],
+                  ].map(([label, value, setter]) => (
+                    <div key={String(label)}>
+                      <label className="block text-gray-300 mb-2">
+                        {String(label)}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={String(value)}
+                        onChange={(event) =>
+                          (setter as (next: string) => void)(event.target.value)
+                        }
+                        className={fieldClass}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div>

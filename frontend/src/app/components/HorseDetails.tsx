@@ -1,25 +1,39 @@
 import {
   Activity,
   ArrowLeft,
+  ChevronDown,
+  ChevronUp,
   FileText,
   Gauge,
   HeartPulse,
   Pencil,
-  Ruler,
   Scale,
   ShieldCheck,
   Trophy,
+  type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import {
+  AuthUser,
   HorseRecord,
   RaceEntryRecord,
   getBootstrap,
 } from '../services/api';
-import { statusLabel } from '../utils/domain';
+import { formatWeightLb, statusLabel } from '../utils/domain';
+import { officialHorseRating } from '../utils/rating';
 
 interface HorseDetailsProps {
+  currentUser: AuthUser | null;
   horse: HorseRecord | null;
   onNavigate: (page: string) => void;
 }
@@ -29,22 +43,132 @@ const value = (input: string | number | null | undefined, suffix = '') =>
     ? 'Not set'
     : `${input}${suffix}`;
 
-const overall = (horse: HorseRecord) =>
-  Number(
-    (
-      Number(horse.speedRating || 75) * 0.4 +
-        Number(horse.staminaRating || 75) * 0.25 +
-        Number(horse.formRating || 75) * 0.2 +
-        Number(horse.healthRating || 80) * 0.15
-    ).toFixed(2)
-  );
+const overall = officialHorseRating;
 
-export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
+interface RatingHistoryPoint {
+  entryId: string;
+  raceName: string;
+  jockeyName: string;
+  finishTime: string;
+  position: string;
+  sortKey: string;
+  beforeRating: number;
+  ratingChange: number;
+  afterRating: number;
+}
+
+interface RatingTooltipProps {
+  active?: boolean;
+  payload?: Array<{ payload: RatingHistoryPoint }>;
+}
+
+const toFiniteNumber = (input: number | string | null | undefined) => {
+  if (input === null || input === undefined || input === '') return null;
+
+  const numeric = Number(input);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const formatRating = (input: number) =>
+  Number.isInteger(input) ? String(input) : input.toFixed(2);
+
+const formatRatingChange = (input: number) => {
+  const formatted = formatRating(Math.abs(input));
+  if (input > 0) return `+${formatted}`;
+  if (input < 0) return `-${formatted}`;
+  return '0';
+};
+
+const buildRatingHistory = (entries: RaceEntryRecord[]): RatingHistoryPoint[] =>
+  entries
+    .filter((entry) => entry.resultStatus === 'official')
+    .map((entry, index) => {
+      const snapshot = toFiniteNumber(entry.ratingSnapshot);
+      const change = toFiniteNumber(entry.ratingChange) ?? 0;
+      const postRace = toFiniteNumber(entry.postRaceRating);
+      const beforeRating = snapshot ?? (postRace !== null ? postRace - change : null);
+      const afterRating = postRace ?? (beforeRating !== null ? beforeRating + change : null);
+
+      if (beforeRating === null || afterRating === null) return null;
+
+      return {
+        entryId: entry.id,
+        raceName: entry.raceName || `Race ${index + 1}`,
+        jockeyName: entry.jockeyName || 'Pending',
+        finishTime: entry.finishTime || 'Pending',
+        position: entry.position ? String(entry.position) : 'Pending',
+        sortKey: entry.createdAt || entry.id,
+        beforeRating,
+        ratingChange: afterRating - beforeRating,
+        afterRating,
+      };
+    })
+    .filter((point): point is RatingHistoryPoint => Boolean(point))
+    .sort(
+      (first, second) =>
+        first.sortKey.localeCompare(second.sortKey) ||
+        first.entryId.localeCompare(second.entryId)
+    );
+
+function RatingTooltip({ active, payload }: RatingTooltipProps) {
+  if (!active || !payload?.length) return null;
+
+  const point = payload[0].payload;
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-[#071a2f] p-4 shadow-2xl">
+      <div className="text-white font-bold">{point.raceName}</div>
+      <div className="mt-1 text-sm text-gray-400">
+        Jockey: {point.jockeyName} • Position {point.position}
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+        <div>
+          <div className="text-gray-500">Before</div>
+          <div className="text-white font-bold">
+            {formatRating(point.beforeRating)}
+          </div>
+        </div>
+
+        <div>
+          <div className="text-gray-500">Change</div>
+          <div
+            className={`font-bold ${
+              point.ratingChange >= 0 ? 'text-emerald-300' : 'text-red-300'
+            }`}
+          >
+            {formatRatingChange(point.ratingChange)}
+          </div>
+        </div>
+
+        <div>
+          <div className="text-gray-500">After</div>
+          <div className="text-[#d4af37] font-bold">
+            {formatRating(point.afterRating)}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 text-xs text-gray-500">
+        Time {point.finishTime}
+      </div>
+    </div>
+  );
+}
+
+export default function HorseDetails({
+  currentUser,
+  horse,
+  onNavigate,
+}: HorseDetailsProps) {
   const { horseId } = useParams();
   const [loadedHorse, setLoadedHorse] = useState<HorseRecord | null>(null);
   const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
+  const [profileExpanded, setProfileExpanded] = useState(false);
+  const [raceHistoryExpanded, setRaceHistoryExpanded] = useState(false);
   const [message, setMessage] = useState('');
   const activeHorse = horse || loadedHorse;
+  const canOpenHorseList = ['admin', 'owner'].includes(currentUser?.role || '');
 
   useEffect(() => {
     const activeHorseId = horse?.id || horseId;
@@ -64,6 +188,7 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
             .filter((entry) => entry.horseId === activeHorseId)
             .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
         );
+        setRaceHistoryExpanded(false);
       })
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : 'Unable to load horse')
@@ -75,11 +200,11 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
       <div className="min-h-screen bg-[#071a2f] pt-24 pb-12">
         <div className="max-w-4xl mx-auto px-4">
           <button
-            onClick={() => onNavigate('horses')}
+            onClick={() => onNavigate(canOpenHorseList ? 'horses' : 'tournaments')}
             className="flex items-center gap-2 text-gray-400 hover:text-white mb-8"
           >
             <ArrowLeft className="w-5 h-5" />
-            Back to Horses
+            {canOpenHorseList ? 'Back to Horses' : 'Back to Tournaments'}
           </button>
 
           <div className="rounded-2xl border border-white/10 bg-[#0b223d] p-8 text-gray-300">
@@ -90,46 +215,75 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
     );
   }
 
-  const profileCards = [
+  const profileCards: Array<[string, string | number, LucideIcon]> = [
     ['Breed', activeHorse.breed, Trophy],
     ['Species', activeHorse.species || 'Not set', Activity],
     ['Sex', activeHorse.sex || 'Not set', ShieldCheck],
     ['Color', activeHorse.color || 'Not set', FileText],
     ['Age', `${activeHorse.age} years`, Activity],
-    ['Weight', value(activeHorse.weightKg, 'kg'), Scale],
-    ['Height', value(activeHorse.heightCm, 'cm'), Ruler],
-    ['Base Handicap', value(activeHorse.baseHandicap), Trophy],
+    ['Weight', formatWeightLb(activeHorse.weightLb), Scale],
+    ['Official Rating', value(overall(activeHorse)), Trophy],
     ['Speed Rating', value(activeHorse.speedRating), Gauge],
     ['Stamina Rating', value(activeHorse.staminaRating), Activity],
     ['Form Rating', value(activeHorse.formRating), Trophy],
     ['Health Rating', value(activeHorse.healthRating), HeartPulse],
-    ['Overall Rating', overall(activeHorse), Gauge],
-    ['Health Status', activeHorse.healthStatus || 'Not set', HeartPulse],
-    ['Jockey Pairing', statusLabel(activeHorse.jockeyConfirmation), ShieldCheck],
   ];
+  const compactProfileLabels = new Set([
+    'Breed',
+    'Sex',
+    'Age',
+    'Weight',
+    'Official Rating',
+  ]);
+  const visibleProfileCards = profileExpanded
+    ? profileCards
+    : profileCards.filter(([label]) => compactProfileLabels.has(label));
+  const visibleRaceEntries = raceHistoryExpanded
+    ? raceEntries
+    : raceEntries.slice(0, 5);
+  const ratingHistory = buildRatingHistory(raceEntries);
+  const firstRating = ratingHistory[0]?.beforeRating ?? null;
+  const latestRating = ratingHistory[ratingHistory.length - 1]?.afterRating ?? null;
+  const totalRatingChange =
+    firstRating !== null && latestRating !== null ? latestRating - firstRating : null;
+  const ratingValues = ratingHistory.flatMap((point) => [
+    point.beforeRating,
+    point.afterRating,
+  ]);
+  const ratingDomain =
+    ratingValues.length > 0
+      ? ([
+          Math.max(0, Math.floor(Math.min(...ratingValues) - 2)),
+          Math.ceil(Math.max(...ratingValues) + 2),
+        ] as [number, number])
+      : ([0, 100] as [number, number]);
+  const canEditHorse =
+    currentUser?.role === 'owner' && activeHorse.ownerUserId === currentUser.id;
 
   return (
     <div className="min-h-screen bg-[#071a2f] pt-24 pb-12">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-8">
           <button
-            onClick={() => onNavigate('horses')}
+            onClick={() => onNavigate(canOpenHorseList ? 'horses' : 'tournaments')}
             className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
-            Back to Horses
+            {canOpenHorseList ? 'Back to Horses' : 'Back to Tournaments'}
           </button>
 
-          <button
-            onClick={() => {
-              sessionStorage.setItem('selectedHorseId', activeHorse.id);
-              onNavigate('edit-horse');
-            }}
-            className="flex items-center justify-center gap-2 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/10 px-5 py-3 text-[#d4af37] font-bold hover:bg-[#d4af37]/20"
-          >
-            <Pencil className="w-4 h-4" />
-            Edit Horse
-          </button>
+          {canEditHorse && (
+            <button
+              onClick={() => {
+                sessionStorage.setItem('selectedHorseId', activeHorse.id);
+                onNavigate('edit-horse');
+              }}
+              className="flex items-center justify-center gap-2 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/10 px-5 py-3 text-[#d4af37] font-bold hover:bg-[#d4af37]/20"
+            >
+              <Pencil className="w-4 h-4" />
+              Edit Horse
+            </button>
+          )}
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-[#0b223d] overflow-hidden mb-8">
@@ -148,15 +302,7 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
                 </span>
 
                 <span className="px-4 py-2 bg-[#071a2f]/50 border border-white/10 rounded-lg text-white font-semibold text-sm">
-                  Handicap {activeHorse.baseHandicap || 0}
-                </span>
-
-                <span className="px-4 py-2 bg-[#071a2f]/50 border border-white/10 rounded-lg text-white font-semibold text-sm">
-                  Rating {overall(activeHorse)}
-                </span>
-
-                <span className="px-4 py-2 bg-[#071a2f]/50 border border-white/10 rounded-lg text-white font-semibold text-sm">
-                  {activeHorse.healthStatus || 'Health not set'}
+                  Official Rating {overall(activeHorse)}
                 </span>
               </div>
 
@@ -173,13 +319,13 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
 
         <div className="grid lg:grid-cols-[1fr,380px] gap-8">
           <div className="space-y-8">
-            <div className="rounded-2xl border border-white/10 bg-[#0b223d] p-8">
+            <div className="relative rounded-2xl border border-white/10 bg-[#0b223d] p-8 pb-10">
               <h2 className="text-3xl font-bold text-white mb-6">
                 Horse Profile
               </h2>
 
               <div className="grid md:grid-cols-2 gap-4">
-                {profileCards.map(([label, content, Icon]) => (
+                {visibleProfileCards.map(([label, content, Icon]) => (
                   <div
                     key={String(label)}
                     className="rounded-xl border border-white/10 bg-[#12304f] p-5"
@@ -195,22 +341,142 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
                   </div>
                 ))}
               </div>
+
+              <button
+                type="button"
+                onClick={() => setProfileExpanded((current) => !current)}
+                aria-label={
+                  profileExpanded
+                    ? 'Collapse full horse profile'
+                    : 'Expand full horse profile'
+                }
+                title={
+                  profileExpanded
+                    ? 'Collapse full horse profile'
+                    : 'Expand full horse profile'
+                }
+                className="absolute left-1/2 bottom-0 flex h-9 w-9 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border border-[#d4af37]/40 bg-[#071a2f] text-[#d4af37] shadow-lg shadow-black/20 hover:bg-[#12304f] focus:outline-none focus:ring-2 focus:ring-[#d4af37]/60"
+              >
+                {profileExpanded ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </button>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-[#0b223d] p-8">
-              <h2 className="text-3xl font-bold text-white mb-5">
-                Notes
-              </h2>
+              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="text-3xl font-bold text-white">
+                    Rating Trend
+                  </h2>
 
-              <p className="text-gray-300 leading-8">
-                {activeHorse.profileNotes || 'No profile notes have been added yet.'}
-              </p>
+                  <p className="text-gray-400 text-sm mt-1">
+                    Based on official race results
+                  </p>
+                </div>
+
+                {ratingHistory.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div className="rounded-xl border border-white/10 bg-[#12304f] px-4 py-3">
+                      <div className="text-xs text-gray-400">Start</div>
+                      <div className="text-white text-lg font-bold">
+                        {formatRating(firstRating ?? 0)}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-white/10 bg-[#12304f] px-4 py-3">
+                      <div className="text-xs text-gray-400">Latest</div>
+                      <div className="text-[#d4af37] text-lg font-bold">
+                        {formatRating(latestRating ?? 0)}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-white/10 bg-[#12304f] px-4 py-3">
+                      <div className="text-xs text-gray-400">Total</div>
+                      <div
+                        className={`text-lg font-bold ${
+                          (totalRatingChange ?? 0) >= 0
+                            ? 'text-emerald-300'
+                            : 'text-red-300'
+                        }`}
+                      >
+                        {formatRatingChange(totalRatingChange ?? 0)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {ratingHistory.length === 0 ? (
+                <div className="rounded-xl border border-white/10 bg-[#12304f] p-5 text-gray-400">
+                  No official rating history has been recorded for this horse yet.
+                </div>
+              ) : (
+                <div className="h-80 rounded-xl border border-white/10 bg-[#071a2f]/60 p-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={ratingHistory}
+                      margin={{ top: 12, right: 16, left: 0, bottom: 20 }}
+                    >
+                      <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                      <XAxis
+                        dataKey="raceName"
+                        interval="preserveStartEnd"
+                        tick={{ fill: '#9ca3af', fontSize: 12 }}
+                        tickLine={false}
+                        axisLine={{ stroke: 'rgba(255,255,255,0.14)' }}
+                      />
+                      <YAxis
+                        domain={ratingDomain}
+                        tick={{ fill: '#9ca3af', fontSize: 12 }}
+                        tickLine={false}
+                        axisLine={{ stroke: 'rgba(255,255,255,0.14)' }}
+                        width={40}
+                      />
+                      <Tooltip content={<RatingTooltip />} />
+                      <Line
+                        type="monotone"
+                        dataKey="afterRating"
+                        name="Post-race rating"
+                        stroke="#d4af37"
+                        strokeWidth={3}
+                        dot={{ r: 4, fill: '#d4af37', stroke: '#071a2f', strokeWidth: 2 }}
+                        activeDot={{ r: 7, fill: '#f4d35e', stroke: '#ffffff', strokeWidth: 2 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-[#0b223d] p-8">
-              <h2 className="text-3xl font-bold text-white mb-5">
-                Race History
-              </h2>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
+                <div>
+                  <h2 className="text-3xl font-bold text-white">
+                    Race History
+                  </h2>
+
+                  <p className="text-gray-400 text-sm mt-1">
+                    Showing {visibleRaceEntries.length}/{raceEntries.length} entries
+                  </p>
+                </div>
+
+                {raceEntries.length > 5 && (
+                  <button
+                    onClick={() => setRaceHistoryExpanded((current) => !current)}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/10 px-4 py-2 text-[#d4af37] font-bold hover:bg-[#d4af37]/20 transition-all"
+                  >
+                    {raceHistoryExpanded ? 'Show Less' : `View All ${raceEntries.length}`}
+                    {raceHistoryExpanded ? (
+                      <ChevronUp className="h-4 w-4" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4" />
+                    )}
+                  </button>
+                )}
+              </div>
 
               <div className="space-y-4">
                 {raceEntries.length === 0 && (
@@ -219,7 +485,7 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
                   </div>
                 )}
 
-                {raceEntries.map((entry) => (
+                {visibleRaceEntries.map((entry) => (
                   <div
                     key={entry.id}
                     className="rounded-xl border border-white/10 bg-[#12304f] p-5"
@@ -257,6 +523,16 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
 
           <div className="space-y-8">
             <div className="rounded-2xl border border-white/10 bg-[#0b223d] p-8">
+              <h2 className="text-2xl font-bold text-white mb-5">
+                Notes
+              </h2>
+
+              <p className="text-gray-300 leading-8">
+                {activeHorse.profileNotes || 'No profile notes have been added yet.'}
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-[#0b223d] p-8">
               <h2 className="text-2xl font-bold text-white mb-6">
                 Documents
               </h2>
@@ -274,11 +550,11 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
 
                 <div className="rounded-xl border border-white/10 bg-[#12304f] p-5">
                   <div className="text-gray-400 text-sm mb-2">
-                    Owner ID
+                    Owner name
                   </div>
 
                   <div className="text-white font-semibold">
-                    {activeHorse.ownerUserId}
+                    {activeHorse.ownerName || 'Unknown Owner'}
                   </div>
                 </div>
               </div>
@@ -301,12 +577,7 @@ export default function HorseDetails({ horse, onNavigate }: HorseDetailsProps) {
                 </div>
 
                 <div className="flex justify-between gap-4">
-                  <span className="text-gray-400">Handicap</span>
-                  <span className="text-white font-bold">{activeHorse.baseHandicap || 0}</span>
-                </div>
-
-                <div className="flex justify-between gap-4">
-                  <span className="text-gray-400">Overall rating</span>
+                  <span className="text-gray-400">Official Rating</span>
                   <span className="text-white font-bold">{overall(activeHorse)}</span>
                 </div>
               </div>

@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Award,
   Clock,
-  Trophy,
-  TrendingUp,
+  Search,
 } from 'lucide-react';
 import {
   RaceEntryRecord,
@@ -13,23 +12,14 @@ import {
 } from '../services/api';
 import { statusLabel } from '../utils/domain';
 
-const scoreByPosition: Record<number, number> = {
-  1: 10,
-  2: 7,
-  3: 5,
-  4: 3,
-  5: 2,
-  6: 1,
-};
 
-const scoreForPosition = (position?: number | null) =>
-  position ? scoreByPosition[position] || 0 : 0;
 
 export default function ResultsPage() {
   const [races, setRaces] = useState<RaceRecord[]>([]);
   const [entries, setEntries] = useState<RaceEntryRecord[]>([]);
   const [tournaments, setTournaments] = useState<TournamentRecord[]>([]);
   const [selectedTournamentId, setSelectedTournamentId] = useState('');
+  const [raceSearch, setRaceSearch] = useState('');
   const [message, setMessage] = useState('');
 
   useEffect(() => {
@@ -55,7 +45,7 @@ export default function ResultsPage() {
   const completedRaces = useMemo(
     () =>
       tournamentRaces.filter((race) =>
-        ['finished', 'completed'].includes(race.status)
+        race.status === 'completed' && race.resultStatus === 'official'
       ),
     [tournamentRaces]
   );
@@ -76,82 +66,48 @@ export default function ResultsPage() {
     [entries, raceIds]
   );
 
-  const recentResults = completedRaces
-    .map((race) => {
-      const raceEntries = tournamentEntries
-        .filter((entry) => entry.raceId === race.id && entry.position)
-        .sort((a, b) => Number(a.position || 99) - Number(b.position || 99));
+  const recentResults = useMemo(
+    () =>
+      completedRaces
+        .map((race) => {
+          const raceEntries = tournamentEntries
+            .filter((entry) => entry.raceId === race.id && entry.position)
+            .sort((a, b) => Number(a.position || 99) - Number(b.position || 99));
 
-      return {
-        race,
-        entries: raceEntries,
-      };
-    })
-    .filter((item) => item.entries.length > 0);
+          return {
+            race,
+            entries: raceEntries,
+          };
+        })
+        .filter((item) => item.entries.length > 0),
+    [completedRaces, tournamentEntries]
+  );
 
-  const horseRankings = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        horse: string;
-        races: number;
-        wins: number;
-        points: number;
-      }
-    >();
+  const visibleResults = useMemo(() => {
+    const normalized = raceSearch.trim().toLowerCase();
 
-    tournamentEntries.forEach((entry) => {
-      const current =
-        map.get(entry.horseId) ||
-        {
-          horse: entry.horseName || 'Horse',
-          races: 0,
-          wins: 0,
-          points: 0,
-        };
+    if (!normalized) return recentResults;
 
-      current.races += 1;
-      current.wins += entry.position === 1 ? 1 : 0;
-      current.points += scoreForPosition(entry.position);
-      map.set(entry.horseId, current);
+    return recentResults.filter(({ race, entries: raceEntries }) => {
+      const searchableText = [
+        race.raceNumber,
+        race.name,
+        race.date,
+        race.time,
+        ...raceEntries.slice(0, 3).flatMap((entry) => [
+          entry.horseName,
+          entry.jockeyName,
+          entry.finishTime,
+          String(entry.position || ''),
+        ]),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return searchableText.includes(normalized);
     });
-
-    return Array.from(map.values())
-      .sort((a, b) => b.points - a.points || b.wins - a.wins)
-      .slice(0, 5);
-  }, [tournamentEntries]);
-
-  const jockeyRankings = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        jockey: string;
-        races: number;
-        wins: number;
-        points: number;
-      }
-    >();
-
-    tournamentEntries.forEach((entry) => {
-      const current =
-        map.get(entry.jockeyUserId) ||
-        {
-          jockey: entry.jockeyName || 'Jockey',
-          races: 0,
-          wins: 0,
-          points: 0,
-        };
-
-      current.races += 1;
-      current.wins += entry.position === 1 ? 1 : 0;
-      current.points += scoreForPosition(entry.position);
-      map.set(entry.jockeyUserId, current);
-    });
-
-    return Array.from(map.values())
-      .sort((a, b) => b.points - a.points || b.wins - a.wins)
-      .slice(0, 5);
-  }, [tournamentEntries]);
+  }, [raceSearch, recentResults]);
 
   return (
     <div className="min-h-screen bg-[#071a2f] pt-24 pb-12">
@@ -169,7 +125,10 @@ export default function ResultsPage() {
 
           <select
             value={selectedTournamentId}
-            onChange={(event) => setSelectedTournamentId(event.target.value)}
+            onChange={(event) => {
+              setSelectedTournamentId(event.target.value);
+              setRaceSearch('');
+            }}
             className="bg-[#12304f] border border-white/10 rounded-xl px-4 py-3 text-white min-w-[280px]"
           >
             {tournaments.map((tournament) => (
@@ -203,9 +162,27 @@ export default function ResultsPage() {
         </div>
 
         <div className="mb-8">
-          <h2 className="text-2xl font-black text-white mb-6">
-            Recent Race Results
-          </h2>
+          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-6">
+            <div>
+              <h2 className="text-2xl font-black text-white">
+                Recent Race Results
+              </h2>
+
+              <p className="text-gray-400 text-sm mt-1">
+                Showing {visibleResults.length}/{recentResults.length} races
+              </p>
+            </div>
+
+            <div className="relative w-full lg:max-w-md">
+              <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-500" />
+              <input
+                value={raceSearch}
+                onChange={(event) => setRaceSearch(event.target.value)}
+                placeholder="Search race, horse, jockey, time"
+                className="w-full rounded-xl border border-white/10 bg-[#12304f] py-3 pl-12 pr-4 text-white outline-none focus:border-[#d4af37]"
+              />
+            </div>
+          </div>
 
           <div className="space-y-6">
             {recentResults.length === 0 && (
@@ -214,7 +191,13 @@ export default function ResultsPage() {
               </div>
             )}
 
-            {recentResults.map(({ race, entries: raceEntries }) => {
+            {recentResults.length > 0 && visibleResults.length === 0 && (
+              <div className="bg-[#12304f] border border-white/10 rounded-2xl p-6 text-gray-400">
+                No race results match this search in the selected tournament.
+              </div>
+            )}
+
+            {visibleResults.map(({ race, entries: raceEntries }) => {
               const winner = raceEntries[0];
 
               return (
@@ -287,64 +270,7 @@ export default function ResultsPage() {
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-8">
-          <div className="bg-[#12304f] border border-white/10 rounded-2xl p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <Trophy className="w-6 h-6 text-[#d4af37]" />
-              <h2 className="text-2xl font-black text-white">Horse Rankings</h2>
-            </div>
-
-            <div className="space-y-3">
-              {horseRankings.map((entry, index) => (
-                <div key={entry.horse} className="bg-[#071a2f] border border-white/10 rounded-xl p-4 flex items-center gap-4">
-                  <div className="w-12 h-12 rounded bg-[#d4af37] text-[#071a2f] flex items-center justify-center font-black text-xl">
-                    {index + 1}
-                  </div>
-
-                  <div className="flex-1">
-                    <div className="text-white font-bold text-lg">{entry.horse}</div>
-                    <div className="text-gray-400 text-sm">
-                      {entry.wins}W / {entry.races}R
-                    </div>
-                  </div>
-
-                  <div className="text-[#d4af37] font-black text-xl">
-                    {entry.points}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-[#12304f] border border-white/10 rounded-2xl p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <TrendingUp className="w-6 h-6 text-[#d4af37]" />
-              <h2 className="text-2xl font-black text-white">Jockey Rankings</h2>
-            </div>
-
-            <div className="space-y-3">
-              {jockeyRankings.map((entry, index) => (
-                <div key={entry.jockey} className="bg-[#071a2f] border border-white/10 rounded-xl p-4 flex items-center gap-4">
-                  <div className="w-12 h-12 rounded bg-[#d4af37] text-[#071a2f] flex items-center justify-center font-black text-xl">
-                    {index + 1}
-                  </div>
-
-                  <div className="flex-1">
-                    <div className="text-white font-bold text-lg">{entry.jockey}</div>
-                    <div className="text-gray-400 text-sm">
-                      {entry.wins}W / {entry.races}R
-                    </div>
-                  </div>
-
-                  <div className="text-[#d4af37] font-black text-xl">
-                    {entry.points}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
+              </div>
     </div>
   );
 }

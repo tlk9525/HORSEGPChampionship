@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import {
+  Activity,
   ChevronDown,
   ChevronUp,
   CheckCircle,
+  HeartPulse,
   Flag,
   Gauge,
   MapPin,
   Save,
+  Scale,
+  ShieldCheck,
   XCircle,
 } from 'lucide-react';
 import {
@@ -21,13 +25,24 @@ import {
   getJockeyPortal,
   saveJockeyProfile,
 } from '../services/api';
-import { statusLabel } from '../utils/domain';
+import { formatWeightLb, statusLabel } from '../utils/domain';
 import { messageToneClasses } from '../utils/messageTone';
 
 interface JockeyPageProps {
   currentUser: AuthUser | null;
   onNavigate: (page: string) => void;
 }
+
+const numberLabel = (value?: number | null, suffix = '') => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 'Not set';
+  return `${parsed.toFixed(0)}${suffix}`;
+};
+
+const horseRatingLabel = (horse?: HorseRecord) => {
+  const rating = horse?.overallRating ?? horse?.baseHandicap;
+  return Number.isFinite(Number(rating)) ? Number(rating).toFixed(0) : 'TBD';
+};
 
 export default function JockeyPage({
   currentUser,
@@ -42,9 +57,13 @@ export default function JockeyPage({
   const [bio, setBio] = useState('');
   const [certificate, setCertificate] = useState('');
   const [competitionLevel, setCompetitionLevel] = useState('');
-  const [weight, setWeight] = useState('');
+  const [weightLb, setWeightLb] = useState('');
   const [message, setMessage] = useState('');
+  const [participationExpanded, setParticipationExpanded] = useState(false);
   const [assignedExpanded, setAssignedExpanded] = useState(false);
+  const [expandedHorseInfoKeys, setExpandedHorseInfoKeys] = useState<Set<string>>(
+    new Set()
+  );
 
   const loadPortal = () => {
     getJockeyPortal()
@@ -55,11 +74,13 @@ export default function JockeyPage({
         setRaces(data.races);
         setRaceEntries(data.raceEntries);
         setInvitations(data.invitations);
+        setParticipationExpanded(false);
         setAssignedExpanded(false);
+        setExpandedHorseInfoKeys(new Set());
         setBio(data.profile?.bio || '');
         setCertificate(data.profile?.certificate || '');
         setCompetitionLevel(data.profile?.competitionLevel || '');
-        setWeight(data.profile?.weight ? String(data.profile.weight) : '');
+        setWeightLb(data.profile?.weightLb ? String(data.profile.weightLb) : '');
       })
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : 'Unable to load jockey portal')
@@ -77,11 +98,11 @@ export default function JockeyPage({
       bio,
       certificate,
       competitionLevel,
-      weight,
+      weightLb,
     })
       .then(({ profile: updatedProfile }) => {
         setProfile(updatedProfile);
-        setMessage('Profile published. Owners can now select you.');
+        setMessage('Profile published. Join a tournament so owners can select you after Admin approves their horses.');
       })
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : 'Unable to publish profile')
@@ -93,7 +114,7 @@ export default function JockeyPage({
       .then(() => {
         setMessage(
           decision === 'accepted'
-            ? 'Invitation accepted. Admin has been notified to approve your tournament assignment.'
+            ? 'Invitation accepted. Admin has been notified to approve your race assignment.'
             : 'Invitation rejected. Owner has been notified.'
         );
         loadPortal();
@@ -105,8 +126,16 @@ export default function JockeyPage({
 
   const raceById = (raceId: string) =>
     races.find((race) => race.id === raceId);
+  const horseById = (horseId: string) =>
+    horses.find((horse) => horse.id === horseId);
   const tournamentById = (tournamentId?: string | null) =>
     tournaments.find((tournament) => tournament.id === tournamentId);
+  const needsJockeyResponse = (invitation: JockeyInvitation) =>
+    invitation.status === 'pending';
+
+  const visibleInvitations = participationExpanded
+    ? invitations
+    : invitations.slice(0, 4);
 
   const visibleAssignedEntries = assignedExpanded
     ? raceEntries
@@ -117,6 +146,135 @@ export default function JockeyPage({
       race &&
         ['published', 'in-progress', 'finished', 'completed'].includes(race.status)
     );
+  const toggleHorseInfo = (key: string) => {
+    setExpandedHorseInfoKeys((current) => {
+      const next = new Set(current);
+
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+
+      return next;
+    });
+  };
+
+  const renderHorseInformation = (
+    horse?: HorseRecord,
+    ratingSnapshot?: number,
+    informationKey?: string
+  ) => {
+    if (!horse) {
+      return (
+        <div className="mt-4 rounded-xl border border-white/10 bg-[#0b223d] p-4 text-gray-400 text-sm">
+          Horse information is not available yet.
+        </div>
+      );
+    }
+
+    const profileItems = [
+      { label: 'Breed', value: horse.breed || 'Not set', icon: Activity },
+      { label: 'Age', value: numberLabel(horse.age, ' years'), icon: Activity },
+      { label: 'Sex', value: horse.sex || 'Not set', icon: ShieldCheck },
+      { label: 'Color', value: horse.color || 'Not set', icon: ShieldCheck },
+      { label: 'Horse Weight', value: formatWeightLb(horse.weightLb), icon: Scale },
+      {
+        label: 'Official Rating',
+        value: ratingSnapshot ?? horseRatingLabel(horse),
+        icon: Gauge,
+      },
+      { label: 'Speed', value: numberLabel(horse.speedRating), icon: Gauge },
+      { label: 'Stamina', value: numberLabel(horse.staminaRating), icon: HeartPulse },
+    ];
+    const compactLabels = new Set([
+      'Breed',
+      'Age',
+      'Sex',
+      'Color',
+      'Horse Weight',
+      'Official Rating',
+    ]);
+    const expandKey = informationKey || horse.id;
+    const isExpanded = expandedHorseInfoKeys.has(expandKey);
+    const visibleProfileItems = isExpanded
+      ? profileItems
+      : profileItems.filter(({ label }) => compactLabels.has(label));
+
+    return (
+      <div className="relative mt-4 rounded-xl border border-white/10 bg-[#0b223d] p-4 pb-7">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="text-gray-300 text-xs uppercase font-bold">
+            Horse Information
+          </div>
+
+          <span className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs font-bold text-gray-300">
+            {statusLabel(horse.status)}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {visibleProfileItems.map(({ label, value, icon: Icon }) => (
+            <div
+              key={label}
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-2"
+            >
+              <div className="flex items-center gap-1.5 text-[11px] uppercase font-bold text-gray-500">
+                <Icon className="h-3.5 w-3.5 text-[#d4af37]" />
+                {label}
+              </div>
+
+              <div className="mt-1 text-sm font-bold text-white">
+                {value}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {isExpanded && (
+          <>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-gray-300">
+                Health: <span className="font-bold text-white">{horse.healthStatus || 'Not set'}</span>
+              </div>
+
+              <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-gray-300">
+                Species: <span className="font-bold text-white">{horse.species || 'Not set'}</span>
+              </div>
+            </div>
+
+            {horse.profileNotes && (
+              <p className="mt-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-300">
+                {horse.profileNotes}
+              </p>
+            )}
+          </>
+        )}
+
+        <button
+          type="button"
+          onClick={() => toggleHorseInfo(expandKey)}
+          aria-label={
+            isExpanded
+              ? `Collapse full information for ${horse.name}`
+              : `Expand full information for ${horse.name}`
+          }
+          title={
+            isExpanded
+              ? `Collapse full information for ${horse.name}`
+              : `Expand full information for ${horse.name}`
+          }
+          className="absolute left-1/2 bottom-0 flex h-8 w-8 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border border-[#d4af37]/40 bg-[#071a2f] text-[#d4af37] shadow-lg shadow-black/20 hover:bg-[#12304f] focus:outline-none focus:ring-2 focus:ring-[#d4af37]/60"
+        >
+          {isExpanded ? (
+            <ChevronUp className="h-4 w-4" />
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )}
+        </button>
+      </div>
+    );
+  };
 
   if (currentUser?.role !== 'jockey') {
     return (
@@ -150,7 +308,7 @@ export default function JockeyPage({
         </h1>
 
         <p className="text-gray-400 mb-8">
-          Publish your jockey profile, certificate and competition level so Horse Owners can send riding requests for active tournament races.
+          Publish your profile, join races, then accept owner requests after their horses are approved by Admin.
         </p>
 
         {message && (
@@ -201,14 +359,14 @@ export default function JockeyPage({
               </div>
 
               <div>
-                <label className="block text-gray-300 mb-2">Weight</label>
+                <label className="block text-gray-300 mb-2">Weight (lb)</label>
 
                 <input
                   type="number"
-                  value={weight}
-                  onChange={(event) => setWeight(event.target.value)}
+                  value={weightLb}
+                  onChange={(event) => setWeightLb(event.target.value)}
                   className="w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-[#d4af37]"
-                  placeholder="54"
+                  placeholder="120"
                 />
               </div>
             </div>
@@ -227,9 +385,31 @@ export default function JockeyPage({
           </div>
 
           <div className="bg-[#12304f] border border-white/10 rounded-2xl p-8">
-            <h2 className="text-3xl font-black text-white mb-6">
-              Race Participation
-            </h2>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-3xl font-black text-white">
+                  Race Participation
+                </h2>
+
+                <p className="text-gray-400 text-sm mt-1">
+                  Showing {visibleInvitations.length}/{invitations.length} requests
+                </p>
+              </div>
+
+              {invitations.length > 4 && (
+                <button
+                  onClick={() => setParticipationExpanded((current) => !current)}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/10 px-4 py-2 text-[#d4af37] font-bold hover:bg-[#d4af37]/20 transition-all"
+                >
+                  {participationExpanded ? 'Show Less' : `View All ${invitations.length}`}
+                  {participationExpanded ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </button>
+              )}
+            </div>
 
             <div className="space-y-4">
               {invitations.length === 0 && (
@@ -238,56 +418,62 @@ export default function JockeyPage({
                 </div>
               )}
 
-              {invitations.map((invitation) => (
-                <div
-                  key={invitation.id}
-                  className="rounded-xl bg-[#071a2f] border border-white/10 p-4"
-                >
-                  <div className="text-white font-bold">
-                    {horses.find((horse) => horse.id === invitation.horseId)?.name || 'Horse'}
+              {visibleInvitations.map((invitation) => {
+                const horse = horseById(invitation.horseId);
+
+                return (
+                  <div
+                    key={invitation.id}
+                    className="rounded-xl bg-[#071a2f] border border-white/10 p-4"
+                  >
+                    <div className="text-white font-bold">
+                      {horse?.name || 'Horse'}
+                    </div>
+
+                    <div className="text-gray-400 text-sm mt-1">
+                      {invitation.raceId
+                        ? `Race: ${races.find((race) => race.id === invitation.raceId)?.name || 'Race'}`
+                        : `Tournament: ${tournamentById(invitation.tournamentId)?.name || 'Tournament'}`}{' '}
+                      • Status: {statusLabel(invitation.status)}
+                    </div>
+
+                    {needsJockeyResponse(invitation) && (
+                      <div className="text-blue-300 text-sm mt-2 font-semibold">
+                        Owner selected you after Admin approved the horse. Accept to send this pairing to final Admin approval.
+                      </div>
+                    )}
+
+                    {renderHorseInformation(horse, undefined, `invitation-${invitation.id}`)}
+
+                    {invitation.status === 'accepted' && (
+                      <div className="text-yellow-400 text-sm mt-2 font-semibold">
+                        Admin approval:{' '}
+                        {statusLabel(invitation.adminStatus || 'pending')}
+                      </div>
+                    )}
+
+                    {needsJockeyResponse(invitation) && (
+                      <div className="grid grid-cols-2 gap-3 mt-4">
+                        <button
+                          onClick={() => respond(invitation.id, 'accepted')}
+                          className="flex items-center justify-center gap-2 py-3 rounded-xl bg-green-600 text-white font-bold hover:bg-green-700 transition-all"
+                        >
+                          <CheckCircle className="w-5 h-5" />
+                          Accept
+                        </button>
+
+                        <button
+                          onClick={() => respond(invitation.id, 'rejected')}
+                          className="flex items-center justify-center gap-2 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition-all"
+                        >
+                          <XCircle className="w-5 h-5" />
+                          Reject
+                        </button>
+                      </div>
+                    )}
                   </div>
-
-                  <div className="text-gray-400 text-sm mt-1">
-                    {invitation.raceId
-                      ? `Race: ${races.find((race) => race.id === invitation.raceId)?.name || 'Race'}`
-                      : `Tournament: ${tournamentById(invitation.tournamentId)?.name || 'Tournament'}`}{' '}
-                    • Status: {statusLabel(invitation.status)}
-                  </div>
-
-                  {invitation.status === 'pending' && (
-                    <div className="text-blue-300 text-sm mt-2 font-semibold">
-                      Owner request: accept to send this tournament pairing to Admin approval.
-                    </div>
-                  )}
-
-                  {invitation.status === 'accepted' && (
-                    <div className="text-yellow-400 text-sm mt-2 font-semibold">
-                      Admin approval:{' '}
-                      {statusLabel(invitation.adminStatus || 'pending')}
-                    </div>
-                  )}
-
-                  {invitation.status === 'pending' && (
-                    <div className="grid grid-cols-2 gap-3 mt-4">
-                      <button
-                        onClick={() => respond(invitation.id, 'accepted')}
-                        className="flex items-center justify-center gap-2 py-3 rounded-xl bg-green-600 text-white font-bold hover:bg-green-700 transition-all"
-                      >
-                        <CheckCircle className="w-5 h-5" />
-                        Accept
-                      </button>
-
-                      <button
-                        onClick={() => respond(invitation.id, 'rejected')}
-                        className="flex items-center justify-center gap-2 py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 transition-all"
-                      >
-                        <XCircle className="w-5 h-5" />
-                        Reject
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="mt-8 border-t border-white/10 pt-6">
@@ -304,6 +490,7 @@ export default function JockeyPage({
 
                 {visibleAssignedEntries.map((entry) => {
                   const race = raceById(entry.raceId);
+                  const horse = horseById(entry.horseId);
                   const lineVisible = canViewLine(race);
 
                   return (
@@ -327,6 +514,8 @@ export default function JockeyPage({
                         </span>
                       </div>
 
+                      {renderHorseInformation(horse, entry.ratingSnapshot, `entry-${entry.id}`)}
+
                       <div className="mt-4 rounded-xl border border-white/10 bg-[#0b223d] p-4">
                         <div className="flex items-center gap-2 text-gray-400 text-xs uppercase font-bold mb-3">
                           <Flag className="w-4 h-4 text-[#d4af37]" />
@@ -345,14 +534,14 @@ export default function JockeyPage({
                             <div>
                               <p className="text-gray-500 text-xs">Rating</p>
                               <p className="text-white text-2xl font-black">
-                                {entry.ratingSnapshot || 'TBD'}
+                                {entry.ratingSnapshot ?? 'TBD'}
                               </p>
                             </div>
 
                             <div>
-                              <p className="text-gray-500 text-xs">Handicap</p>
+                              <p className="text-gray-500 text-xs">Assigned Wt. (lb)</p>
                               <p className="text-white text-2xl font-black">
-                                {entry.handicap || 0}kg
+                                {formatWeightLb(entry.handicap)}
                               </p>
                             </div>
                           </div>

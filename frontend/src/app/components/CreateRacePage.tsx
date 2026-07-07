@@ -13,6 +13,15 @@ interface CreateRacePageProps {
   onNavigate: (page: string) => void;
 }
 
+const RACE_CLASS_WEIGHT_RANGES: Record<string, { minWeightLb: string; topWeightLb: string }> = {
+  'Class 1': { topWeightLb: '135', minWeightLb: '115' },
+  'Class 2': { topWeightLb: '135', minWeightLb: '115' },
+  'Class 3': { topWeightLb: '133', minWeightLb: '113' },
+  'Class 4': { topWeightLb: '132', minWeightLb: '112' },
+  'Class 5': { topWeightLb: '130', minWeightLb: '110' },
+  Open: { topWeightLb: '135', minWeightLb: '110' },
+};
+
 export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
   const fieldClass =
     'min-h-[54px] w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 outline-none focus:border-[#d4af37]/70 focus:ring-2 focus:ring-[#d4af37]/20';
@@ -30,15 +39,16 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
     raceName: '',
     raceDate: '',
     startTime: '',
+    registrationOpensAt: '',
+    registrationClosesAt: '',
     venue: '',
     distance: '',
     surfaceType: '',
     raceClass: '',
     handicapMin: '',
     handicapMax: '',
-    refereeUserId: '',
-    registrationOpenTime: '',
-    registrationCloseTime: '',
+    totalPrize: '',
+    refereeUserIds: [] as string[],
   });
 
   const selectedTournament = useMemo(
@@ -86,7 +96,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
           tournamentId: firstTournament?.id || '',
           raceNumber: current.raceNumber || nextRaceNumber,
           venue: current.venue || firstTournament?.location || '',
-          refereeUserId: data.referees[0]?.id || '',
+          refereeUserIds: data.referees[0] ? [data.referees[0].id] : [],
         }));
       })
       .catch((error) =>
@@ -116,27 +126,32 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
       !form.raceClass ||
       form.handicapMin === '' ||
       form.handicapMax === '' ||
-      !form.refereeUserId ||
-      !form.registrationOpenTime ||
-      !form.registrationCloseTime
+      form.refereeUserIds.length === 0
     ) {
-      setMessage('Please complete the race schedule, registration open/close time, venue, distance and referee.');
+      setMessage('Please complete the race schedule, venue, distance and referees.');
       return;
     }
 
-    const registrationOpensAt = new Date(form.registrationOpenTime);
-    const registrationClosesAt = new Date(form.registrationCloseTime);
+    if (!form.registrationOpensAt || !form.registrationClosesAt) {
+      setMessage('Registration open and close times are required.');
+      return;
+    }
+    const regOpens = new Date(form.registrationOpensAt);
+    const regCloses = new Date(form.registrationClosesAt);
     const raceStartsAt = new Date(`${form.raceDate}T${form.startTime}`);
-
-    if (registrationOpensAt >= registrationClosesAt) {
+    if (
+      !Number.isFinite(regOpens.getTime()) ||
+      !Number.isFinite(regCloses.getTime()) ||
+      !Number.isFinite(raceStartsAt.getTime())
+    ) {
+      setMessage('Race and registration times must be valid.');
+      return;
+    }
+    if (regOpens >= regCloses) {
       setMessage('Registration close time must be after open time.');
       return;
     }
-    if (registrationClosesAt <= new Date()) {
-      setMessage('Registration close time must be in the future.');
-      return;
-    }
-    if (registrationClosesAt > raceStartsAt) {
+    if (regCloses > raceStartsAt) {
       setMessage('Registration must close before the race starts.');
       return;
     }
@@ -144,8 +159,12 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
       setMessage('Race distance must be between 400m and 10,000m.');
       return;
     }
-    if (Number(form.handicapMin) > Number(form.handicapMax)) {
-      setMessage('Handicap minimum cannot exceed handicap maximum.');
+    if (
+      Number(form.handicapMin) < 110 ||
+      Number(form.handicapMax) > 135 ||
+      Number(form.handicapMin) > Number(form.handicapMax)
+    ) {
+      setMessage('Assigned weight must stay between 110 lb and 135 lb.');
       return;
     }
 
@@ -157,15 +176,17 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
       name: form.raceName,
       date: form.raceDate,
       time: form.startTime,
+      registrationOpensAt: new Date(form.registrationOpensAt).toISOString(),
+      registrationClosesAt: new Date(form.registrationClosesAt).toISOString(),
       venue: form.venue,
       distance: form.distance,
       surface: form.surfaceType,
       raceClass: form.raceClass,
       handicapMin: form.handicapMin,
       handicapMax: form.handicapMax,
-      refereeUserId: form.refereeUserId,
-      registrationOpenTime: registrationOpensAt.toISOString(),
-      registrationCloseTime: registrationClosesAt.toISOString(),
+      totalPrize: form.totalPrize,
+      refereeUserIds: form.refereeUserIds,
+      refereeUserId: form.refereeUserIds[0],
     })
       .then(() => {
         setMessage('Race created. Registration is open for Owners/Jockeys.');
@@ -186,6 +207,17 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
       tournamentId,
       raceNumber: nextRaceNumber,
       venue: tournament?.location || current.venue,
+    }));
+  };
+
+  const handleRaceClassChange = (raceClass: string) => {
+    const weightRange = RACE_CLASS_WEIGHT_RANGES[raceClass];
+
+    setForm((current) => ({
+      ...current,
+      raceClass,
+      handicapMin: weightRange?.minWeightLb || current.handicapMin,
+      handicapMax: weightRange?.topWeightLb || current.handicapMax,
     }));
   };
 
@@ -289,36 +321,6 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
               </div>
 
               <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Registration Open Time</label>
-                <input
-                  type="datetime-local"
-                  className={fieldClass}
-                  value={form.registrationOpenTime}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      registrationOpenTime: event.target.value,
-                    })
-                  }
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Registration Close Time</label>
-                <input
-                  type="datetime-local"
-                  className={fieldClass}
-                  value={form.registrationCloseTime}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      registrationCloseTime: event.target.value,
-                    })
-                  }
-                />
-              </div>
-
-              <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Race Date</label>
                 <input
                   type="date"
@@ -344,6 +346,44 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                       ...form,
                       startTime: event.target.value,
                     })
+                  }
+                />
+              </div>
+
+              <div className="min-w-0">
+                <label className="block text-gray-300 mb-2">Registration Opens</label>
+                <input
+                  type="datetime-local"
+                  className={fieldClass}
+                  value={form.registrationOpensAt}
+                  onChange={(event) =>
+                    setForm({ ...form, registrationOpensAt: event.target.value })
+                  }
+                />
+              </div>
+
+              <div className="min-w-0">
+                <label className="block text-gray-300 mb-2">Registration Closes</label>
+                <input
+                  type="datetime-local"
+                  className={fieldClass}
+                  value={form.registrationClosesAt}
+                  onChange={(event) =>
+                    setForm({ ...form, registrationClosesAt: event.target.value })
+                  }
+                />
+              </div>
+
+              <div className="min-w-0">
+                <label className="block text-gray-300 mb-2">Prize Pool (USD)</label>
+                <input
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 150000"
+                  className={fieldClass}
+                  value={form.totalPrize}
+                  onChange={(event) =>
+                    setForm({ ...form, totalPrize: event.target.value })
                   }
                 />
               </div>
@@ -400,25 +440,28 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
 
               <div className="min-w-0">
                 <label className="block text-gray-300 mb-2">Race Class</label>
-                <input
-                  placeholder="Open"
+                <select
                   className={fieldClass}
                   value={form.raceClass}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      raceClass: event.target.value,
-                    })
-                  }
-                />
+                  onChange={(event) => handleRaceClassChange(event.target.value)}
+                >
+                  <option value="">Select class</option>
+                  <option value="Class 1">Class 1 (101-140)</option>
+                  <option value="Class 2">Class 2 (81-100)</option>
+                  <option value="Class 3">Class 3 (61-80)</option>
+                  <option value="Class 4">Class 4 (41-60)</option>
+                  <option value="Class 5">Class 5 (0-40)</option>
+                  <option value="Open">Open (0-140)</option>
+                </select>
               </div>
 
               <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Handicap Min</label>
+                <label className="block text-gray-300 mb-2">Minimum Weight (lb)</label>
                 <input
                   type="number"
-                  min="0"
-                  step="0.5"
+                  min="110"
+                  max="135"
+                  step="1"
                   className={fieldClass}
                   value={form.handicapMin}
                   onChange={(event) =>
@@ -431,11 +474,12 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
               </div>
 
               <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Handicap Max</label>
+                <label className="block text-gray-300 mb-2">Top Weight (lb)</label>
                 <input
                   type="number"
-                  min="0"
-                  step="0.5"
+                  min="110"
+                  max="135"
+                  step="1"
                   className={fieldClass}
                   value={form.handicapMax}
                   onChange={(event) =>
@@ -448,19 +492,21 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
               </div>
 
               <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Assigned Referee</label>
+                <label className="block text-gray-300 mb-2">Assigned Referees (Hold Cmd/Ctrl to select multiple)</label>
                 <select
-                  className={fieldClass}
-                  value={form.refereeUserId}
-                  onChange={(event) =>
+                  multiple
+                  className={`${fieldClass} min-h-[120px]`}
+                  value={form.refereeUserIds}
+                  onChange={(event) => {
+                    const options = Array.from(event.target.selectedOptions);
                     setForm({
                       ...form,
-                      refereeUserId: event.target.value,
-                    })
-                  }
+                      refereeUserIds: options.map(opt => opt.value),
+                    });
+                  }}
                 >
                   {referees.map((referee) => (
-                    <option key={referee.id} value={referee.id}>
+                    <option key={referee.id} value={referee.id} className="p-1">
                       {referee.name}
                     </option>
                   ))}
@@ -474,29 +520,29 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   <Bell className="w-6 h-6 text-[#d4af37]" />
 
                   <h2 className="text-2xl font-black text-white">
-                    Open Registration
+                    Race Registration Window
                   </h2>
                 </div>
 
                 <p className="text-gray-400 mb-5">
-                  Owner horse registration is tournament-wide; jockey approvals and race publication prepare the full race schedule.
+                  Each race has its own registration window. Owners can register horses once the window opens. Prize is awarded per race.
                 </p>
 
                 <div className="space-y-3 text-sm text-gray-300 mb-6">
                   <div className="flex justify-between gap-3">
-                    <span>Registration opens</span>
+                    <span>Race registration opens</span>
                     <span className="text-white font-bold text-right">
-                      {form.registrationOpenTime
-                        ? new Date(form.registrationOpenTime).toLocaleString()
+                      {form.registrationOpensAt
+                        ? new Date(form.registrationOpensAt).toLocaleString()
                         : 'Not set'}
                     </span>
                   </div>
 
                   <div className="flex justify-between gap-3">
-                    <span>Registration closes</span>
+                    <span>Race registration closes</span>
                     <span className="text-white font-bold text-right">
-                      {form.registrationCloseTime
-                        ? new Date(form.registrationCloseTime).toLocaleString()
+                      {form.registrationClosesAt
+                        ? new Date(form.registrationClosesAt).toLocaleString()
                         : 'Not set'}
                     </span>
                   </div>
@@ -504,8 +550,8 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   <div className="flex justify-between gap-3">
                     <span>Initial status</span>
                     <span className="text-white font-bold">
-                      {form.registrationOpenTime &&
-                      Date.now() < new Date(form.registrationOpenTime).getTime()
+                      {form.registrationOpensAt &&
+                      Date.now() < new Date(form.registrationOpensAt).getTime()
                         ? 'Registration Scheduled'
                         : 'Registration Open'}
                     </span>
@@ -517,7 +563,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   </div>
 
                   <div className="flex justify-between gap-3">
-                    <span>Gate + handicap</span>
+                    <span>Gate + assigned weight</span>
                     <span className="text-white font-bold">System</span>
                   </div>
                 </div>

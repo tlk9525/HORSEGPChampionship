@@ -34,7 +34,7 @@ export default function LandingPage({ onNavigate }: LandingPageProps) {
           </h1>
 
           <p className="text-xl sm:text-2xl text-gray-300 mb-12 max-w-3xl mx-auto">
-            Manage tournaments, horses, jockeys, races, rankings and live results.
+            Manage tournaments, horses, jockeys, race cards and live results.
             <br />
             Experience the future of competitive horse racing.
           </p>
@@ -143,7 +143,7 @@ export default function LandingPage({ onNavigate }: LandingPageProps) {
               </div>
               <h3 className="text-xl font-bold text-white mb-3">Rankings & Results</h3>
               <p className="text-gray-400">
-                Real-time rankings, historical results, and comprehensive performance analytics.
+                Race cards, historical results, and comprehensive performance analytics.
               </p>
             </div>
           </div>
