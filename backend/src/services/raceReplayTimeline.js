@@ -11,6 +11,46 @@ const silkPalette = [
   '#f472b6',
 ];
 
+const mulberry32 = (seed) => {
+  let value = seed || 1;
+
+  return () => {
+    value += 0x6d2b79f5;
+    let result = value;
+    result = Math.imul(result ^ (result >>> 15), result | 1);
+    result ^= result + Math.imul(result ^ (result >>> 7), result | 61);
+    return ((result ^ (result >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+const shuffleValues = (values, seed) => {
+  const random = mulberry32(seed);
+  const next = [...values];
+
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+
+  if (next.length > 1 && next.every((value, index) => value === values[index])) {
+    const [first, ...rest] = next;
+    return [...rest, first];
+  }
+
+  return next;
+};
+
+const hashRaceSeed = (value) => {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return hash >>> 0;
+};
+
 const baseSpeedBySurface = {
   Turf: 17,
   Dirt: 16,
@@ -162,6 +202,10 @@ export const buildOfficialReplayTimeline = ({ race, entries, horses = [] }) => {
   }, 0);
   const useRecordedTiming = recordedFinishTimes.every(Number.isFinite) && recordedSpread <= 20 && largestRecordedGap <= 10;
   const fieldSize = competingEntries.length;
+  const visualGates = shuffleValues(
+    Array.from({ length: fieldSize }, (_, index) => index + 1),
+    hashRaceSeed(`${race.id}:${distanceMeters}:${surface}:${fieldSize}`)
+  );
 
   const horseById = new Map((horses || []).map((horse) => [horse.id, horse]));
   const runners = competingEntries.map((entry, index) => {
@@ -176,9 +220,10 @@ export const buildOfficialReplayTimeline = ({ race, entries, horses = [] }) => {
     return {
       entryId: entry.id,
       lane: entry.lane || index + 1,
+      displayGate: visualGates[index] || index + 1,
       horseName: entry.horseName || horse?.name || `Horse ${index + 1}`,
       jockeyName: entry.jockeyName || `Jockey ${index + 1}`,
-      silkColor: silkPalette[index % silkPalette.length],
+      silkColor: silkPalette[((visualGates[index] || index + 1) - 1) % silkPalette.length],
       rating: Number(entry.ratingSnapshot || horse?.overallRating || 0),
       carriedWeight: Number(entry.handicap || 0),
       speed: Number(horse?.speedRating || entry.ratingSnapshot || 0),
@@ -191,6 +236,7 @@ export const buildOfficialReplayTimeline = ({ race, entries, horses = [] }) => {
       finishTime: useRecordedTiming ? entry.finishTime || '' : formatFinishTime(finishTimeSeconds),
       officialFinishTime: entry.finishTime || '',
       checkpoints,
+      displayGate: visualGates[index] || index + 1,
     };
   });
 

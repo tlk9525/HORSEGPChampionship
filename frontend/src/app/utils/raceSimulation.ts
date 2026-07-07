@@ -25,6 +25,7 @@ export interface RaceCheckpoint {
 export interface RaceSimulationRunner {
   entryId: string;
   lane: number;
+  displayGate: number;
   horseName: string;
   jockeyName: string;
   silkColor: string;
@@ -106,8 +107,34 @@ const mulberry32 = (seed: number) => {
   };
 };
 
+const shuffleValues = <T,>(values: T[], seed: number) => {
+  const random = mulberry32(seed || 1);
+  const next = [...values];
+
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+
+  if (
+    next.length > 1 &&
+    next.every((value, index) => value === values[index])
+  ) {
+    const [first, ...rest] = next;
+    return [...rest, first];
+  }
+
+  return next;
+};
+
 const numericRating = (value: number | null | undefined, fallback = 75) =>
   Number.isFinite(Number(value)) ? Number(value) : fallback;
+
+const buildVisualGateOrder = (seed: number, fieldSize: number) =>
+  shuffleValues(
+    Array.from({ length: fieldSize }, (_, index) => index + 1),
+    seed
+  );
 
 export const formatRaceSimulationTime = (seconds: number) => {
   const safeSeconds = Math.max(0, seconds);
@@ -133,6 +160,7 @@ export const createRaceSimulationPlan = ({
   const sortedEntries = [...entries].sort(
     (a, b) => Number(a.lane || 999) - Number(b.lane || 999)
   );
+  const visualGates = buildVisualGateOrder(seed, sortedEntries.length);
 
   const scoredRunners = sortedEntries.map((entry, index) => {
     const rating = numericRating(
@@ -162,9 +190,10 @@ export const createRaceSimulationPlan = ({
     return {
       entryId: entry.id,
       lane: entry.lane || index + 1,
+      displayGate: visualGates[index] || index + 1,
       horseName: entry.horseName || `Horse ${index + 1}`,
       jockeyName: entry.jockeyName || 'Jockey pending',
-      silkColor: silkPalette[index % silkPalette.length],
+      silkColor: silkPalette[((visualGates[index] || index + 1) - 1) % silkPalette.length],
       rating,
       carriedWeight,
       speed,
@@ -412,8 +441,9 @@ export const normalizeOfficialReplayRunners = (
     hasRecordedTimes && rawSpread <= 20 && largestGap <= 10;
 
   if (useRecordedTiming) {
-    return sortedRunners.map((runner) => ({
+    return sortedRunners.map((runner, index) => ({
       ...runner,
+      displayGate: runner.displayGate || index + 1,
       finishTimeSeconds: parseReplayTimeSeconds(runner.finishTime),
     }));
   }
@@ -422,6 +452,7 @@ export const normalizeOfficialReplayRunners = (
   const surface = normalizeRaceSurface(race?.surface);
 
   return sortedRunners.map((runner, index) => {
+    const displayGate = index + 1;
     const finishTimeSeconds = buildVisualFinishTimeSeconds(
       distanceMeters,
       surface,
@@ -431,6 +462,7 @@ export const normalizeOfficialReplayRunners = (
 
     return {
       ...runner,
+      displayGate,
       finishTimeSeconds,
       finishTime: formatRaceSimulationTime(finishTimeSeconds),
       checkpoints: buildOfficialCheckpoints(
@@ -438,6 +470,7 @@ export const normalizeOfficialReplayRunners = (
         finishTimeSeconds,
         index
       ),
+      silkColor: silkPalette[index % silkPalette.length],
     };
   });
 };

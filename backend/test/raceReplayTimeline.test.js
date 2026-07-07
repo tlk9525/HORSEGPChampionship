@@ -35,6 +35,11 @@ test('official replay timeline compresses placeholder finish times into a realis
   const spread = Math.max(...finishTimes) - Math.min(...finishTimes);
 
   assert.equal(timeline.runners.length, 10);
+  assert.equal(new Set(timeline.runners.map((runner) => runner.displayGate)).size, 10);
+  assert.ok(
+    timeline.runners.some((runner) => runner.displayGate !== runner.lane),
+    'expected at least one shuffled display gate'
+  );
   assert.ok(timeline.durationSeconds < 140, 'expected replay duration to stay in race-like range');
   assert.ok(spread < 8, 'expected replay finish times to stay close together');
   assert.notEqual(timeline.runners[0].finishTime, '01:00');
