@@ -29,6 +29,62 @@ import {
   progressForRunner,
 } from '../utils/raceSimulation';
 
+interface DisplayRunnerRow {
+  keyId: string;
+  lane: number | null;
+  horseName: string;
+  jockeyName: string;
+  silkColor: string;
+  rating: number;
+  carriedWeight: number;
+  progress: number;
+  position?: number;
+  finishTime?: string;
+}
+
+const parseFinishTimeSeconds = (value?: string) => {
+  const raw = String(value || '').trim();
+  if (!raw) return Number.NaN;
+
+  const parts = raw.split(':');
+  if (parts.length === 2) {
+    const [minutes, secondsAndMs] = parts;
+    const [seconds, fraction = '0'] = String(secondsAndMs).split('.');
+    const parsedMinutes = Number(minutes);
+    const parsedSeconds = Number(seconds);
+    const parsedFraction = Number(fraction.padEnd(3, '0').slice(0, 3));
+
+    if (
+      Number.isFinite(parsedMinutes) &&
+      Number.isFinite(parsedSeconds) &&
+      Number.isFinite(parsedFraction)
+    ) {
+      return parsedMinutes * 60 + parsedSeconds + parsedFraction / 1000;
+    }
+  }
+
+  if (parts.length === 3) {
+    const [hours, minutes, secondsAndMs] = parts;
+    const [seconds, fraction = '0'] = String(secondsAndMs).split('.');
+    const parsedHours = Number(hours);
+    const parsedMinutes = Number(minutes);
+    const parsedSeconds = Number(seconds);
+    const parsedFraction = Number(fraction.padEnd(3, '0').slice(0, 3));
+
+    if (
+      Number.isFinite(parsedHours) &&
+      Number.isFinite(parsedMinutes) &&
+      Number.isFinite(parsedSeconds) &&
+      Number.isFinite(parsedFraction)
+    ) {
+      return parsedHours * 3600 + parsedMinutes * 60 + parsedSeconds + parsedFraction / 1000;
+    }
+  }
+
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+};
+
 export default function LiveRace() {
   const { raceId } = useParams();
   const routerNavigate = useNavigate();
@@ -151,6 +207,100 @@ export default function LiveRace() {
   const simulationFinishedVisually =
     simulationPlan.durationSeconds > 0 &&
     simulationElapsedSeconds >= simulationPlan.durationSeconds;
+  const officialTimelineRunners = selectedRace?.replayTimeline?.runners || [];
+  const officialReplayEntries = useMemo<DisplayRunnerRow[]>(() => {
+    if (officialTimelineRunners.length > 0) {
+      return officialTimelineRunners.map((runner) => ({
+        keyId: runner.entryId,
+        lane: runner.lane,
+        horseName: runner.horseName,
+        jockeyName: runner.jockeyName,
+        silkColor: runner.silkColor,
+        rating: runner.rating,
+        carriedWeight: runner.carriedWeight,
+        progress: progressForRunner(runner, simulationElapsedSeconds),
+        position: runner.position,
+        finishTime: runner.finishTime,
+      }));
+    }
+
+    const fallbackEntries = [...selectedEntries]
+      .filter(
+        (entry) =>
+          entry.status === 'approved' &&
+          entry.preRaceStatus !== 'absent' &&
+          !entry.disqualified &&
+          Number.isFinite(Number(entry.position)) &&
+          Boolean(entry.finishTime)
+      )
+      .sort((a, b) => {
+        const positionA = Number(a.position || 999);
+        const positionB = Number(b.position || 999);
+
+        if (positionA !== positionB) return positionA - positionB;
+
+        return String(a.finishTime || '').localeCompare(String(b.finishTime || ''));
+      });
+    const fallbackMaxFinishSeconds = fallbackEntries.reduce((max, entry) => {
+      const finishSeconds = parseFinishTimeSeconds(entry.finishTime);
+      return Number.isFinite(finishSeconds) ? Math.max(max, finishSeconds) : max;
+    }, 0);
+
+    return fallbackEntries.map((entry) => {
+      const finishSeconds = parseFinishTimeSeconds(entry.finishTime);
+
+      return {
+        keyId: entry.id,
+        lane: entry.lane,
+        horseName: entry.horseName || 'Unknown horse',
+        jockeyName: entry.jockeyName || 'Unknown jockey',
+        silkColor: '#d4af37',
+        rating: Number(entry.ratingSnapshot || 0),
+        carriedWeight: Number(entry.handicap || 0),
+        progress:
+          fallbackMaxFinishSeconds > 0 && Number.isFinite(finishSeconds)
+            ? Math.min(finishSeconds / fallbackMaxFinishSeconds, 1)
+            : 0,
+        position: Number(entry.position || 0),
+        finishTime: entry.finishTime || '',
+      };
+    });
+  }, [officialTimelineRunners, selectedEntries, simulationElapsedSeconds]);
+  const hasOfficialReplayData =
+    officialTimelineRunners.length > 0 || officialReplayEntries.length > 0;
+  const officialReplayMode =
+    ['finished', 'completed'].includes(selectedRace?.status || '') && hasOfficialReplayData;
+  const displayEntries: DisplayRunnerRow[] = officialReplayMode
+    ? officialReplayEntries
+    : liveSimulationRunners.map((runner) => ({
+        keyId: runner.entryId,
+        lane: runner.lane,
+        horseName: runner.horseName,
+        jockeyName: runner.jockeyName,
+        silkColor: runner.silkColor,
+        rating: runner.rating,
+        carriedWeight: runner.carriedWeight,
+        progress: runner.progress,
+      }));
+  const displayRankByEntryId = officialReplayMode
+    ? new Map(officialReplayEntries.map((entry, index) => [entry.keyId, index + 1]))
+    : simulationRankByEntryId;
+  const displayDistance =
+    officialReplayMode && selectedRace?.distance
+      ? selectedRace.distance
+      : `${simulationPlan.distanceMeters.toLocaleString()}m`;
+  const displaySurface =
+    officialReplayMode && selectedRace?.surface ? selectedRace.surface : simulationPlan.surface;
+  const displayElapsed =
+    officialReplayMode && selectedRace?.status !== 'in-progress'
+      ? (officialTimelineRunners.find((entry) => entry.position === 1)?.finishTime ||
+        selectedEntries.find((entry) => entry.position === 1)?.finishTime ||
+        '00:00.000')
+      : formatRaceSimulationTime(simulationElapsedSeconds);
+  const displayProjected =
+    officialReplayMode && selectedRace?.status !== 'in-progress'
+      ? displayElapsed
+      : formatRaceSimulationTime(simulationPlan.durationSeconds);
 
   const positionOptions = Array.from(
     { length: competingEntries.length },
@@ -544,19 +694,21 @@ export default function LiveRace() {
                     <div>
                       <div className="flex items-center gap-2 text-[#d4af37] font-black uppercase tracking-[0.16em] text-sm">
                         <Trophy className="w-5 h-5" />
-                        Live Simulation
+                        {officialReplayMode ? 'Official Replay' : 'Live Simulation'}
                       </div>
                       <p className="mt-2 text-sm text-gray-400">
-                        Uses this race&apos;s distance, surface, gates, rating snapshots and assigned weights. Visual only until Referee records results.
+                        {officialReplayMode
+                          ? 'Uses recorded positions and finish times from the official result set.'
+                          : 'Uses this race&apos;s distance, surface, gates, rating snapshots and assigned weights. Visual only until Referee records results.'}
                       </p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                       {[
-                        ['Distance', `${simulationPlan.distanceMeters.toLocaleString()}m`],
-                        ['Surface', simulationPlan.surface],
-                        ['Elapsed', formatRaceSimulationTime(simulationElapsedSeconds)],
-                        ['Projected', formatRaceSimulationTime(simulationPlan.durationSeconds)],
+                        ['Distance', displayDistance],
+                        ['Surface', displaySurface],
+                        ['Elapsed', displayElapsed],
+                        ['Projected', displayProjected],
                       ].map(([label, value]) => (
                         <div key={label} className="rounded-xl border border-white/10 bg-[#071a2f] px-4 py-3">
                           <div className="text-xs text-gray-500">{label}</div>
@@ -581,25 +733,27 @@ export default function LiveRace() {
                 </div>
 
                 <div className="space-y-2 p-3 sm:p-5">
-                  {liveSimulationRunners.length === 0 && (
+                  {displayEntries.length === 0 && (
                     <div className="rounded-xl border border-dashed border-white/15 bg-[#071a2f] p-5 text-center text-gray-500">
-                      Mark at least one approved participant Ready before the race can be simulated.
+                      {officialReplayMode
+                        ? 'This race has no official results yet.'
+                        : 'Mark at least one approved participant Ready before the race can be simulated.'}
                     </div>
                   )}
 
-                  {liveSimulationRunners.map((runner) => {
-                    const rank = simulationRankByEntryId.get(runner.entryId);
+                  {displayEntries.map((runner) => {
+                    const rank = displayRankByEntryId.get(runner.keyId);
 
                     return (
                       <div
-                        key={runner.entryId}
+                        key={runner.keyId}
                         className="grid grid-cols-[38px,minmax(0,1fr),44px] items-center gap-2 rounded-2xl border border-white/[0.07] bg-[#071a2f] p-2 sm:grid-cols-[44px,180px,minmax(0,1fr),54px] sm:gap-3 sm:p-3"
                       >
                         <div
                           className="flex h-9 w-9 items-center justify-center rounded-xl text-sm font-black text-[#071a2f]"
-                          style={{ backgroundColor: runner.silkColor }}
+                          style={{ backgroundColor: officialReplayMode ? '#d4af37' : runner.silkColor }}
                         >
-                          {runner.lane}
+                          {runner.lane || '-'}
                         </div>
 
                         <div className="hidden min-w-0 sm:block">
@@ -607,7 +761,9 @@ export default function LiveRace() {
                             {runner.horseName}
                           </div>
                           <div className="truncate text-xs text-gray-400">
-                            {runner.jockeyName} • R{runner.rating} • {runner.carriedWeight}lb
+                            {officialReplayMode
+                              ? `Jockey ${runner.jockeyName} • Position ${rank || '-'} • ${runner.finishTime || ''}`
+                              : `${runner.jockeyName} • R${runner.rating} • ${runner.carriedWeight}lb`}
                           </div>
                         </div>
 
@@ -620,17 +776,31 @@ export default function LiveRace() {
                         >
                           <div className="absolute inset-y-0 left-[18px] right-[18px]">
                             <div className="absolute inset-y-0 right-0 z-20 w-1 translate-x-1/2 bg-[repeating-linear-gradient(0deg,#fff_0_4px,#111_4px_8px)] opacity-80" />
-                            <div
-                              className="absolute top-1/2 z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-lg"
-                              style={{
-                                left: `${runner.progress * 100}%`,
-                                backgroundColor: runner.silkColor,
-                                boxShadow: `0 0 18px ${runner.silkColor}80`,
-                              }}
-                              title={`${runner.horseName}: ${Math.round(runner.progress * 100)}%`}
-                            >
-                              <span className="text-base">♞</span>
-                            </div>
+                            {officialReplayMode ? (
+                              <div
+                                className="absolute top-1/2 z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-lg"
+                                style={{
+                                  left: `${runner.progress * 100}%`,
+                                  backgroundColor: '#d4af37',
+                                  boxShadow: '0 0 18px rgba(212,175,55,0.5)',
+                                }}
+                                title={`${runner.horseName}: P${rank || '-'}`}
+                              >
+                                <span className="text-base">♞</span>
+                              </div>
+                            ) : (
+                              <div
+                                className="absolute top-1/2 z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-lg"
+                                style={{
+                                  left: `${runner.progress * 100}%`,
+                                  backgroundColor: runner.silkColor,
+                                  boxShadow: `0 0 18px ${runner.silkColor}80`,
+                                }}
+                                title={`${runner.horseName}: ${Math.round(runner.progress * 100)}%`}
+                              >
+                                <span className="text-base">♞</span>
+                              </div>
+                            )}
                           </div>
                         </div>
 

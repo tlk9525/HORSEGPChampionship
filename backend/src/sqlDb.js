@@ -472,6 +472,7 @@ export const writeDb = async (db) => {
         'registrationClosesAt',
         'resultStatus',
         'awardsPublished',
+        'replayTimeline',
         'createdBy',
         'createdAt',
         'updatedAt',
@@ -484,6 +485,7 @@ export const writeDb = async (db) => {
         registrationClosesAt: race.registrationClosesAt || null,
         resultStatus: race.resultStatus || 'draft',
         awardsPublished: race.awardsPublished ?? false,
+        replayTimeline: race.replayTimeline || null,
         handicapMin: race.handicapMin ?? 115,
         handicapMax: race.handicapMax ?? 135,
         raceNumber: race.raceNumber || '',
@@ -850,13 +852,15 @@ export const persistRefereeRaceAction = async ({
        SET "status" = $2,
            "resultStatus" = $3,
            "awardsPublished" = $4,
-           "updatedAt" = $5
+           "replayTimeline" = $5,
+           "updatedAt" = $6
        WHERE "id" = $1`,
       [
         race.id,
         race.status,
         race.resultStatus || 'draft',
         Boolean(race.awardsPublished),
+        race.replayTimeline || null,
         race.updatedAt || nowIso(),
       ]
     );

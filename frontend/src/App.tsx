@@ -303,11 +303,11 @@ export default function App() {
             <Route path="/live-race/:raceId" element={<LiveRace />} />
             <Route
               path="/simulation-demo"
-              element={<RaceSimulationDemo currentUser={currentUser} />}
+              element={<RaceSimulationDemo />}
             />
             <Route
               path="/simulation-demo/:raceId"
-              element={<RaceSimulationDemo currentUser={currentUser} />}
+              element={<RaceSimulationDemo />}
             />
             <Route path="/results" element={<ResultsPage />} />
             <Route
