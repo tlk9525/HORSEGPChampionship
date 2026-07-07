@@ -48,6 +48,15 @@ export interface RaceSimulationPlan {
   runners: RaceSimulationRunner[];
 }
 
+interface RaceDisplayRunnerLike {
+  progress?: number;
+  finishTimeSeconds?: number;
+  lane?: number | null;
+  displayGate?: number | null;
+  entryId?: string;
+  keyId?: string;
+}
+
 const baseSpeedBySurface: Record<RaceSurface, number> = {
   Turf: 17,
   Dirt: 16,
@@ -329,6 +338,32 @@ export const progressForRunner = (
 
   return clamp(currentDistance / runner.checkpoints.at(-1)!.distanceMeters, 0, 1);
 };
+
+export const sortRaceDisplayRunners = <T extends RaceDisplayRunnerLike>(runners: T[]) =>
+  [...runners].sort((a, b) => {
+    const progressA = Number(a.progress ?? 0);
+    const progressB = Number(b.progress ?? 0);
+
+    if (Math.abs(progressB - progressA) > 0.0001) {
+      return progressB - progressA;
+    }
+
+    const finishTimeA = Number(a.finishTimeSeconds ?? Number.POSITIVE_INFINITY);
+    const finishTimeB = Number(b.finishTimeSeconds ?? Number.POSITIVE_INFINITY);
+
+    if (finishTimeA !== finishTimeB) {
+      return finishTimeA - finishTimeB;
+    }
+
+    const gateA = Number(a.displayGate ?? a.lane ?? 999);
+    const gateB = Number(b.displayGate ?? b.lane ?? 999);
+
+    if (gateA !== gateB) {
+      return gateA - gateB;
+    }
+
+    return String(a.entryId || a.keyId || '').localeCompare(String(b.entryId || b.keyId || ''));
+  });
 
 const parseReplayTimeSeconds = (value?: string) => {
   if (!value) return Number.NaN;
