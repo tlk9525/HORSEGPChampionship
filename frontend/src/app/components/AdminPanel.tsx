@@ -266,7 +266,17 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   const handleRaceAction = (
     raceId: string,
+<<<<<<< Updated upstream
     action: 'close-registration' | 'publish'
+=======
+    action:
+      | 'close-registration'
+      | 'publish'
+      | 'start-race'
+      | 'finish-race'
+      | 'complete-results'
+      | 'cancel-race'
+>>>>>>> Stashed changes
   ) => {
     adminRaceAction(raceId, action)
       .then((result) => {
@@ -609,6 +619,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                               race.registrationClosesAt &&
                               Date.now() < new Date(race.registrationClosesAt).getTime()
                             )}
+<<<<<<< Updated upstream
                             title={
                               race.registrationClosesAt &&
                               Date.now() < new Date(race.registrationClosesAt).getTime()
@@ -619,6 +630,145 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                           >
                             Close Registration
                           </button>
+=======
+
+                            {tournamentRaces.map((race) => (
+                              <div
+                                key={race.id}
+                                className="bg-[#071a2f] border border-white/10 rounded-xl p-5 hover:border-white/20 transition-all"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="flex items-center gap-3 mb-2">
+                                      <span className="px-3 py-1 rounded-xl bg-blue-600/15 border border-blue-600/30 text-blue-300 text-xs font-bold">
+                                        {race.raceNumber || 'Race'}
+                                      </span>
+
+                                      <h3 className="text-xl font-bold text-white">
+                                        {race.name}
+                                      </h3>
+
+                                      <span
+                                        className={`px-3 py-1 rounded-xl text-xs font-bold ${raceStatusBadgeClass(race.status)}`}
+                                      >
+                                        {statusLabel(race.status)}
+                                      </span>
+                                    </div>
+
+                                    <div className="flex items-center gap-4 text-gray-400 text-sm mt-3">
+                                      <span>{race.date}</span>
+                                      <span>•</span>
+                                      <span>{race.time}</span>
+                                      <span>•</span>
+                                      <span>{race.participants} participants</span>
+                                      {'referee' in race && (
+                                        <>
+                                          <span>•</span>
+                                          <span>{race.referee}</span>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  <div className="flex gap-3">
+                                    {race.status === 'registration-open' && (
+                                      <button
+                                        onClick={() => handleRaceAction(race.id, 'close-registration')}
+                                        disabled={approvedPairCount(race.id) !== maxRaceFieldSize}
+                                        title={
+                                          approvedPairCount(race.id) === maxRaceFieldSize
+                                            ? undefined
+                                            : `Admin must approve ${maxRaceFieldSize} horse-jockey pairs before closing registration. Current: ${approvedPairCount(race.id)}/${maxRaceFieldSize}.`
+                                        }
+                                        className="flex items-center gap-2 px-4 py-2 bg-yellow-500/10 text-yellow-400 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl hover:bg-yellow-500/20 transition-all border border-yellow-500/30 text-sm font-semibold"
+                                      >
+                                        Close Registration ({approvedPairCount(race.id)}/{maxRaceFieldSize})
+                                      </button>
+                                    )}
+
+                                    {race.status === 'registration-closed' && (
+                                      <button
+                                        onClick={() => handleRaceAction(race.id, 'publish')}
+                                        className="flex items-center gap-2 px-4 py-2 bg-green-600/10 text-green-400 rounded-xl hover:bg-green-600/20 transition-all border border-green-600/30 text-sm font-semibold"
+                                      >
+                                        Publish
+                                      </button>
+                                    )}
+
+                                    {race.status === 'published' && (() => {
+                                      const readiness = raceReadiness(race.id);
+                                      const disabled = readiness.ready === 0 || readiness.unchecked > 0;
+
+                                      return (
+                                        <button
+                                          onClick={() => handleRaceAction(race.id, 'start-race')}
+                                          disabled={disabled}
+                                          title={
+                                            disabled
+                                              ? `Need at least one Ready participant and 0 unchecked. Current: ${readiness.ready} ready, ${readiness.unchecked} unchecked.`
+                                              : undefined
+                                          }
+                                          className="flex items-center gap-2 px-4 py-2 bg-[#d4af37]/10 text-[#d4af37] disabled:opacity-40 disabled:cursor-not-allowed rounded-xl hover:bg-[#d4af37]/20 transition-all border border-[#d4af37]/30 text-sm font-semibold"
+                                        >
+                                          Start Race
+                                        </button>
+                                      );
+                                    })()}
+
+                                    {race.status === 'in-progress' && (
+                                      <button
+                                        onClick={() => handleRaceAction(race.id, 'finish-race')}
+                                        className="flex items-center gap-2 px-4 py-2 bg-purple-600/10 text-purple-300 rounded-xl hover:bg-purple-600/20 transition-all border border-purple-600/30 text-sm font-semibold"
+                                      >
+                                        Finish Race
+                                      </button>
+                                    )}
+
+                                    {race.status === 'finished' && race.resultStatus === 'submitted' && (
+                                      <button
+                                        onClick={() => handleRaceAction(race.id, 'complete-results')}
+                                        className="flex items-center gap-2 px-4 py-2 bg-green-600/10 text-green-400 rounded-xl hover:bg-green-600/20 transition-all border border-green-600/30 text-sm font-semibold"
+                                      >
+                                        Approve Results / Complete Race
+                                      </button>
+                                    )}
+
+                                    <button
+                                      onClick={() => handleRaceAction(race.id, 'cancel-race')}
+                                      disabled={['in-progress', 'finished', 'completed', 'cancelled'].includes(race.status)}
+                                      className="flex items-center gap-2 px-4 py-2 bg-red-600/10 text-red-300 rounded-xl hover:bg-red-600/20 transition-all border border-red-600/30 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      <XCircle className="w-4 h-4" />
+                                      Cancel Race
+                                    </button>
+
+                                    <button
+                                      onClick={() =>
+                                        setEditRace({
+                                          ...race,
+                                          date: formatDateInput(race.date || ''),
+                                        })
+                                      }
+                                      disabled={!['registration-open', 'registration-closed'].includes(race.status)}
+                                      className="flex items-center gap-2 px-4 py-2 bg-[#d4af37]/10 text-[#d4af37] rounded-xl hover:bg-[#d4af37] hover:text-white transition-all border border-[#d4af37]/30 text-sm font-semibold disabled:opacity-50 disabled:hover:bg-[#d4af37]/10 disabled:hover:text-[#d4af37]"
+                                    >
+                                      <Pencil className="w-4 h-4" />
+                                      Edit
+                                    </button>
+
+                                    <button
+                                      onClick={() => setShowViewModal(race)}
+                                      className="flex items-center gap-2 px-4 py-2 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-all text-sm font-semibold"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                      View
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+>>>>>>> Stashed changes
                         )}
 
                         {race.status === 'registration-closed' && (

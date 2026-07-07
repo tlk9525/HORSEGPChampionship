@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import {
   ACTIVE_TOURNAMENT_STATUSES,
   MAX_RACE_FIELD_SIZE,
+  MIN_READY_PARTICIPANTS,
   MAX_TOURNAMENT_RACES,
 } from '../config/constants.js';
 import { requireRole } from '../services/authService.js';
@@ -383,7 +384,18 @@ export const createAdminRoutes = (getDb, writeDb) => {
     const db = c.get('db');
     const raceId = c.req.param('raceId');
     const action = c.req.param('action');
+<<<<<<< Updated upstream
     const validActions = ['close-registration', 'publish'];
+=======
+    const validActions = [
+      'close-registration',
+      'publish',
+      'start-race',
+      'finish-race',
+      'complete-results',
+      'cancel-race'
+    ];
+>>>>>>> Stashed changes
 
     if (!validActions.includes(action)) return c.json({ message: 'Invalid action' }, 400);
 
@@ -460,6 +472,174 @@ export const createAdminRoutes = (getDb, writeDb) => {
       });
     }
 
+<<<<<<< Updated upstream
+=======
+    if (action === 'start-race') {
+      if (race.status !== 'published') {
+        return c.json({ message: 'Race must be published before it can start' }, 400);
+      }
+
+      const readyEntries = entries.filter(
+        (entry) => entry.preRaceStatus === 'ready' && !entry.disqualified
+      );
+      const uncheckedEntries = entries.filter(
+        (entry) => !['ready', 'absent'].includes(entry.preRaceStatus) && !entry.disqualified
+      );
+
+      if (uncheckedEntries.length > 0) {
+        return c.json({ message: 'Every participant must be marked Ready or Absent before starting the race' }, 400);
+      }
+      if (readyEntries.length < MIN_READY_PARTICIPANTS) { //Race is cancelled if not enough particpants are ready
+        race.status = 'cancelled';
+        race.updatedAt = new Date().toISOString();
+       raceRefereeIds(db, race).forEach((refereeId) =>
+        createNotification(
+          db,
+          refereeId,
+          'Race cancelled',
+          `${race.name} has been cancelled due to insufficient participants.`
+        )
+      ); 
+      }else{
+
+      race.status = 'in-progress';
+      race.updatedAt = new Date().toISOString();
+      entries.forEach((entry) => {
+        if (entry.preRaceStatus === 'absent') entry.disqualified = true;
+      });
+
+      const tournament = db.tournaments.find((item) => item.id === race.tournamentId);
+      if (tournament && tournament.status !== 'completed') {
+        tournament.status = 'active';
+        tournament.updatedAt = race.updatedAt;
+      }
+
+      raceRefereeIds(db, race).forEach((refereeId) =>
+        createNotification(
+          db,
+          refereeId,
+          'Race started',
+          `${race.name} has been started by Admin.`
+        )
+      );
+    }
+    }
+    if(action === 'cancel-race'){
+      if(race.status === 'in-progress' || race.status === 'finished' || race.status === 'completed'){
+        return c.json ({message: 'The race has already happened and cannot be cancelled'}, 400);
+      } 
+      race.status = 'cancelled';
+        race.updatedAt = new Date().toISOString();
+       raceRefereeIds(db, race).forEach((refereeId) =>
+        createNotification(
+          db,
+          refereeId,
+          'Race cancelled',
+          `${race.name} has been cancelled by the admin`
+        )
+      ); 
+    }
+    if (action === 'finish-race') {
+      if (race.status !== 'in-progress') {
+        return c.json({ message: 'Only an in-progress race can be finished' }, 400);
+      }
+
+      race.status = 'finished';
+      race.resultStatus = 'draft';
+      race.awardsPublished = false;
+      race.updatedAt = new Date().toISOString();
+      entries.forEach((entry) => {
+        entry.resultStatus = entry.preRaceStatus === 'absent' || entry.disqualified
+          ? 'disqualified'
+          : 'draft';
+      });
+
+      raceRefereeIds(db, race).forEach((refereeId) =>
+        createNotification(
+          db,
+          refereeId,
+          'Race finished',
+          `${race.name} has been finished by Admin. Enter and submit the official timing draft.`
+        )
+      );
+    }
+
+    if (action === 'complete-results') {
+      if (race.status !== 'finished' || race.resultStatus !== 'submitted') {
+        return c.json({ message: 'Only submitted race results can be approved by Admin' }, 400);
+      }
+
+      const competingEntries = entries.filter(
+        (entry) => entry.preRaceStatus !== 'absent' && !entry.disqualified
+      );
+      if (competingEntries.length === 0) {
+        return c.json({ message: 'A race needs at least one competing participant before completion' }, 400);
+      }
+
+      const ratingResults = competingEntries.map((entry) => ({
+        entry,
+        result: computePostRaceRating(entry, competingEntries),
+      }));
+      const invalidRatingResult = ratingResults.find(
+        ({ result }) =>
+          result.previousRating === null ||
+          (competingEntries.length >= 4 && !result.calcLog)
+      );
+      if (invalidRatingResult) {
+        return c.json(
+          {
+            message: `Cannot complete results because entry ${invalidRatingResult.entry.id} has a missing or invalid rating snapshot.`,
+          },
+          400
+        );
+      }
+
+      race.status = 'completed';
+      race.resultStatus = 'official';
+      race.awardsPublished = true;
+      race.updatedAt = new Date().toISOString();
+      entries.forEach((entry) => {
+        entry.resultStatus = entry.preRaceStatus === 'absent' || entry.disqualified
+          ? 'disqualified'
+          : 'official';
+      });
+      ratingResults.forEach(({ entry, result }) => {
+        const horse = db.horses.find((item) => item.id === entry.horseId);
+        entry.ratingChange = result.ratingChange;
+        entry.postRaceRating = result.postRaceRating;
+        entry.ratingLog = result.calcLog;
+        if (horse) {
+          horse.overallRating = result.postRaceRating;
+          horse.updatedAt = race.updatedAt;
+        }
+      });
+
+      const recipientIds = new Set();
+      entries.forEach((entry) => {
+        const horse = db.horses.find((item) => item.id === entry.horseId);
+        if (horse?.ownerUserId) recipientIds.add(horse.ownerUserId);
+        if (entry.jockeyUserId) recipientIds.add(entry.jockeyUserId);
+      });
+      db.users
+        .filter((item) => ['admin', 'spectator'].includes(item.role))
+        .forEach((item) => recipientIds.add(item.id));
+      recipientIds.forEach((userId) =>
+        createNotification(
+          db,
+          userId,
+          'Official results published',
+          `${race.name} results were approved by Admin and are now official.`
+        )
+      );
+
+      const tournament = db.tournaments.find((item) => item.id === race.tournamentId);
+      if (tournament && tournamentHasEnded(tournament)) {
+        tournament.status = 'completed';
+        tournament.updatedAt = race.updatedAt;
+      }
+    }
+
+>>>>>>> Stashed changes
     recordRaceAction(db, {
       raceId: race.id,
       userId: c.get('user').id,
