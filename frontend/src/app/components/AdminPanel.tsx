@@ -341,6 +341,12 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       );
   };
 
+  const confirmCancelRace = (raceId: string) => {
+    const confirmed = window.confirm('Are you sure you want to cancel this race?');
+    if (!confirmed) return;
+    handleRaceAction(raceId, 'cancel-race');
+  };
+
   const raceReadiness = (raceId: string) => {
     const entries = raceEntries.filter(
       (entry) => entry.raceId === raceId && entry.status === 'approved'
@@ -882,7 +888,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                                     )}
 
                                     <button
-                                      onClick={() => handleRaceAction(race.id, 'cancel-race')}
+                                      onClick={() => confirmCancelRace(race.id)}
                                       disabled={['in-progress', 'finished', 'completed', 'cancelled'].includes(race.status)}
                                       className="flex items-center gap-2 px-4 py-2 bg-red-600/10 text-red-300 rounded-xl hover:bg-red-600/20 transition-all border border-red-600/30 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                                     >

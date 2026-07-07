@@ -670,11 +670,7 @@ export const createAdminRoutes = (getDb, writeDb) => {
       .filter((item) => ['admin', 'spectator'].includes(item.role))
         .forEach((item) => recipientIds.add(item.id));
 
-       recipientIds.forEach((userId) =>
-      createNotification(
-      db,
-      userId,
-      'Race cancelled',
+       recipientIds.forEach((userId) =>createNotification(db,userId,'Race cancelled',
       `${race.name} has been cancelled due to insufficient participants. Only ${readyEntries.length} participants were marked Ready, but at least ${MIN_READIED_PARTICIPANTS} are required.`
       )
       );
@@ -702,7 +698,7 @@ export const createAdminRoutes = (getDb, writeDb) => {
     }
     }
     if(action === 'cancel-race'){
-      if(race.status === 'in-progress' || 'finished' || 'completed'){
+      if(race.status === 'in-progress' || race.status === 'finished' || race.status === 'completed'){
         return c.json({ message: 'The race has started and cannot be cancelled.'}, 400);
     }
     race.status = 'cancelled';
@@ -723,7 +719,7 @@ export const createAdminRoutes = (getDb, writeDb) => {
       db,
       userId,
       'Race cancelled',
-      `${race.name} has been cancelled due to insufficient participants. Only ${readyEntries.length} participants were marked Ready, but at least ${MIN_READIED_PARTICIPANTS} are required.`
+      `${race.name} has been cancelled by the admin`
       )
       );
   }
