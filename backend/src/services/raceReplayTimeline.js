@@ -107,7 +107,8 @@ export const buildOfficialReplayTimeline = ({ race, entries, horses = [] }) => {
         entry.preRaceStatus !== 'absent' &&
         !entry.disqualified &&
         Number.isFinite(Number(entry.position)) &&
-        Boolean(entry.finishTime)
+        Boolean(entry.finishTime) &&
+        Number.isFinite(finishTimeToSeconds(entry.finishTime))
     )
     .sort((a, b) => {
       const positionA = Number(a.position || 999);
