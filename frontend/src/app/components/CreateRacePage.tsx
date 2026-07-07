@@ -1,17 +1,45 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Bell, CalendarClock } from 'lucide-react';
+import { useParams } from 'react-router-dom';
+import { ArrowLeft, Bell, CalendarClock, Trash2 } from 'lucide-react';
 import {
   RaceBuilderReferee,
   RaceRecord,
   TournamentRecord,
   createRace,
+  deleteRace,
   getRaceBuilder,
+  updateRace,
 } from '../services/api';
 import { messageToneClasses } from '../utils/messageTone';
 
 interface CreateRacePageProps {
   onNavigate: (page: string) => void;
+  mode?: 'create' | 'edit';
 }
+
+const EDITABLE_RACE_STATUSES = ['registration-open', 'registration-closed'];
+
+const toDatetimeLocal = (value?: string) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '';
+
+  const pad = (part: number) => String(part).padStart(2, '0');
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+const parseRefereeUserIds = (value?: string | string[]) => {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (!value) return [];
+
+  return String(value)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+const parseDistanceMeters = (value?: string) => value?.replace(/m$/i, '') || '';
 
 const RACE_CLASS_WEIGHT_RANGES: Record<string, { minWeightLb: string; topWeightLb: string }> = {
   'Class 1': { topWeightLb: '135', minWeightLb: '115' },
@@ -22,14 +50,22 @@ const RACE_CLASS_WEIGHT_RANGES: Record<string, { minWeightLb: string; topWeightL
   Open: { topWeightLb: '135', minWeightLb: '110' },
 };
 
-export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
+export default function CreateRacePage({
+  onNavigate,
+  mode = 'create',
+}: CreateRacePageProps) {
+  const { raceId } = useParams();
+  const isEdit = mode === 'edit';
   const fieldClass =
-    'min-h-[54px] w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 outline-none focus:border-[#d4af37]/70 focus:ring-2 focus:ring-[#d4af37]/20';
+    'min-h-[54px] w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 outline-none focus:border-[#d4af37]/70 focus:ring-2 focus:ring-[#d4af37]/20 disabled:cursor-not-allowed disabled:opacity-60';
 
   const [tournaments, setTournaments] = useState<TournamentRecord[]>([]);
   const [races, setRaces] = useState<RaceRecord[]>([]);
   const [referees, setReferees] = useState<RaceBuilderReferee[]>([]);
   const [maxRacesPerTournament, setMaxRacesPerTournament] = useState(10);
+  const [editingRace, setEditingRace] = useState<RaceRecord | null>(null);
+  const [isLoading, setIsLoading] = useState(isEdit);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -56,6 +92,22 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
     [form.tournamentId, tournaments]
   );
 
+  const tournamentOptions = useMemo(() => {
+    if (!isEdit || !form.tournamentId) return tournaments;
+    if (tournaments.some((tournament) => tournament.id === form.tournamentId)) {
+      return tournaments;
+    }
+
+    return [
+      {
+        id: form.tournamentId,
+        name: 'Assigned tournament',
+        status: 'active',
+      },
+      ...tournaments,
+    ];
+  }, [form.tournamentId, isEdit, tournaments]);
+
   const getNextRaceNumber = (tournamentId: string) => {
     const usedNumbers = races
       .filter((race) => race.tournamentId === tournamentId)
@@ -74,6 +126,40 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
         setRaces(data.races || []);
         setReferees(data.referees);
         setMaxRacesPerTournament(data.maxRacesPerTournament || 10);
+
+        if (isEdit) {
+          const race = (data.races || []).find((item) => item.id === raceId);
+
+          if (!race) {
+            setMessage('Race not found.');
+            return;
+          }
+
+          if (!EDITABLE_RACE_STATUSES.includes(race.status)) {
+            setMessage('Only unpublished races can be edited.');
+            return;
+          }
+
+          setEditingRace(race);
+          setForm({
+            tournamentId: race.tournamentId || '',
+            raceNumber: race.raceNumber || '',
+            raceName: race.name,
+            raceDate: race.date || '',
+            startTime: race.time || '',
+            registrationOpensAt: toDatetimeLocal(race.registrationOpensAt),
+            registrationClosesAt: toDatetimeLocal(race.registrationClosesAt),
+            venue: race.venue || '',
+            distance: parseDistanceMeters(race.distance),
+            surfaceType: race.surface || '',
+            raceClass: race.raceClass || '',
+            handicapMin: race.handicapMin != null ? String(race.handicapMin) : '',
+            handicapMax: race.handicapMax != null ? String(race.handicapMax) : '',
+            totalPrize: race.totalPrize != null ? String(race.totalPrize) : '',
+            refereeUserIds: parseRefereeUserIds(race.refereeUserIds),
+          });
+          return;
+        }
 
         const existingRaces = data.races || [];
         const firstTournament = data.tournaments.find(
@@ -101,11 +187,53 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
       })
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : 'Unable to load race builder')
-      );
-  }, []);
+      )
+      .finally(() => setIsLoading(false));
+  }, [isEdit, raceId]);
+
+  const handleDelete = () => {
+    if (!raceId) return;
+
+    setIsSubmitting(true);
+    deleteRace(raceId)
+      .then(() => {
+        setMessage('Race deleted.');
+        setTimeout(() => onNavigate('admin'), 900);
+      })
+      .catch((error) =>
+        setMessage(error instanceof Error ? error.message : 'Unable to delete race')
+      )
+      .finally(() => {
+        setIsSubmitting(false);
+        setShowDeleteConfirm(false);
+      });
+  };
 
   const handleSubmit = () => {
     setMessage('');
+
+    if (isEdit) {
+      if (!raceId || !form.raceName || !form.raceDate || !form.startTime) {
+        setMessage('Please complete the race name, date and time.');
+        return;
+      }
+
+      setIsSubmitting(true);
+      updateRace(raceId, {
+        name: form.raceName,
+        date: form.raceDate,
+        time: form.startTime,
+      })
+        .then(() => {
+          setMessage('Race schedule saved.');
+          setTimeout(() => onNavigate('admin'), 900);
+        })
+        .catch((error) =>
+          setMessage(error instanceof Error ? error.message : 'Unable to save race')
+        )
+        .finally(() => setIsSubmitting(false));
+      return;
+    }
 
     const tournamentRaceCount = races.filter(
       (race) => race.tournamentId === form.tournamentId
@@ -236,8 +364,13 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
           <div className="mb-8">
             <div>
               <h1 className="text-4xl font-black text-white">
-                Create Race
+                {isEdit ? 'Edit Race' : 'Create Race'}
               </h1>
+              {isEdit && editingRace && (
+                <p className="text-gray-400 mt-2">
+                  {editingRace.raceNumber || 'Race'} · Schedule fields can be updated before publish.
+                </p>
+              )}
 
             </div>
           </div>
@@ -248,7 +381,22 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
             </div>
           )}
 
-          {tournaments.length === 0 ? (
+          {isLoading ? (
+            <div className="rounded-2xl border border-white/10 bg-[#0b223d] p-6 text-gray-300">
+              Loading race details...
+            </div>
+          ) : isEdit && !editingRace ? (
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6">
+              <h2 className="text-2xl font-black text-white mb-2">Unable to Edit Race</h2>
+              <p className="text-amber-200/90 mb-5">{message || 'This race cannot be edited.'}</p>
+              <button
+                onClick={() => onNavigate('admin')}
+                className="px-5 py-3 rounded-xl bg-[#d4af37] text-white font-bold hover:bg-[#b8892d]"
+              >
+                Back to Admin Panel
+              </button>
+            </div>
+          ) : tournaments.length === 0 && !isEdit ? (
             <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6">
               <h2 className="text-2xl font-black text-white mb-2">
                 Create Tournament First
@@ -273,9 +421,10 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 <select
                   className={fieldClass}
                   value={form.tournamentId}
+                  disabled={isEdit}
                   onChange={(event) => handleTournamentChange(event.target.value)}
                 >
-                  {tournaments.map((tournament) => (
+                  {tournamentOptions.map((tournament) => (
                     <option
                       key={tournament.id}
                       value={tournament.id}
@@ -296,6 +445,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   placeholder={form.tournamentId ? getNextRaceNumber(form.tournamentId) : 'R1'}
                   className={fieldClass}
                   value={form.raceNumber}
+                  disabled={isEdit}
                   onChange={(event) =>
                     setForm({
                       ...form,
@@ -356,6 +506,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   type="datetime-local"
                   className={fieldClass}
                   value={form.registrationOpensAt}
+                  disabled={isEdit}
                   onChange={(event) =>
                     setForm({ ...form, registrationOpensAt: event.target.value })
                   }
@@ -368,6 +519,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   type="datetime-local"
                   className={fieldClass}
                   value={form.registrationClosesAt}
+                  disabled={isEdit}
                   onChange={(event) =>
                     setForm({ ...form, registrationClosesAt: event.target.value })
                   }
@@ -382,6 +534,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   placeholder="e.g. 150000"
                   className={fieldClass}
                   value={form.totalPrize}
+                  disabled={isEdit}
                   onChange={(event) =>
                     setForm({ ...form, totalPrize: event.target.value })
                   }
@@ -394,6 +547,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   placeholder="Churchill Downs"
                   className={fieldClass}
                   value={form.venue}
+                  disabled={isEdit}
                   onChange={(event) =>
                     setForm({
                       ...form,
@@ -410,6 +564,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   min="1"
                   className={fieldClass}
                   value={form.distance}
+                  disabled={isEdit}
                   onChange={(event) =>
                     setForm({
                       ...form,
@@ -424,6 +579,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 <select
                   className={fieldClass}
                   value={form.surfaceType}
+                  disabled={isEdit}
                   onChange={(event) =>
                     setForm({
                       ...form,
@@ -443,6 +599,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                 <select
                   className={fieldClass}
                   value={form.raceClass}
+                  disabled={isEdit}
                   onChange={(event) => handleRaceClassChange(event.target.value)}
                 >
                   <option value="">Select class</option>
@@ -464,6 +621,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   step="1"
                   className={fieldClass}
                   value={form.handicapMin}
+                  disabled={isEdit}
                   onChange={(event) =>
                     setForm({
                       ...form,
@@ -482,6 +640,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   step="1"
                   className={fieldClass}
                   value={form.handicapMax}
+                  disabled={isEdit}
                   onChange={(event) =>
                     setForm({
                       ...form,
@@ -497,6 +656,7 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   multiple
                   className={`${fieldClass} min-h-[120px]`}
                   value={form.refereeUserIds}
+                  disabled={isEdit}
                   onChange={(event) => {
                     const options = Array.from(event.target.selectedOptions);
                     setForm({
@@ -550,10 +710,12 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   <div className="flex justify-between gap-3">
                     <span>Initial status</span>
                     <span className="text-white font-bold">
-                      {form.registrationOpensAt &&
-                      Date.now() < new Date(form.registrationOpensAt).getTime()
-                        ? 'Registration Scheduled'
-                        : 'Registration Open'}
+                      {isEdit
+                        ? editingRace?.status || 'Unknown'
+                        : form.registrationOpensAt &&
+                            Date.now() < new Date(form.registrationOpensAt).getTime()
+                          ? 'Registration Scheduled'
+                          : 'Registration Open'}
                     </span>
                   </div>
 
@@ -572,21 +734,76 @@ export default function CreateRacePage({ onNavigate }: CreateRacePageProps) {
                   onClick={handleSubmit}
                   disabled={
                     isSubmitting ||
-                    !form.tournamentId ||
-                    races.filter((race) => race.tournamentId === form.tournamentId).length >=
-                      maxRacesPerTournament
+                    (isEdit
+                      ? !editingRace
+                      : !form.tournamentId ||
+                        races.filter((race) => race.tournamentId === form.tournamentId).length >=
+                          maxRacesPerTournament)
                   }
                   className="w-full px-8 py-4 bg-[#d4af37] hover:bg-[#b8892d] disabled:opacity-60 rounded-2xl text-white font-bold transition-all"
                 >
                   <CalendarClock className="inline-block w-5 h-5 mr-2" />
-                  {isSubmitting ? 'Creating Race...' : 'Create Race'}
+                  {isSubmitting
+                    ? isEdit
+                      ? 'Saving Changes...'
+                      : 'Creating Race...'
+                    : isEdit
+                      ? 'Save Changes'
+                      : 'Create Race'}
                 </button>
+
+                {isEdit && editingRace && (
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    disabled={isSubmitting}
+                    className="w-full mt-4 flex items-center justify-center gap-2 px-8 py-4 bg-red-600/90 hover:bg-red-700 disabled:opacity-60 rounded-2xl text-white font-bold transition-all"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                    Delete Race
+                  </button>
+                )}
               </div>
             </div>
           </div>
           )}
         </div>
       </div>
+
+      {showDeleteConfirm && editingRace && (
+        <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#12304f] p-8 rounded-3xl w-full max-w-lg border border-red-500/30">
+            <div className="flex items-center gap-3 text-red-300 mb-4">
+              <Trash2 className="w-6 h-6" />
+              <h2 className="text-2xl font-black text-white">Delete Race?</h2>
+            </div>
+
+            <p className="text-gray-300 leading-relaxed">
+              Are you sure you want to delete{' '}
+              <span className="font-bold text-white">{editingRace.name}</span>? This action cannot
+              be undone.
+            </p>
+
+            <div className="flex gap-4 mt-8">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 py-4 bg-white/10 rounded-2xl text-white"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={handleDelete}
+                disabled={isSubmitting}
+                className="flex-1 flex items-center justify-center gap-2 py-4 bg-red-600 hover:bg-red-700 disabled:opacity-60 rounded-2xl text-white font-bold"
+              >
+                <Trash2 className="w-5 h-5" />
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

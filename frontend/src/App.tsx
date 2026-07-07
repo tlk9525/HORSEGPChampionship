@@ -50,6 +50,7 @@ const protectedPages: Record<string, string[]> = {
   'race-details': ['admin', 'owner', 'jockey', 'referee', 'spectator'],
   admin: ['admin'],
   'create-race': ['admin'],
+  'edit-race': ['admin'],
   horses: ['admin', 'owner'],
   'register-horse': ['owner'],
   'race-registration': ['owner'],
@@ -85,6 +86,7 @@ const pageFromPath = (pathname: string) => {
   if (path === '/results') return 'results';
   if (path === '/admin') return 'admin';
   if (path === '/admin/races/new') return 'create-race';
+  if (/^\/admin\/races\/[^/]+\/edit$/.test(path)) return 'edit-race';
 
   return 'tournaments';
 };
@@ -141,6 +143,9 @@ export default function App() {
       results: '/results',
       admin: '/admin',
       'create-race': '/admin/races/new',
+      'edit-race': selectedRaceId
+        ? `/admin/races/${selectedRaceId}/edit`
+        : '/admin',
       login: '/login',
       register: '/register',
     };
@@ -317,6 +322,10 @@ export default function App() {
             <Route
               path="/admin/races/new"
               element={<CreateRacePage onNavigate={navigate} />}
+            />
+            <Route
+              path="/admin/races/:raceId/edit"
+              element={<CreateRacePage mode="edit" onNavigate={navigate} />}
             />
             <Route
               path="/login"
