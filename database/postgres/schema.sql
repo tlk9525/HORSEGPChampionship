@@ -95,6 +95,7 @@ CREATE TABLE "races" (
   "registrationClosesAt" TIMESTAMPTZ,
   "resultStatus" VARCHAR(32) NOT NULL DEFAULT 'draft',
   "awardsPublished" BOOLEAN NOT NULL DEFAULT FALSE,
+  "replayTimeline" JSONB,
   "createdBy" VARCHAR(64),
   "createdAt" TIMESTAMPTZ,
   "updatedAt" TIMESTAMPTZ,

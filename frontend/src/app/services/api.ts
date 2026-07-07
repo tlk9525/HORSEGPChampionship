@@ -119,6 +119,7 @@ export interface RaceRecord {
   registrationClosesAt?: string;
   resultStatus?: string;
   awardsPublished?: boolean;
+  replayTimeline?: RaceReplayTimeline | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -169,6 +170,40 @@ export interface RaceEntryRecord {
   horseWeightLb?: number | null;
   jockeyWeightLb?: number | null;
   raceName?: string;
+}
+
+export interface RaceReplayCheckpoint {
+  distanceMeters: number;
+  timeSeconds: number;
+}
+
+export interface RaceReplayRunner {
+  entryId: string;
+  lane: number;
+  horseName: string;
+  jockeyName: string;
+  silkColor: string;
+  rating: number;
+  carriedWeight: number;
+  speed: number;
+  stamina: number;
+  form: number;
+  phase: number;
+  performanceScore: number;
+  finishTimeSeconds: number;
+  position: number;
+  finishTime: string;
+  checkpoints: RaceReplayCheckpoint[];
+}
+
+export interface RaceReplayTimeline {
+  version: number;
+  generatedAt: string;
+  raceId: string;
+  distanceMeters: number;
+  surface: string;
+  durationSeconds: number;
+  runners: RaceReplayRunner[];
 }
 
 export interface JockeyRaceRegistration {

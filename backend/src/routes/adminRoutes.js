@@ -32,6 +32,7 @@ import {
   createNotification,
   notifyAdmins,
 } from '../services/notificationService.js';
+import { buildOfficialReplayTimeline } from '../services/raceReplayTimeline.js';
 
 // Helpers nội bộ
 const nonRejectedEntry = (entry) => entry.status !== 'rejected';
@@ -750,6 +751,12 @@ export const createAdminRoutes = (getDb, writeDb) => {
           horse.overallRating = result.postRaceRating;
           horse.updatedAt = race.updatedAt;
         }
+      });
+
+      race.replayTimeline = buildOfficialReplayTimeline({
+        race,
+        entries: competingEntries,
+        horses: db.horses,
       });
 
       const recipientIds = new Set();
