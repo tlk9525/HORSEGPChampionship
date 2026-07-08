@@ -158,6 +158,7 @@ export default function RaceSimulationDemo() {
           positionValue: entry.positionValue,
           displayGate: entry.displayGate ?? entry.lane ?? entry.positionValue,
           silkColor: entry.silkColor ?? '#d4af37',
+          finishTimeSeconds: entry.finishSeconds,
           progress:
             maxFinishSeconds > 0
               ? Math.min(elapsedSeconds / entry.finishSeconds, 1)

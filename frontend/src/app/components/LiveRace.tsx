@@ -41,6 +41,7 @@ interface DisplayRunnerRow {
   rating: number;
   carriedWeight: number;
   progress: number;
+  finishTimeSeconds?: number;
   position?: number;
   finishTime?: string;
 }
@@ -266,6 +267,7 @@ export default function LiveRace() {
         silkColor: '#d4af37',
         rating: Number(entry.ratingSnapshot || 0),
         carriedWeight: Number(entry.handicap || 0),
+        finishTimeSeconds: finishSeconds,
         progress:
           fallbackMaxFinishSeconds > 0 && Number.isFinite(finishSeconds)
             ? Math.min(finishSeconds / fallbackMaxFinishSeconds, 1)

@@ -24,6 +24,36 @@ const parseFinishTime = (value) => {
   return Number(minutes) * 60 + Number(seconds) + Number(fraction.padEnd(3, '0').slice(0, 3)) / 1000;
 };
 
+const progressAt = (runner, elapsedSeconds) => {
+  if (!Array.isArray(runner.checkpoints) || runner.checkpoints.length === 0) {
+    return 0;
+  }
+
+  if (elapsedSeconds <= 0) return 0;
+  if (elapsedSeconds >= runner.finishTimeSeconds) return 1;
+
+  const nextCheckpointIndex = runner.checkpoints.findIndex(
+    (checkpoint) => checkpoint.timeSeconds >= elapsedSeconds
+  );
+
+  if (nextCheckpointIndex <= 0) return 0;
+
+  const previousCheckpoint = runner.checkpoints[nextCheckpointIndex - 1];
+  const nextCheckpoint = runner.checkpoints[nextCheckpointIndex];
+  const checkpointDuration =
+    nextCheckpoint.timeSeconds - previousCheckpoint.timeSeconds;
+  const checkpointProgress =
+    checkpointDuration > 0
+      ? (elapsedSeconds - previousCheckpoint.timeSeconds) / checkpointDuration
+      : 1;
+  const currentDistance =
+    previousCheckpoint.distanceMeters +
+    (nextCheckpoint.distanceMeters - previousCheckpoint.distanceMeters) *
+      checkpointProgress;
+
+  return currentDistance / runner.checkpoints.at(-1).distanceMeters;
+};
+
 test('official replay timeline compresses placeholder finish times into a realistic spread', () => {
   const timeline = buildOfficialReplayTimeline({
     race: { id: 'race-1', distance: '2000M', surface: 'Dirt' },
@@ -59,4 +89,27 @@ test('official replay timeline keeps already realistic finish times intact', () 
   assert.equal(timeline.runners[0].finishTime, '01:39.500');
   assert.equal(timeline.runners[1].finishTime, '01:40.200');
   assert.equal(timeline.runners[2].finishTime, '01:41.100');
+});
+
+test('official replay timeline creates a more animated mid-race order than final results', () => {
+  const timeline = buildOfficialReplayTimeline({
+    race: { id: 'race-3', distance: '1700M', surface: 'Turf' },
+    entries: Array.from({ length: 10 }, (_, index) =>
+      baseEntry(index + 1, `${String(68 + index).padStart(2, '0')}:${String(200 + index * 20).padStart(2, '0')}.${String(index * 37).padStart(3, '0')}`)
+    ),
+    horses: [],
+  });
+
+  const midpoint = timeline.durationSeconds * 0.45;
+  const finalOrder = timeline.runners.map((runner) => runner.entryId);
+  const midRaceOrder = [...timeline.runners]
+    .map((runner) => ({
+      entryId: runner.entryId,
+      progress: progressAt(runner, midpoint),
+    }))
+    .sort((a, b) => b.progress - a.progress)
+    .map((runner) => runner.entryId);
+
+  assert.ok(timeline.runners.every((runner) => runner.checkpoints.length > 3));
+  assert.notDeepEqual(midRaceOrder, finalOrder);
 });

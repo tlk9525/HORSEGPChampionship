@@ -456,6 +456,8 @@ export const normalizeOfficialReplayRunners = (
     }
     return Number(a.finishTimeSeconds || 0) - Number(b.finishTimeSeconds || 0);
   });
+  const distanceMeters = parseRaceDistanceMeters(race?.distance);
+  const surface = normalizeRaceSurface(race?.surface);
 
   const recordedTimes = sortedRunners.map((runner) =>
     parseReplayTimeSeconds(runner.finishTime)
@@ -480,11 +482,16 @@ export const normalizeOfficialReplayRunners = (
       ...runner,
       displayGate: runner.displayGate || index + 1,
       finishTimeSeconds: parseReplayTimeSeconds(runner.finishTime),
+      checkpoints:
+        Array.isArray(runner.checkpoints) && runner.checkpoints.length > 0
+          ? runner.checkpoints
+          : buildOfficialCheckpoints(
+              distanceMeters,
+              parseReplayTimeSeconds(runner.finishTime),
+              index
+            ),
     }));
   }
-
-  const distanceMeters = parseRaceDistanceMeters(race?.distance);
-  const surface = normalizeRaceSurface(race?.surface);
 
   return sortedRunners.map((runner, index) => {
     const displayGate = index + 1;
