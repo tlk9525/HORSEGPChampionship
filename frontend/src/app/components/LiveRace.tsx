@@ -28,6 +28,7 @@ import {
   normalizeOfficialReplayRunners,
   parseRaceDistanceMeters,
   progressForRunner,
+  sortRaceDisplayRunners,
 } from '../utils/raceSimulation';
 
 interface DisplayRunnerRow {
@@ -40,6 +41,7 @@ interface DisplayRunnerRow {
   rating: number;
   carriedWeight: number;
   progress: number;
+  finishTimeSeconds?: number;
   position?: number;
   finishTime?: string;
 }
@@ -198,14 +200,6 @@ export default function LiveRace() {
     ...runner,
     progress: progressForRunner(runner, simulationElapsedSeconds),
   }));
-  const rankedSimulationRunners = [...liveSimulationRunners].sort((a, b) => {
-    if (simulationElapsedSeconds === 0) return a.lane - b.lane;
-    if (b.progress !== a.progress) return b.progress - a.progress;
-    return a.finishTimeSeconds - b.finishTimeSeconds;
-  });
-  const simulationRankByEntryId = new Map(
-    rankedSimulationRunners.map((runner, index) => [runner.entryId, index + 1])
-  );
   const simulationFinishedVisually =
     simulationPlan.durationSeconds > 0 &&
     simulationElapsedSeconds >= simulationPlan.durationSeconds;
@@ -273,6 +267,7 @@ export default function LiveRace() {
         silkColor: '#d4af37',
         rating: Number(entry.ratingSnapshot || 0),
         carriedWeight: Number(entry.handicap || 0),
+        finishTimeSeconds: finishSeconds,
         progress:
           fallbackMaxFinishSeconds > 0 && Number.isFinite(finishSeconds)
             ? Math.min(finishSeconds / fallbackMaxFinishSeconds, 1)
@@ -287,21 +282,24 @@ export default function LiveRace() {
   const officialReplayMode =
     ['finished', 'completed'].includes(selectedRace?.status || '') && hasOfficialReplayData;
   const displayEntries: DisplayRunnerRow[] = officialReplayMode
-    ? officialReplayEntries
-    : liveSimulationRunners.map((runner) => ({
-        keyId: runner.entryId,
-        lane: runner.lane,
-        displayGate: runner.displayGate,
-        horseName: runner.horseName,
-        jockeyName: runner.jockeyName,
-        silkColor: runner.silkColor,
-        rating: runner.rating,
-        carriedWeight: runner.carriedWeight,
-        progress: runner.progress,
-      }));
-  const displayRankByEntryId = officialReplayMode
-    ? new Map(officialReplayEntries.map((entry, index) => [entry.keyId, index + 1]))
-    : simulationRankByEntryId;
+    ? sortRaceDisplayRunners(officialReplayEntries)
+    : sortRaceDisplayRunners(
+        liveSimulationRunners.map((runner) => ({
+          keyId: runner.entryId,
+          lane: runner.lane,
+          displayGate: runner.displayGate,
+          horseName: runner.horseName,
+          jockeyName: runner.jockeyName,
+          silkColor: runner.silkColor,
+          rating: runner.rating,
+          carriedWeight: runner.carriedWeight,
+          progress: runner.progress,
+          finishTimeSeconds: runner.finishTimeSeconds,
+        }))
+      );
+  const displayRankByEntryId = new Map(
+    displayEntries.map((entry, index) => [entry.keyId, index + 1])
+  );
   const displayDistance =
     officialReplayMode && selectedRace?.distance
       ? selectedRace.distance

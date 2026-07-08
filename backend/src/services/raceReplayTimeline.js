@@ -145,6 +145,93 @@ const buildCheckpoints = (distanceMeters, finishTimeSeconds, positionIndex) => {
   return checkpoints;
 };
 
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+const buildCompetitiveCheckpoints = ({
+  distanceMeters,
+  finishTimeSeconds,
+  positionIndex,
+  fieldSize,
+  seed,
+}) => {
+  const checkpointSize = distanceMeters <= 1200 ? 50 : 100;
+  const rawCheckpoints = [{ distanceMeters: 0, timeSeconds: 0 }];
+  const random = mulberry32(seed || 1);
+  const styleRoll = random();
+  const phaseShift = random() * Math.PI * 2;
+
+  const style = styleRoll < 0.34
+    ? {
+        early: 1.16,
+        middle: 0.98,
+        late: 0.92,
+      }
+    : styleRoll < 0.67
+      ? {
+          early: 1.0,
+          middle: 1.0,
+          late: 1.0,
+        }
+      : {
+          early: 0.92,
+          middle: 1.0,
+          late: 1.14,
+        };
+
+  const laneBias = clamp(1.06 - positionIndex * 0.01, 0.9, 1.08);
+  const fieldBias = clamp(1 + (fieldSize - positionIndex - 1) * 0.004, 0.96, 1.06);
+
+  for (
+    let checkpointDistance = checkpointSize;
+    checkpointDistance <= distanceMeters;
+    checkpointDistance += checkpointSize
+  ) {
+    const safeDistance = Math.min(checkpointDistance, distanceMeters);
+    const progress = safeDistance / distanceMeters;
+    const earlyPhase = clamp(1 - progress / 0.42, 0, 1);
+    const middlePhase = clamp(1 - Math.abs(progress - 0.55) / 0.28, 0, 1);
+    const latePhase = clamp((progress - 0.7) / 0.3, 0, 1);
+    const tacticalVariation = 1 + Math.sin(progress * Math.PI * 4 + phaseShift) * 0.03;
+    const phaseMultiplier = clamp(
+      (style.early * earlyPhase) +
+        (style.middle * middlePhase * 0.9) +
+        (style.late * latePhase * 1.05) +
+        0.52,
+      0.82,
+      1.26
+    );
+    const segmentSpeed = (distanceMeters / finishTimeSeconds) * laneBias * fieldBias * phaseMultiplier * tacticalVariation;
+    const previous = rawCheckpoints.at(-1);
+    const segmentDistance = safeDistance - (previous?.distanceMeters || 0);
+    const previousTime = previous?.timeSeconds || 0;
+    const nextTime = previousTime + segmentDistance / Math.max(segmentSpeed, 0.001);
+
+    rawCheckpoints.push({
+      distanceMeters: safeDistance,
+      timeSeconds: nextTime,
+    });
+  }
+
+  if (rawCheckpoints.at(-1)?.distanceMeters !== distanceMeters) {
+    rawCheckpoints.push({
+      distanceMeters,
+      timeSeconds: rawCheckpoints.at(-1)?.timeSeconds || 0,
+    });
+  }
+
+  const rawElapsed = rawCheckpoints.at(-1)?.timeSeconds || finishTimeSeconds;
+  const timeScale = rawElapsed > 0 ? finishTimeSeconds / rawElapsed : 1;
+  const checkpoints = rawCheckpoints.map((checkpoint, index) => ({
+    ...checkpoint,
+    timeSeconds:
+      index === rawCheckpoints.length - 1
+        ? finishTimeSeconds
+        : checkpoint.timeSeconds * timeScale,
+  }));
+
+  return checkpoints;
+};
+
 const formatFinishTime = (seconds) => {
   const safeSeconds = Math.max(0, seconds);
   const minutes = Math.floor(safeSeconds / 60);
@@ -215,7 +302,15 @@ export const buildOfficialReplayTimeline = ({ race, entries, horses = [] }) => {
     const finishTimeSeconds = useRecordedTiming
       ? recordedFinishTimeSeconds
       : buildVisualFinishTimeSeconds(distanceMeters, surface, positionIndex, fieldSize);
-    const checkpoints = buildCheckpoints(distanceMeters, finishTimeSeconds, positionIndex);
+    const checkpoints = useRecordedTiming
+      ? buildCompetitiveCheckpoints({
+          distanceMeters,
+          finishTimeSeconds,
+          positionIndex,
+          fieldSize,
+          seed: hashRaceSeed(`${race.id}:${entry.id}:${entry.position || index + 1}`),
+        })
+      : buildCheckpoints(distanceMeters, finishTimeSeconds, positionIndex);
 
     return {
       entryId: entry.id,

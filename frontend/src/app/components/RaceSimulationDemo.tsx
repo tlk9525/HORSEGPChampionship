@@ -20,6 +20,7 @@ import {
   formatRaceSimulationTime,
   normalizeOfficialReplayRunners,
   progressForRunner,
+  sortRaceDisplayRunners,
 } from '../utils/raceSimulation';
 
 type ReplayStatus = 'ready' | 'running' | 'paused' | 'finished';
@@ -138,19 +139,10 @@ export default function RaceSimulationDemo() {
     [selectedEntries]
   );
 
-  const rankByEntryId = useMemo(
-    () => new Map(replayEntries.map((entry) => [entry.id, entry.positionValue])),
-    [replayEntries]
-  );
   const officialRows = useMemo(
     () => {
       if (replayTimelineRunners.length > 0) {
-        return [...normalizedReplayTimelineRunners]
-          .sort(
-            (a, b) =>
-              Number(a.displayGate || a.lane || 999) -
-              Number(b.displayGate || b.lane || 999)
-          )
+        return sortRaceDisplayRunners([...normalizedReplayTimelineRunners])
           .map((runner) => ({
           ...runner,
           id: runner.entryId,
@@ -159,18 +151,14 @@ export default function RaceSimulationDemo() {
         }));
       }
 
-      return [...replayEntries]
-        .sort(
-          (a, b) =>
-            Number(a.displayGate || a.lane || 999) -
-            Number(b.displayGate || b.lane || 999)
-        )
+      return sortRaceDisplayRunners([...replayEntries])
           .map((entry) => ({
           ...entry,
           id: entry.id,
           positionValue: entry.positionValue,
           displayGate: entry.displayGate ?? entry.lane ?? entry.positionValue,
           silkColor: entry.silkColor ?? '#d4af37',
+          finishTimeSeconds: entry.finishSeconds,
           progress:
             maxFinishSeconds > 0
               ? Math.min(elapsedSeconds / entry.finishSeconds, 1)
@@ -178,6 +166,10 @@ export default function RaceSimulationDemo() {
         }));
     },
     [elapsedSeconds, maxFinishSeconds, normalizedReplayTimelineRunners, replayEntries, replayTimelineRunners]
+  );
+  const displayRankByEntryId = useMemo(
+    () => new Map(officialRows.map((entry, index) => [entry.id, index + 1])),
+    [officialRows]
   );
   const officialFieldCount = replayTimelineRunners.length > 0
     ? normalizedReplayTimelineRunners.length
@@ -448,7 +440,7 @@ export default function RaceSimulationDemo() {
 
                   {officialRows.map((runner) => {
                   const visibleEntry = selectedEntriesById.get(runner.id);
-                  const rank = runner.positionValue || rankByEntryId.get(runner.id) || Number(visibleEntry?.position || 0);
+                  const rank = displayRankByEntryId.get(runner.id) || runner.positionValue || Number(visibleEntry?.position || 0);
                   const gateNumber = Number(runner.displayGate || runner.lane || visibleEntry?.lane || 0);
                   const runnerColor = runner.silkColor || '#d4af37';
 
