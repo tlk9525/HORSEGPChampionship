@@ -1,0 +1,2 @@
+ALTER TABLE "races"
+  ADD COLUMN IF NOT EXISTS "replayTimeline" JSONB;

@@ -9,11 +9,22 @@ const eventName = (raceId) => `race:${raceId}`;
 // Phát sóng cập nhật của một cuộc đua tới tất cả client đang lắng nghe qua EventEmitter
 export const broadcastRaceUpdate = (raceId) => {
   if (!raceId) return;
-  liveRaceEvents.emit(eventName(raceId), {
+  const payload = {
     raceId,
     updatedAt: new Date().toISOString(),
-  });
+  };
+
+  for (const listener of liveRaceEvents.listeners(eventName(raceId))) {
+    try {
+      listener(payload);
+    } catch (error) {
+      console.error('Failed to broadcast race update', error);
+      liveRaceEvents.off(eventName(raceId), listener);
+    }
+  }
 };
+
+export const __liveRaceEventsForTest = liveRaceEvents;
 
 // Thiết lập kết nối Server-Sent Events (SSE) để truyền sống cập nhật của cuộc đua đến client
 // Trả về một Response chuẩn Web API tương thích với Hono
@@ -31,10 +42,24 @@ export const streamRaceUpdates = (req, raceId) => {
       sendEvent({ raceId, updatedAt: new Date().toISOString(), initial: true });
 
       const heartbeat = setInterval(() => {
-        controller.enqueue(encoder.encode(': heartbeat\n\n'));
+        try {
+          controller.enqueue(encoder.encode(': heartbeat\n\n'));
+        } catch (error) {
+          clearInterval(heartbeat);
+          liveRaceEvents.off(eventName(raceId), listener);
+          controller.close();
+        }
       }, 25000);
 
-      const listener = (payload) => sendEvent(payload);
+      const listener = (payload) => {
+        try {
+          sendEvent(payload);
+        } catch (error) {
+          clearInterval(heartbeat);
+          liveRaceEvents.off(eventName(raceId), listener);
+          controller.close();
+        }
+      };
       liveRaceEvents.on(eventName(raceId), listener);
 
       // Dọn dẹp khi client ngắt kết nối

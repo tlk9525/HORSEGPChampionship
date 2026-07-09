@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import pg from 'pg';
 import { SESSION_DAYS } from './config/constants.js';
 
@@ -331,6 +332,15 @@ const upsertChangedRows = async (
   }
 };
 
+const derivedRefereeAssignmentId = (raceId, refereeUserId) => {
+  const digest = createHash('sha1')
+    .update(`${raceId}:${refereeUserId}`)
+    .digest('hex')
+    .slice(0, 24);
+
+  return `rra_${digest}`;
+};
+
 const tableDeleteOrder = [
   'notifications',
   'sessions',
@@ -355,6 +365,9 @@ export const writeDb = async (db) => {
   const client = await getPool().connect();
   const baseline = dbBaselines.get(db) || {};
   const persistedRows = new Map();
+  const baselineUsersById = new Map(
+    (baseline.users || []).map((user) => [user.id, user])
+  );
   const writeRows = async (tableName, columns, rows = []) => {
     persistedRows.set(tableName, rows);
     await upsertChangedRows(
@@ -375,6 +388,8 @@ export const writeDb = async (db) => {
       ['id', 'name', 'email', 'password', 'role', 'status', 'createdAt', 'updatedAt'],
       (db.users || []).map((user) => ({
         ...user,
+        password:
+          user.password ?? baselineUsersById.get(user.id)?.password ?? '',
         ...rowTimestamps(user),
       }))
     );
@@ -472,6 +487,7 @@ export const writeDb = async (db) => {
         'registrationClosesAt',
         'resultStatus',
         'awardsPublished',
+        'replayTimeline',
         'createdBy',
         'createdAt',
         'updatedAt',
@@ -484,6 +500,7 @@ export const writeDb = async (db) => {
         registrationClosesAt: race.registrationClosesAt || null,
         resultStatus: race.resultStatus || 'draft',
         awardsPublished: race.awardsPublished ?? false,
+        replayTimeline: race.replayTimeline || null,
         handicapMin: race.handicapMin ?? 115,
         handicapMax: race.handicapMax ?? 135,
         raceNumber: race.raceNumber || '',
@@ -572,12 +589,16 @@ export const writeDb = async (db) => {
     const derivedRefereeAssignments = (db.raceRefereeAssignments || []).length
       ? db.raceRefereeAssignments
       : (db.races || []).flatMap((race) =>
-          String(race.refereeUserIds || race.refereeUserId || '')
-            .split(',')
-            .map((refereeUserId) => refereeUserId.trim())
-            .filter(Boolean)
+          Array.from(
+            new Set(
+              String(race.refereeUserIds || race.refereeUserId || '')
+                .split(',')
+                .map((refereeUserId) => refereeUserId.trim())
+                .filter(Boolean)
+            )
+          )
             .map((refereeUserId) => ({
-              id: `rra_${race.id}_${refereeUserId}`,
+              id: derivedRefereeAssignmentId(race.id, refereeUserId),
               raceId: race.id,
               refereeUserId,
               assignedBy: race.createdBy || null,
@@ -850,13 +871,15 @@ export const persistRefereeRaceAction = async ({
        SET "status" = $2,
            "resultStatus" = $3,
            "awardsPublished" = $4,
-           "updatedAt" = $5
+           "replayTimeline" = $5,
+           "updatedAt" = $6
        WHERE "id" = $1`,
       [
         race.id,
         race.status,
         race.resultStatus || 'draft',
         Boolean(race.awardsPublished),
+        race.replayTimeline || null,
         race.updatedAt || nowIso(),
       ]
     );

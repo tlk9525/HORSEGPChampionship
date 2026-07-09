@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  useNavigate,
-  useParams,
-} from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   CirclePause,
   CirclePlay,
@@ -13,66 +10,75 @@ import {
   Trophy,
   type LucideIcon,
 } from 'lucide-react';
+
 import {
-  AuthUser,
-  HorseRecord,
   RaceEntryRecord,
   RaceRecord,
   getBootstrap,
 } from '../services/api';
-import { statusLabel as domainStatusLabel } from '../utils/domain';
 import {
-  clamp,
-  createRaceSimulationPlan,
   formatRaceSimulationTime,
-  hashRaceSeed,
-  normalizeRaceSurface,
-  parseRaceDistanceMeters,
+  normalizeOfficialReplayRunners,
   progressForRunner,
+  sortRaceDisplayRunners,
 } from '../utils/raceSimulation';
 
-type PreviewStatus = 'ready' | 'running' | 'paused' | 'finished';
-
-interface RefereeDraft {
-  id: string;
-  position: number;
-  finishTime: string;
-  notes: string;
-}
-
-interface RaceSimulationDemoProps {
-  currentUser: AuthUser | null;
-}
-
-const previewStatusLabel: Record<PreviewStatus, string> = {
-  ready: 'Ready to replay',
-  running: 'Simulation running',
-  paused: 'Simulation paused',
-  finished: 'Simulation finished',
-};
+type ReplayStatus = 'ready' | 'running' | 'paused' | 'finished';
 
 const raceSortValue = (race: RaceRecord) => {
-  const scheduledAt = new Date(`${race.date || race.raceDate || ''}T${race.time || race.raceTime || '00:00'}`).getTime();
+  const scheduledAt = new Date(
+    `${race.date || race.raceDate || ''}T${race.time || race.raceTime || '00:00'}`
+  ).getTime();
 
   return Number.isFinite(scheduledAt) ? scheduledAt : 0;
 };
 
-export default function RaceSimulationDemo({
-  currentUser,
-}: RaceSimulationDemoProps) {
+const parseFinishTimeSeconds = (value?: string) => {
+  if (!value) return Number.NaN;
+
+  const segments = value.trim().split(':');
+
+  if (segments.length === 3) {
+    const [hours, minutes, seconds] = segments.map(Number);
+    if ([hours, minutes, seconds].every(Number.isFinite)) {
+      return hours * 3600 + minutes * 60 + seconds;
+    }
+  }
+
+  if (segments.length === 2) {
+    const [minutes, seconds] = segments;
+    const parsedMinutes = Number(minutes);
+    const parsedSeconds = Number(seconds);
+
+    if (Number.isFinite(parsedMinutes) && Number.isFinite(parsedSeconds)) {
+      return parsedMinutes * 60 + parsedSeconds;
+    }
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : Number.NaN;
+};
+
+const isOfficialReplayEntry = (entry: RaceEntryRecord) =>
+  entry.status === 'approved' &&
+  entry.preRaceStatus !== 'absent' &&
+  !entry.disqualified &&
+  Number.isFinite(Number(entry.position)) &&
+  Boolean(entry.finishTime);
+
+export default function RaceSimulationDemo() {
   const { raceId } = useParams();
   const routerNavigate = useNavigate();
   const [races, setRaces] = useState<RaceRecord[]>([]);
   const [entries, setEntries] = useState<RaceEntryRecord[]>([]);
-  const [horses, setHorses] = useState<HorseRecord[]>([]);
   const [selectedRaceId, setSelectedRaceId] = useState(
     raceId || sessionStorage.getItem('selectedRaceId') || ''
   );
   const [message, setMessage] = useState('');
-  const [status, setStatus] = useState<PreviewStatus>('ready');
+  const [status, setStatus] = useState<ReplayStatus>('ready');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const [refereeDrafts, setRefereeDrafts] = useState<RefereeDraft[]>([]);
+  const frameRef = useRef<number | null>(null);
   const previousFrameRef = useRef<number | null>(null);
 
   const selectedRace = useMemo(
@@ -88,74 +94,86 @@ export default function RaceSimulationDemo({
     [entries, selectedRace?.id]
   );
 
-  const competingEntries = useMemo(
+  const replayEntries = useMemo(
     () =>
-      selectedEntries.filter(
-        (entry) =>
-          entry.status === 'approved' &&
-          entry.preRaceStatus !== 'absent' &&
-          !entry.disqualified
+    selectedEntries
+        .filter(isOfficialReplayEntry)
+        .map((entry) => ({
+          ...entry,
+          positionValue: Number(entry.position),
+          finishSeconds: parseFinishTimeSeconds(entry.finishTime),
+          displayGate: Number(entry.lane || Number(entry.position)),
+          silkColor: '#d4af37',
+        }))
+        .filter((entry) => Number.isFinite(entry.positionValue) && Number.isFinite(entry.finishSeconds))
+        .sort((a, b) => {
+          if (a.positionValue !== b.positionValue) return a.positionValue - b.positionValue;
+          if (a.finishSeconds !== b.finishSeconds) return a.finishSeconds - b.finishSeconds;
+          return Number(a.lane || 999) - Number(b.lane || 999);
+        }),
+    [selectedEntries]
+  );
+  const replayTimelineRunners = selectedRace?.replayTimeline?.runners || [];
+  const normalizedReplayTimelineRunners = useMemo(
+    () => normalizeOfficialReplayRunners(replayTimelineRunners, selectedRace),
+    [replayTimelineRunners, selectedRace?.distance, selectedRace?.surface]
+  );
+  const isCompletedReplay =
+    ['finished', 'completed'].includes(selectedRace?.status || '') &&
+    ((replayTimelineRunners.length > 0 && normalizedReplayTimelineRunners.length > 0) ||
+      replayEntries.length > 0);
+
+  const maxFinishSeconds = useMemo(
+    () =>
+      replayEntries.reduce(
+        (max, entry) => Math.max(max, entry.finishSeconds),
+        0
       ),
+    [replayEntries]
+  );
+  const timelineDurationSeconds =
+    selectedRace?.replayTimeline?.durationSeconds || maxFinishSeconds;
+
+  const selectedEntriesById = useMemo(
+    () => new Map(selectedEntries.map((entry) => [entry.id, entry])),
     [selectedEntries]
   );
 
-  const recordedDraftEntries = useMemo(
-    () =>
-      competingEntries.filter(
-        (entry) =>
-          Number.isFinite(Number(entry.position)) && Boolean(entry.finishTime)
-      ),
-    [competingEntries]
-  );
+  const officialRows = useMemo(
+    () => {
+      if (replayTimelineRunners.length > 0) {
+        return sortRaceDisplayRunners([...normalizedReplayTimelineRunners])
+          .map((runner) => ({
+          ...runner,
+          id: runner.entryId,
+          positionValue: runner.position,
+          progress: progressForRunner(runner, elapsedSeconds),
+        }));
+      }
 
-  const horseById = useMemo(
-    () => new Map(horses.map((horse) => [horse.id, horse])),
-    [horses]
-  );
-
-  const plan = useMemo(() => {
-    if (!selectedRace) {
-      return createRaceSimulationPlan({
-        seed: 1,
-        distanceMeters: 1600,
-        surface: 'Turf',
-        entries: [],
-      });
-    }
-
-    const seed = hashRaceSeed(
-      [
-        selectedRace.id,
-        selectedRace.createdAt || selectedRace.updatedAt || '',
-        selectedRace.distance || '',
-        selectedRace.surface || '',
-      ].join(':')
-    );
-
-    return createRaceSimulationPlan({
-      seed,
-      distanceMeters: parseRaceDistanceMeters(selectedRace.distance),
-      surface: normalizeRaceSurface(selectedRace.surface),
-      entries: competingEntries.map((entry) => {
-        const horse = horseById.get(entry.horseId);
-
-        return {
+      return sortRaceDisplayRunners([...replayEntries])
+          .map((entry) => ({
+          ...entry,
           id: entry.id,
-          lane: entry.lane,
-          horseName: entry.horseName,
-          jockeyName: entry.jockeyName,
-          ratingSnapshot: entry.ratingSnapshot,
-          handicap: entry.handicap,
-          horseWeightLb: entry.horseWeightLb,
-          jockeyWeightLb: entry.jockeyWeightLb,
-          horseSpeedRating: horse?.speedRating,
-          horseStaminaRating: horse?.staminaRating,
-          horseFormRating: horse?.formRating,
-          horseOverallRating: horse?.overallRating,
-        };
-      }),
-    });
-  }, [competingEntries, horseById, selectedRace]);
+          positionValue: entry.positionValue,
+          displayGate: entry.displayGate ?? entry.lane ?? entry.positionValue,
+          silkColor: entry.silkColor ?? '#d4af37',
+          finishTimeSeconds: entry.finishSeconds,
+          progress:
+            maxFinishSeconds > 0
+              ? Math.min(elapsedSeconds / entry.finishSeconds, 1)
+              : 0,
+        }));
+    },
+    [elapsedSeconds, maxFinishSeconds, normalizedReplayTimelineRunners, replayEntries, replayTimelineRunners]
+  );
+  const displayRankByEntryId = useMemo(
+    () => new Map(officialRows.map((entry, index) => [entry.id, index + 1])),
+    [officialRows]
+  );
+  const officialFieldCount = replayTimelineRunners.length > 0
+    ? normalizedReplayTimelineRunners.length
+    : replayEntries.length;
 
   useEffect(() => {
     getBootstrap()
@@ -166,7 +184,6 @@ export default function RaceSimulationDemo({
 
         setRaces(sortedRaces);
         setEntries(data.raceEntries || []);
-        setHorses(data.horses || []);
         setSelectedRaceId((current) => {
           const next = raceId || current;
 
@@ -190,11 +207,15 @@ export default function RaceSimulationDemo({
   }, [raceId]);
 
   useEffect(() => {
-    setStatus('ready');
-    setElapsedSeconds(0);
-    setRefereeDrafts([]);
+    setStatus(isCompletedReplay ? 'finished' : 'ready');
+    setElapsedSeconds(isCompletedReplay ? timelineDurationSeconds : 0);
     previousFrameRef.current = null;
-  }, [selectedRace?.id]);
+
+    if (frameRef.current !== null) {
+      window.cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
+  }, [isCompletedReplay, selectedRace?.id, timelineDurationSeconds]);
 
   useEffect(() => {
     if (status !== 'running') {
@@ -202,7 +223,7 @@ export default function RaceSimulationDemo({
       return;
     }
 
-    let frameId = 0;
+    let activeFrameId = 0;
 
     const advance = (timestamp: number) => {
       const previousTimestamp = previousFrameRef.current ?? timestamp;
@@ -210,119 +231,71 @@ export default function RaceSimulationDemo({
       previousFrameRef.current = timestamp;
 
       setElapsedSeconds((current) =>
-        Math.min(plan.durationSeconds, current + deltaSeconds * playbackSpeed)
+        Math.min(timelineDurationSeconds, current + deltaSeconds * playbackSpeed)
       );
-      frameId = window.requestAnimationFrame(advance);
+
+      activeFrameId = window.requestAnimationFrame(advance);
     };
 
-    frameId = window.requestAnimationFrame(advance);
+    activeFrameId = window.requestAnimationFrame(advance);
+    frameRef.current = activeFrameId;
 
-    return () => window.cancelAnimationFrame(frameId);
-  }, [plan.durationSeconds, playbackSpeed, status]);
+    return () => window.cancelAnimationFrame(activeFrameId);
+  }, [playbackSpeed, status, timelineDurationSeconds]);
 
   useEffect(() => {
-    if (status === 'running' && elapsedSeconds >= plan.durationSeconds) {
+    if (status === 'running' && elapsedSeconds >= timelineDurationSeconds && timelineDurationSeconds > 0) {
       setStatus('finished');
     }
-  }, [elapsedSeconds, plan.durationSeconds, status]);
+  }, [elapsedSeconds, status, timelineDurationSeconds]);
 
-  const liveRunners = plan.runners.map((runner) => ({
-    ...runner,
-    progress: progressForRunner(runner, elapsedSeconds),
-  }));
+  const progressPercent =
+    timelineDurationSeconds > 0
+      ? Math.min((elapsedSeconds / timelineDurationSeconds) * 100, 100)
+      : 0;
 
-  const rankedRunners = [...liveRunners].sort((a, b) => {
-    if (elapsedSeconds === 0) return a.lane - b.lane;
-    if (b.progress !== a.progress) return b.progress - a.progress;
-    return a.finishTimeSeconds - b.finishTimeSeconds;
-  });
-
-  const rankByRunnerId = new Map(
-    rankedRunners.map((runner, index) => [runner.entryId, index + 1])
-  );
-  const progressPercent = plan.durationSeconds > 0
-    ? clamp((elapsedSeconds / plan.durationSeconds) * 100, 0, 100)
-    : 0;
   const summaryCards: Array<{
     label: string;
     value: string;
     Icon: LucideIcon;
   }> = [
-    { label: 'Status', value: previewStatusLabel[status], Icon: Gauge },
+    { label: 'Status', value: status === 'running' ? 'Running' : status === 'paused' ? 'Paused' : status === 'finished' ? 'Finished' : 'Ready', Icon: Gauge },
     { label: 'Elapsed', value: formatRaceSimulationTime(elapsedSeconds), Icon: Clock3 },
     {
       label: 'Race status',
-      value: selectedRace ? domainStatusLabel(selectedRace.status) : '-',
+      value: selectedRace?.status || '-',
       Icon: Trophy,
     },
     {
-      label: 'Field',
-      value: `${plan.runners.length}/${selectedEntries.length}`,
+      label: 'Official field',
+      value: `${officialFieldCount}/${selectedEntries.length}`,
       Icon: ShieldCheck,
     },
   ];
-  const assignedRefereeIds = String(
-    selectedRace?.refereeUserIds || selectedRace?.refereeUserId || ''
-  )
-    .split(',')
-    .map((id) => id.trim())
-    .filter(Boolean);
-  const canPreviewRefereeDraft =
-    currentUser?.role === 'referee' &&
-    Boolean(selectedRace?.id) &&
-    assignedRefereeIds.includes(currentUser.id) &&
-    selectedRace?.status === 'finished' &&
-    selectedRace?.resultStatus === 'draft';
-  const canRunPreview = plan.runners.length > 0;
 
-  const resetRace = () => {
+  const resetReplay = () => {
     setStatus('ready');
     setElapsedSeconds(0);
-    setRefereeDrafts([]);
     previousFrameRef.current = null;
+    if (frameRef.current !== null) {
+      window.cancelAnimationFrame(frameRef.current);
+      frameRef.current = null;
+    }
   };
+
+  const primaryActionLabel =
+    status === 'running'
+      ? 'Pause'
+      : status === 'paused'
+        ? 'Resume replay'
+        : status === 'finished'
+          ? 'Replay complete'
+          : 'Play replay';
 
   const selectRace = (nextRaceId: string) => {
     sessionStorage.setItem('selectedRaceId', nextRaceId);
     setSelectedRaceId(nextRaceId);
     routerNavigate(`/simulation-demo/${nextRaceId}`);
-  };
-
-  const loadRefereeDraft = () => {
-    if (recordedDraftEntries.length === 0) {
-      setRefereeDrafts([]);
-      setMessage('No provisional results have been recorded for this race yet.');
-      return;
-    }
-
-    const sourceRows = [...recordedDraftEntries].sort((a, b) => {
-      const positionA = Number(a.position || 999);
-      const positionB = Number(b.position || 999);
-
-      if (positionA !== positionB) return positionA - positionB;
-
-      return String(a.finishTime || '').localeCompare(String(b.finishTime || ''));
-    });
-
-    setRefereeDrafts(
-      sourceRows.map((runner, index) => ({
-        id: runner.id,
-        position: Number.isFinite(Number(runner.position)) ? Number(runner.position) : index + 1,
-        finishTime: runner.finishTime || '',
-        notes: '',
-      }))
-    );
-  };
-
-  const updateDraft = (
-    runnerId: string,
-    patch: Partial<Omit<RefereeDraft, 'id'>>
-  ) => {
-    setRefereeDrafts((current) =>
-      current.map((draft) =>
-        draft.id === runnerId ? { ...draft, ...patch } : draft
-      )
-    );
   };
 
   return (
@@ -333,18 +306,18 @@ export default function RaceSimulationDemo({
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-2 rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-xs font-black uppercase tracking-[0.18em] text-cyan-300">
                 <Gauge className="h-4 w-4" />
-                Race-linked replay
+                Race Replay
               </span>
               <span className="rounded-full border border-amber-300/25 bg-amber-300/10 px-3 py-1 text-xs font-bold text-amber-200">
-                Read-only • No database writes
+                Read-only • Official results only
               </span>
             </div>
 
             <h1 className="text-3xl font-black tracking-tight sm:text-5xl">
-              {selectedRace?.name || 'Race Simulation'}
+              {selectedRace?.name || 'Race Replay'}
             </h1>
             <p className="mt-2 max-w-3xl text-gray-400">
-              Uses the selected race&apos;s distance, surface, gates, ratings and assigned weights.
+              Uses the race&apos;s recorded positions and finish times. The animation is visual only.
             </p>
           </div>
 
@@ -399,14 +372,14 @@ export default function RaceSimulationDemo({
                 <Icon className="h-4 w-4 text-[#d4af37]" />
                 {label}
               </div>
-              <div className="mt-2 text-xl font-black text-white">{value}</div>
+          <div className="mt-2 text-xl font-black text-white">{value}</div>
             </div>
           ))}
         </div>
 
         {!selectedRace ? (
           <div className="rounded-3xl border border-white/10 bg-[#0b223d] p-8 text-gray-400">
-            No race is available for this role yet.
+            No race is available for replay yet.
           </div>
         ) : (
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr),340px]">
@@ -415,10 +388,10 @@ export default function RaceSimulationDemo({
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <div className="text-sm font-black uppercase tracking-[0.2em] text-[#d4af37]">
-                      {plan.distanceMeters.toLocaleString()}m • {plan.surface} • {selectedRace.raceClass || 'Race class pending'}
+                      {selectedRace.distance || 'Distance pending'} • {selectedRace.surface || 'Surface pending'} • {selectedRace.raceClass || 'Race class pending'}
                     </div>
                     <div className="mt-1 text-sm text-gray-400">
-                      Checkpoints every {plan.distanceMeters <= 1200 ? 50 : 100}m • live order is visual only.
+                      Official replay order comes from saved positions; movement is visual only.
                     </div>
                   </div>
 
@@ -429,7 +402,7 @@ export default function RaceSimulationDemo({
                           current === 'running' ? 'paused' : 'running'
                         )
                       }
-                      disabled={status === 'finished' || !canRunPreview}
+                      disabled={replayEntries.length === 0 || status === 'finished'}
                       className="inline-flex items-center gap-2 rounded-xl bg-[#d4af37] px-5 py-3 font-black text-[#071a2f] transition hover:bg-[#e7c95d] disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {status === 'running' ? (
@@ -437,15 +410,11 @@ export default function RaceSimulationDemo({
                       ) : (
                         <CirclePlay className="h-5 w-5" />
                       )}
-                      {status === 'running'
-                        ? 'Pause'
-                        : status === 'paused'
-                          ? 'Resume replay'
-                          : 'Play replay'}
+                      {primaryActionLabel}
                     </button>
 
                     <button
-                      onClick={resetRace}
+                      onClick={resetReplay}
                       className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-bold text-white hover:bg-white/10"
                     >
                       <RefreshCcw className="h-5 w-5" />
@@ -463,33 +432,39 @@ export default function RaceSimulationDemo({
               </div>
 
               <div className="space-y-2 p-3 sm:p-5">
-                {liveRunners.length === 0 && (
+                {replayEntries.length === 0 && (
                   <div className="rounded-2xl border border-dashed border-white/15 bg-[#071a2f] p-6 text-center text-gray-500">
-                    This race has no visible approved runners to simulate yet.
+                    This race has no official results yet.
                   </div>
                 )}
 
-                {liveRunners.map((runner) => {
-                  const rank = rankByRunnerId.get(runner.entryId);
+                  {officialRows.map((runner) => {
+                  const visibleEntry = selectedEntriesById.get(runner.id);
+                  const rank = displayRankByEntryId.get(runner.id) || runner.positionValue || Number(visibleEntry?.position || 0);
+                  const gateNumber = Number(runner.displayGate || runner.lane || visibleEntry?.lane || 0);
+                  const runnerColor = runner.silkColor || '#d4af37';
 
                   return (
                     <div
-                      key={runner.entryId}
-                      className="grid grid-cols-[38px,minmax(0,1fr),44px] items-center gap-2 rounded-2xl border border-white/[0.07] bg-[#071a2f] p-2 sm:grid-cols-[44px,180px,minmax(0,1fr),54px] sm:gap-3 sm:p-3"
+                      key={runner.id}
+                      className="grid grid-cols-[38px,minmax(0,1fr),54px] items-center gap-2 rounded-2xl border border-white/[0.07] bg-[#071a2f] p-2 sm:grid-cols-[44px,180px,minmax(0,1fr),54px] sm:gap-3 sm:p-3"
                     >
                       <div
                         className="flex h-9 w-9 items-center justify-center rounded-xl text-sm font-black text-[#071a2f]"
-                        style={{ backgroundColor: runner.silkColor }}
+                        style={{
+                          backgroundColor: runnerColor,
+                          boxShadow: `0 0 0 1px ${runnerColor}55 inset`,
+                        }}
                       >
-                        {runner.lane}
+                        {gateNumber || '-'}
                       </div>
 
                       <div className="hidden min-w-0 sm:block">
                         <div className="truncate font-black text-white">
-                          {runner.horseName}
+                          {visibleEntry?.horseName || runner.horseName}
                         </div>
                         <div className="truncate text-xs text-gray-400">
-                          {runner.jockeyName} • R{runner.rating} • {runner.carriedWeight}lb
+                          {visibleEntry?.jockeyName || runner.jockeyName} • Position {rank} • {visibleEntry?.finishTime}
                         </div>
                       </div>
 
@@ -502,18 +477,16 @@ export default function RaceSimulationDemo({
                       >
                         <div className="absolute inset-y-0 left-[18px] right-[18px]">
                           <div
-                            data-finish-line
                             className="absolute inset-y-0 right-0 z-20 w-1 translate-x-1/2 bg-[repeating-linear-gradient(0deg,#fff_0_4px,#111_4px_8px)] opacity-80"
                           />
                           <div
-                            data-runner-marker={runner.entryId}
                             className="absolute top-1/2 z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-lg"
                             style={{
-                              left: `${runner.progress * 100}%`,
-                              backgroundColor: runner.silkColor,
-                              boxShadow: `0 0 18px ${runner.silkColor}80`,
+                            left: `${runner.progress * 100}%`,
+                              backgroundColor: runnerColor,
+                              boxShadow: `0 0 18px ${runnerColor}80`,
                             }}
-                            title={`${runner.horseName}: ${Math.round(runner.progress * 100)}%`}
+                            title={`${visibleEntry?.horseName || runner.horseName}: ${Math.round(runner.progress * 100)}%`}
                           >
                             <span className="text-base">♞</span>
                           </div>
@@ -542,32 +515,29 @@ export default function RaceSimulationDemo({
               <div className="rounded-3xl border border-white/10 bg-[#0b223d] p-5">
                 <div className="mb-4 flex items-center gap-2">
                   <Trophy className="h-5 w-5 text-[#d4af37]" />
-                  <h2 className="text-xl font-black">Live leaderboard</h2>
+                  <h2 className="text-xl font-black">Official leaderboard</h2>
                 </div>
 
                 <div className="space-y-2">
-                  {rankedRunners.length === 0 && (
+                  {replayEntries.length === 0 && (
                     <div className="rounded-xl border border-dashed border-white/15 bg-[#071a2f] p-4 text-sm text-gray-500">
-                      Waiting for race entries.
+                      Waiting for official results.
                     </div>
                   )}
 
-                  {rankedRunners.map((runner, index) => (
+                  {replayEntries.map((runner, index) => (
                     <div
-                      key={runner.entryId}
+                      key={runner.id}
                       className={`grid grid-cols-[32px,12px,1fr] items-center gap-3 rounded-xl border p-3 ${
                         index === 0
                           ? 'border-[#d4af37]/30 bg-[#d4af37]/10'
                           : 'border-white/[0.06] bg-[#071a2f]'
                       }`}
                     >
-                      <span className="font-black text-white">{index + 1}</span>
-                      <span
-                        className="h-3 w-3 rounded-full"
-                        style={{ backgroundColor: runner.silkColor }}
-                      />
+                      <span className="font-black text-white">{runner.positionValue}</span>
+                      <span className="h-3 w-3 rounded-full" style={{ backgroundColor: runner.silkColor || '#d4af37' }} />
                       <span className="truncate text-sm font-bold text-gray-200">
-                        {runner.horseName}
+                        {runner.horseName} • {runner.finishTime}
                       </span>
                     </div>
                   ))}
@@ -580,109 +550,11 @@ export default function RaceSimulationDemo({
                   <h2 className="font-black">Integration boundary</h2>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-gray-300">
-                  This preview reads race data but never changes race status,
-                  official rating, handicap, results, or referee reports.
+                  This replay reads official raceEntries and never changes race status, results, or referee reports.
                 </p>
               </div>
             </aside>
           </div>
-        )}
-
-        {selectedRace && canPreviewRefereeDraft && (
-          <section className="mt-6 rounded-3xl border border-white/10 bg-[#0b223d] p-5 sm:p-6">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="h-6 w-6 text-[#d4af37]" />
-                  <h2 className="text-2xl font-black">Referee confirmation box</h2>
-                </div>
-                <p className="mt-2 text-sm text-gray-400">
-                  Only the referee assigned to this race can load and confirm the provisional rank and time saved on this race.
-                </p>
-              </div>
-
-              <button
-                onClick={loadRefereeDraft}
-                disabled={status !== 'finished' || !canRunPreview}
-                className="rounded-xl bg-white px-5 py-3 font-black text-[#071a2f] transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-30"
-              >
-                Load provisional results
-              </button>
-            </div>
-
-            {refereeDrafts.length === 0 ? (
-              <div className="mt-5 rounded-2xl border border-dashed border-white/15 bg-[#071a2f] p-6 text-center text-gray-500">
-                Finish the preview to inspect the referee form.
-              </div>
-            ) : (
-              <div className="mt-5 overflow-x-auto">
-                <table className="w-full min-w-[760px] text-left">
-                  <thead className="text-xs uppercase tracking-wider text-gray-500">
-                    <tr>
-                      <th className="px-3 py-3">Horse</th>
-                      <th className="px-3 py-3">Position</th>
-                      <th className="px-3 py-3">Finish time</th>
-                      <th className="px-3 py-3">Referee notes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {refereeDrafts.map((draft) => {
-                      const runner = plan.runners.find((item) => item.entryId === draft.id);
-
-                      if (!runner) return null;
-
-                      return (
-                        <tr key={draft.id} className="border-t border-white/[0.07]">
-                          <td className="px-3 py-3 font-bold text-white">
-                            {runner.horseName}
-                          </td>
-                          <td className="px-3 py-3">
-                            <input
-                              type="number"
-                              min={1}
-                              max={plan.runners.length}
-                              value={draft.position}
-                              onChange={(event) =>
-                                updateDraft(draft.id, {
-                                  position: Number(event.target.value),
-                                })
-                              }
-                              className="w-24 rounded-xl border border-white/10 bg-[#071a2f] px-3 py-2 text-white"
-                            />
-                          </td>
-                          <td className="px-3 py-3">
-                            <input
-                              value={draft.finishTime}
-                              onChange={(event) =>
-                                updateDraft(draft.id, {
-                                  finishTime: event.target.value,
-                                })
-                              }
-                              className="w-36 rounded-xl border border-white/10 bg-[#071a2f] px-3 py-2 text-white"
-                            />
-                          </td>
-                          <td className="px-3 py-3">
-                            <input
-                              value={draft.notes}
-                              onChange={(event) =>
-                                updateDraft(draft.id, { notes: event.target.value })
-                              }
-                              placeholder="Incident or correction"
-                              className="w-full min-w-[240px] rounded-xl border border-white/10 bg-[#071a2f] px-3 py-2 text-white"
-                            />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-
-                <div className="mt-4 rounded-xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm font-semibold text-amber-100">
-                  Preview only: there is intentionally no submit endpoint on this branch.
-                </div>
-              </div>
-            )}
-          </section>
         )}
       </div>
     </div>
