@@ -5,6 +5,7 @@ export const API_HOST =
 export const API_PORT = Number(process.env.PORT || process.env.API_PORT || 4000);
 export const FRONTEND_URL = process.env.FRONTEND_URL || 'http://127.0.0.1:5173/';
 export const MAX_RACE_FIELD_SIZE = Number(process.env.MAX_RACE_FIELD_SIZE || 10);
+export const MIN_READIED_PARTICIPANTS = Number(process.env.MIN_READIED_PARTICIPANTS || 5);
 export const MAX_TOURNAMENT_RACES = Number(process.env.MAX_TOURNAMENT_RACES || 10);
 export const MAX_OWNER_HORSES = Number(process.env.MAX_OWNER_HORSES || 10);
 export const SESSION_DAYS = Number(process.env.SESSION_DAYS || 7);

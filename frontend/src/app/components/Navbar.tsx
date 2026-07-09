@@ -50,7 +50,19 @@ export default function Navbar({
 
   useEffect(() => {
     loadNotifications();
+    if (!currentUser) return;
+
+    const intervalId = window.setInterval(() => {
+      loadNotifications();
+    }, 10000);
+
+    return () => window.clearInterval(intervalId);
   }, [currentUser?.id]);
+
+  useEffect(() => {
+    if (!isNotificationsOpen) return;
+    loadNotifications();
+  }, [isNotificationsOpen]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

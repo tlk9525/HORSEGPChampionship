@@ -571,7 +571,13 @@ export const deleteRace = async (raceId: string) =>
 // Admin đóng đăng ký, publish race và duyệt kết quả cuối cùng
 export const adminRaceAction = async (
   raceId: string,
-  action: 'close-registration' | 'publish' | 'start-race' | 'finish-race' | 'complete-results'
+  action:
+    | 'close-registration'
+    | 'publish'
+    | 'start-race'
+    | 'finish-race'
+    | 'complete-results'
+    | 'cancel-race'
 ) =>
   request<{ race: RaceRecord; entries: RaceEntryRecord[]; notifications: NotificationItem[] }>(
     `/admin/races/${raceId}/${action}`,

@@ -4,6 +4,7 @@ import {
   ACTIVE_TOURNAMENT_STATUSES,
   MAX_RACE_FIELD_SIZE,
   MAX_TOURNAMENT_RACES,
+  MIN_READIED_PARTICIPANTS,
   RACE_CLASSES,
   RACE_CLASS_WEIGHT_RANGES,
 } from '../config/constants.js';
@@ -520,6 +521,7 @@ export const createAdminRoutes = (getDb, writeDb) => {
       'start-race',
       'finish-race',
       'complete-results',
+      'cancel-race',
     ];
 
     if (!validActions.includes(action)) return c.json({ message: 'Invalid action' }, 400);
@@ -655,7 +657,25 @@ export const createAdminRoutes = (getDb, writeDb) => {
       if (uncheckedEntries.length > 0) {
         return c.json({ message: 'Every participant must be marked Ready or Absent before starting the race' }, 400);
       }
+      if(readyEntries.length < MIN_READIED_PARTICIPANTS) {
+        race.status = 'cancelled';
+        race.updatedAt = new Date().toISOString();
+        const recipientIds = new Set();
+          entries.forEach((entry) => {
+        const horse = db.horses.find((item) => item.id === entry.horseId);
+        if (horse?.ownerUserId) recipientIds.add(horse.ownerUserId);
+        if (entry.jockeyUserId) recipientIds.add(entry.jockeyUserId);
+        });
+       raceRefereeIds(db, race).forEach((refereeId) => recipientIds.add(refereeId));
+        db.users
+      .filter((item) => ['admin', 'spectator'].includes(item.role))
+        .forEach((item) => recipientIds.add(item.id));
 
+       recipientIds.forEach((userId) =>createNotification(db,userId,'Race cancelled',
+      `${race.name} has been cancelled due to insufficient participants. Only ${readyEntries.length} participants were marked Ready, but at least ${MIN_READIED_PARTICIPANTS} are required.`
+      )
+      );
+      }else{
       race.status = 'in-progress';
       race.updatedAt = new Date().toISOString();
       entries.forEach((entry) => {
@@ -677,7 +697,33 @@ export const createAdminRoutes = (getDb, writeDb) => {
         )
       );
     }
+    }
+    if(action === 'cancel-race'){
+      if(race.status === 'in-progress' || race.status === 'finished' || race.status === 'completed'){
+        return c.json({ message: 'The race has started and cannot be cancelled.'}, 400);
+    }
+    race.status = 'cancelled';
+        race.updatedAt = new Date().toISOString();
+        const recipientIds = new Set();
+          entries.forEach((entry) => {
+        const horse = db.horses.find((item) => item.id === entry.horseId);
+        if (horse?.ownerUserId) recipientIds.add(horse.ownerUserId);
+        if (entry.jockeyUserId) recipientIds.add(entry.jockeyUserId);
+        });
+       raceRefereeIds(db, race).forEach((refereeId) => recipientIds.add(refereeId));
+        db.users
+      .filter((item) => ['admin', 'spectator'].includes(item.role))
+        .forEach((item) => recipientIds.add(item.id));
 
+       recipientIds.forEach((userId) =>
+      createNotification(
+      db,
+      userId,
+      'Race cancelled',
+      `${race.name} has been cancelled by the admin`
+      )
+      );
+  }
     if (action === 'finish-race') {
       if (race.status !== 'in-progress') {
         return c.json({ message: 'Only an in-progress race can be finished' }, 400);
