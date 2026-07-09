@@ -180,6 +180,7 @@ export interface RaceReplayCheckpoint {
 export interface RaceReplayRunner {
   entryId: string;
   lane: number;
+  displayGate?: number;
   horseName: string;
   jockeyName: string;
   silkColor: string;

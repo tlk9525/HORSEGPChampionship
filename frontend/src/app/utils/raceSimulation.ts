@@ -25,6 +25,7 @@ export interface RaceCheckpoint {
 export interface RaceSimulationRunner {
   entryId: string;
   lane: number;
+  displayGate: number;
   horseName: string;
   jockeyName: string;
   silkColor: string;
@@ -45,6 +46,15 @@ export interface RaceSimulationPlan {
   surface: RaceSurface;
   durationSeconds: number;
   runners: RaceSimulationRunner[];
+}
+
+interface RaceDisplayRunnerLike {
+  progress?: number;
+  finishTimeSeconds?: number;
+  lane?: number | null;
+  displayGate?: number | null;
+  entryId?: string;
+  keyId?: string;
 }
 
 const baseSpeedBySurface: Record<RaceSurface, number> = {
@@ -106,8 +116,34 @@ const mulberry32 = (seed: number) => {
   };
 };
 
+const shuffleValues = <T,>(values: T[], seed: number) => {
+  const random = mulberry32(seed || 1);
+  const next = [...values];
+
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+
+  if (
+    next.length > 1 &&
+    next.every((value, index) => value === values[index])
+  ) {
+    const [first, ...rest] = next;
+    return [...rest, first];
+  }
+
+  return next;
+};
+
 const numericRating = (value: number | null | undefined, fallback = 75) =>
   Number.isFinite(Number(value)) ? Number(value) : fallback;
+
+const buildVisualGateOrder = (seed: number, fieldSize: number) =>
+  shuffleValues(
+    Array.from({ length: fieldSize }, (_, index) => index + 1),
+    seed
+  );
 
 export const formatRaceSimulationTime = (seconds: number) => {
   const safeSeconds = Math.max(0, seconds);
@@ -133,6 +169,7 @@ export const createRaceSimulationPlan = ({
   const sortedEntries = [...entries].sort(
     (a, b) => Number(a.lane || 999) - Number(b.lane || 999)
   );
+  const visualGates = buildVisualGateOrder(seed, sortedEntries.length);
 
   const scoredRunners = sortedEntries.map((entry, index) => {
     const rating = numericRating(
@@ -162,9 +199,10 @@ export const createRaceSimulationPlan = ({
     return {
       entryId: entry.id,
       lane: entry.lane || index + 1,
+      displayGate: visualGates[index] || index + 1,
       horseName: entry.horseName || `Horse ${index + 1}`,
       jockeyName: entry.jockeyName || 'Jockey pending',
-      silkColor: silkPalette[index % silkPalette.length],
+      silkColor: silkPalette[((visualGates[index] || index + 1) - 1) % silkPalette.length],
       rating,
       carriedWeight,
       speed,
@@ -301,6 +339,32 @@ export const progressForRunner = (
   return clamp(currentDistance / runner.checkpoints.at(-1)!.distanceMeters, 0, 1);
 };
 
+export const sortRaceDisplayRunners = <T extends RaceDisplayRunnerLike>(runners: T[]) =>
+  [...runners].sort((a, b) => {
+    const progressA = Number(a.progress ?? 0);
+    const progressB = Number(b.progress ?? 0);
+
+    if (Math.abs(progressB - progressA) > 0.0001) {
+      return progressB - progressA;
+    }
+
+    const finishTimeA = Number(a.finishTimeSeconds ?? Number.POSITIVE_INFINITY);
+    const finishTimeB = Number(b.finishTimeSeconds ?? Number.POSITIVE_INFINITY);
+
+    if (finishTimeA !== finishTimeB) {
+      return finishTimeA - finishTimeB;
+    }
+
+    const gateA = Number(a.displayGate ?? a.lane ?? 999);
+    const gateB = Number(b.displayGate ?? b.lane ?? 999);
+
+    if (gateA !== gateB) {
+      return gateA - gateB;
+    }
+
+    return String(a.entryId || a.keyId || '').localeCompare(String(b.entryId || b.keyId || ''));
+  });
+
 const parseReplayTimeSeconds = (value?: string) => {
   if (!value) return Number.NaN;
 
@@ -392,6 +456,8 @@ export const normalizeOfficialReplayRunners = (
     }
     return Number(a.finishTimeSeconds || 0) - Number(b.finishTimeSeconds || 0);
   });
+  const distanceMeters = parseRaceDistanceMeters(race?.distance);
+  const surface = normalizeRaceSurface(race?.surface);
 
   const recordedTimes = sortedRunners.map((runner) =>
     parseReplayTimeSeconds(runner.finishTime)
@@ -412,16 +478,23 @@ export const normalizeOfficialReplayRunners = (
     hasRecordedTimes && rawSpread <= 20 && largestGap <= 10;
 
   if (useRecordedTiming) {
-    return sortedRunners.map((runner) => ({
+    return sortedRunners.map((runner, index) => ({
       ...runner,
+      displayGate: runner.displayGate || index + 1,
       finishTimeSeconds: parseReplayTimeSeconds(runner.finishTime),
+      checkpoints:
+        Array.isArray(runner.checkpoints) && runner.checkpoints.length > 0
+          ? runner.checkpoints
+          : buildOfficialCheckpoints(
+              distanceMeters,
+              parseReplayTimeSeconds(runner.finishTime),
+              index
+            ),
     }));
   }
 
-  const distanceMeters = parseRaceDistanceMeters(race?.distance);
-  const surface = normalizeRaceSurface(race?.surface);
-
   return sortedRunners.map((runner, index) => {
+    const displayGate = index + 1;
     const finishTimeSeconds = buildVisualFinishTimeSeconds(
       distanceMeters,
       surface,
@@ -431,6 +504,7 @@ export const normalizeOfficialReplayRunners = (
 
     return {
       ...runner,
+      displayGate,
       finishTimeSeconds,
       finishTime: formatRaceSimulationTime(finishTimeSeconds),
       checkpoints: buildOfficialCheckpoints(
@@ -438,6 +512,7 @@ export const normalizeOfficialReplayRunners = (
         finishTimeSeconds,
         index
       ),
+      silkColor: silkPalette[index % silkPalette.length],
     };
   });
 };

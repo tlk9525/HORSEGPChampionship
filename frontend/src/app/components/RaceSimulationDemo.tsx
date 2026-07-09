@@ -20,6 +20,7 @@ import {
   formatRaceSimulationTime,
   normalizeOfficialReplayRunners,
   progressForRunner,
+  sortRaceDisplayRunners,
 } from '../utils/raceSimulation';
 
 type ReplayStatus = 'ready' | 'running' | 'paused' | 'finished';
@@ -95,12 +96,14 @@ export default function RaceSimulationDemo() {
 
   const replayEntries = useMemo(
     () =>
-      selectedEntries
+    selectedEntries
         .filter(isOfficialReplayEntry)
         .map((entry) => ({
           ...entry,
           positionValue: Number(entry.position),
           finishSeconds: parseFinishTimeSeconds(entry.finishTime),
+          displayGate: Number(entry.lane || Number(entry.position)),
+          silkColor: '#d4af37',
         }))
         .filter((entry) => Number.isFinite(entry.positionValue) && Number.isFinite(entry.finishSeconds))
         .sort((a, b) => {
@@ -115,6 +118,10 @@ export default function RaceSimulationDemo() {
     () => normalizeOfficialReplayRunners(replayTimelineRunners, selectedRace),
     [replayTimelineRunners, selectedRace?.distance, selectedRace?.surface]
   );
+  const isCompletedReplay =
+    ['finished', 'completed'].includes(selectedRace?.status || '') &&
+    ((replayTimelineRunners.length > 0 && normalizedReplayTimelineRunners.length > 0) ||
+      replayEntries.length > 0);
 
   const maxFinishSeconds = useMemo(
     () =>
@@ -132,15 +139,10 @@ export default function RaceSimulationDemo() {
     [selectedEntries]
   );
 
-  const rankByEntryId = useMemo(
-    () => new Map(replayEntries.map((entry) => [entry.id, entry.positionValue])),
-    [replayEntries]
-  );
   const officialRows = useMemo(
     () => {
       if (replayTimelineRunners.length > 0) {
-        return [...normalizedReplayTimelineRunners]
-          .sort((a, b) => Number(a.lane || 999) - Number(b.lane || 999))
+        return sortRaceDisplayRunners([...normalizedReplayTimelineRunners])
           .map((runner) => ({
           ...runner,
           id: runner.entryId,
@@ -149,12 +151,14 @@ export default function RaceSimulationDemo() {
         }));
       }
 
-      return [...replayEntries]
-        .sort((a, b) => Number(a.lane || 999) - Number(b.lane || 999))
-        .map((entry) => ({
+      return sortRaceDisplayRunners([...replayEntries])
+          .map((entry) => ({
           ...entry,
           id: entry.id,
           positionValue: entry.positionValue,
+          displayGate: entry.displayGate ?? entry.lane ?? entry.positionValue,
+          silkColor: entry.silkColor ?? '#d4af37',
+          finishTimeSeconds: entry.finishSeconds,
           progress:
             maxFinishSeconds > 0
               ? Math.min(elapsedSeconds / entry.finishSeconds, 1)
@@ -162,6 +166,10 @@ export default function RaceSimulationDemo() {
         }));
     },
     [elapsedSeconds, maxFinishSeconds, normalizedReplayTimelineRunners, replayEntries, replayTimelineRunners]
+  );
+  const displayRankByEntryId = useMemo(
+    () => new Map(officialRows.map((entry, index) => [entry.id, index + 1])),
+    [officialRows]
   );
   const officialFieldCount = replayTimelineRunners.length > 0
     ? normalizedReplayTimelineRunners.length
@@ -199,15 +207,15 @@ export default function RaceSimulationDemo() {
   }, [raceId]);
 
   useEffect(() => {
-    setStatus('ready');
-    setElapsedSeconds(0);
+    setStatus(isCompletedReplay ? 'finished' : 'ready');
+    setElapsedSeconds(isCompletedReplay ? timelineDurationSeconds : 0);
     previousFrameRef.current = null;
 
     if (frameRef.current !== null) {
       window.cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
     }
-  }, [selectedRace?.id]);
+  }, [isCompletedReplay, selectedRace?.id, timelineDurationSeconds]);
 
   useEffect(() => {
     if (status !== 'running') {
@@ -274,6 +282,15 @@ export default function RaceSimulationDemo() {
       frameRef.current = null;
     }
   };
+
+  const primaryActionLabel =
+    status === 'running'
+      ? 'Pause'
+      : status === 'paused'
+        ? 'Resume replay'
+        : status === 'finished'
+          ? 'Replay complete'
+          : 'Play replay';
 
   const selectRace = (nextRaceId: string) => {
     sessionStorage.setItem('selectedRaceId', nextRaceId);
@@ -393,11 +410,7 @@ export default function RaceSimulationDemo() {
                       ) : (
                         <CirclePlay className="h-5 w-5" />
                       )}
-                      {status === 'running'
-                        ? 'Pause'
-                        : status === 'paused'
-                          ? 'Resume replay'
-                          : 'Play replay'}
+                      {primaryActionLabel}
                     </button>
 
                     <button
@@ -427,15 +440,23 @@ export default function RaceSimulationDemo() {
 
                   {officialRows.map((runner) => {
                   const visibleEntry = selectedEntriesById.get(runner.id);
-                  const rank = runner.positionValue || rankByEntryId.get(runner.id) || Number(visibleEntry?.position || 0);
+                  const rank = displayRankByEntryId.get(runner.id) || runner.positionValue || Number(visibleEntry?.position || 0);
+                  const gateNumber = Number(runner.displayGate || runner.lane || visibleEntry?.lane || 0);
+                  const runnerColor = runner.silkColor || '#d4af37';
 
                   return (
                     <div
                       key={runner.id}
                       className="grid grid-cols-[38px,minmax(0,1fr),54px] items-center gap-2 rounded-2xl border border-white/[0.07] bg-[#071a2f] p-2 sm:grid-cols-[44px,180px,minmax(0,1fr),54px] sm:gap-3 sm:p-3"
                     >
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#d4af37] text-sm font-black text-[#071a2f]">
-                        {visibleEntry?.lane || runner.lane || '-'}
+                      <div
+                        className="flex h-9 w-9 items-center justify-center rounded-xl text-sm font-black text-[#071a2f]"
+                        style={{
+                          backgroundColor: runnerColor,
+                          boxShadow: `0 0 0 1px ${runnerColor}55 inset`,
+                        }}
+                      >
+                        {gateNumber || '-'}
                       </div>
 
                       <div className="hidden min-w-0 sm:block">
@@ -462,8 +483,8 @@ export default function RaceSimulationDemo() {
                             className="absolute top-1/2 z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-lg"
                             style={{
                             left: `${runner.progress * 100}%`,
-                              backgroundColor: '#d4af37',
-                              boxShadow: '0 0 18px rgba(212,175,55,0.5)',
+                              backgroundColor: runnerColor,
+                              boxShadow: `0 0 18px ${runnerColor}80`,
                             }}
                             title={`${visibleEntry?.horseName || runner.horseName}: ${Math.round(runner.progress * 100)}%`}
                           >
@@ -514,7 +535,7 @@ export default function RaceSimulationDemo() {
                       }`}
                     >
                       <span className="font-black text-white">{runner.positionValue}</span>
-                      <span className="h-3 w-3 rounded-full bg-[#d4af37]" />
+                      <span className="h-3 w-3 rounded-full" style={{ backgroundColor: runner.silkColor || '#d4af37' }} />
                       <span className="truncate text-sm font-bold text-gray-200">
                         {runner.horseName} • {runner.finishTime}
                       </span>
