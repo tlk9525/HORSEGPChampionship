@@ -255,6 +255,216 @@ const buildVisualFinishTimeSeconds = (
   return winnerSeconds + spreadSeconds * easing;
 };
 
+const numericRating = (value, fallback = 75) =>
+  Number.isFinite(Number(value)) ? Number(value) : fallback;
+
+const scaleCheckpointsToFinish = (checkpoints, finishTimeSeconds, distanceMeters) => {
+  if (!Array.isArray(checkpoints) || checkpoints.length < 2) {
+    return null;
+  }
+
+  const lastCheckpoint = checkpoints.at(-1);
+  const previousFinishSeconds = Number(lastCheckpoint?.timeSeconds);
+  const scale =
+    Number.isFinite(previousFinishSeconds) && previousFinishSeconds > 0
+      ? finishTimeSeconds / previousFinishSeconds
+      : 1;
+
+  return checkpoints.map((checkpoint, index) => ({
+    distanceMeters: Number(checkpoint.distanceMeters) || (index === checkpoints.length - 1 ? distanceMeters : 0),
+    timeSeconds:
+      index === checkpoints.length - 1
+        ? finishTimeSeconds
+        : (Number(checkpoint.timeSeconds) || 0) * scale,
+  }));
+};
+
+export const buildProvisionalRaceTimeline = ({ race, entries, horses = [] }) => {
+  const approvedEntries = [...(entries || [])]
+    .filter(
+      (entry) =>
+        entry.status === 'approved' &&
+        entry.preRaceStatus !== 'absent' &&
+        !entry.disqualified
+    )
+    .sort((a, b) => Number(a.lane || 999) - Number(b.lane || 999));
+
+  const distanceMeters = parseDistanceMeters(race?.distance);
+  const surface = normalizeRaceSurface(race?.surface);
+  const seed = hashRaceSeed(
+    [
+      race?.id || '',
+      race?.updatedAt || race?.createdAt || '',
+      race?.distance || '',
+      race?.surface || '',
+    ].join(':')
+  );
+  const random = mulberry32(seed || 1);
+  const visualGates = shuffleValues(
+    Array.from({ length: approvedEntries.length }, (_, index) => index + 1),
+    seed
+  );
+  const horseById = new Map((horses || []).map((horse) => [horse.id, horse]));
+
+  const scoredRunners = approvedEntries.map((entry, index) => {
+    const horse = horseById.get(entry.horseId);
+    const rating = numericRating(
+      entry.ratingSnapshot,
+      numericRating(horse?.overallRating)
+    );
+    const carriedWeight = numericRating(entry.handicap, 126);
+    const speed = numericRating(horse?.speedRating, rating);
+    const stamina = numericRating(horse?.staminaRating, rating);
+    const form = numericRating(horse?.formRating, rating);
+    const horseWeightFactor = numericRating(entry.horseWeightLb || horse?.weightLb, 1000) > 0
+      ? (numericRating(entry.horseWeightLb || horse?.weightLb, 1000) - 1000) * 0.002
+      : 0;
+    const jockeyWeightFactor = numericRating(entry.jockeyWeightLb, 115) > 0
+      ? (numericRating(entry.jockeyWeightLb, 115) - 115) * 0.025
+      : 0;
+    const weightPenalty = (carriedWeight - 115) * 0.16 + horseWeightFactor + jockeyWeightFactor;
+    const raceVariance = (random() - 0.5) * 7;
+    const performanceScore =
+      rating * 0.45 +
+      speed * 0.2 +
+      stamina * 0.2 +
+      form * 0.15 -
+      weightPenalty +
+      raceVariance;
+
+    return {
+      entry,
+      horse,
+      index,
+      lane: entry.lane || index + 1,
+      displayGate: visualGates[index] || index + 1,
+      silkColor: silkPalette[((visualGates[index] || index + 1) - 1) % silkPalette.length],
+      rating,
+      carriedWeight,
+      speed,
+      stamina,
+      form,
+      phase: random() * Math.PI * 2,
+      performanceScore,
+      finishTimeSeconds: 0,
+      checkpoints: [],
+    };
+  });
+
+  if (scoredRunners.length === 0) {
+    return {
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      raceId: race.id,
+      distanceMeters,
+      surface,
+      durationSeconds: 0,
+      runners: [],
+    };
+  }
+
+  const fieldAverageScore =
+    scoredRunners.reduce((total, runner) => total + runner.performanceScore, 0) /
+    scoredRunners.length;
+  const baseFinishTime = Math.max(400, distanceMeters) / baseSpeedBySurface[surface];
+  const checkpointSize = distanceMeters <= 1200 ? 50 : 100;
+
+  scoredRunners.forEach((runner) => {
+    const abilitySpeedFactor =
+      1 + (runner.performanceScore - fieldAverageScore) * 0.004;
+    const desiredFinishTime =
+      baseFinishTime / abilitySpeedFactor + (random() - 0.5) * 0.12;
+    const rawCheckpoints = [{ distanceMeters: 0, timeSeconds: 0 }];
+    let rawElapsed = 0;
+
+    for (
+      let checkpointDistance = checkpointSize;
+      checkpointDistance <= distanceMeters;
+      checkpointDistance += checkpointSize
+    ) {
+      const segmentEnd = Math.min(checkpointDistance, distanceMeters);
+      const segmentStart = rawCheckpoints.at(-1)?.distanceMeters || 0;
+      const segmentDistance = segmentEnd - segmentStart;
+      const raceProgress = (segmentStart + segmentDistance / 2) / distanceMeters;
+      const accelerationFactor =
+        raceProgress < 0.12 ? 0.7 + raceProgress * 2.5 : 1;
+      const staminaFactor =
+        raceProgress > 0.65
+          ? 1 +
+            ((runner.stamina - 80) / 420) *
+              ((raceProgress - 0.65) / 0.35)
+          : 1;
+      const closingKick =
+        raceProgress > 0.84
+          ? 1 +
+            ((runner.form - 80) / 300) *
+              ((raceProgress - 0.84) / 0.16)
+          : 1;
+      const tacticalVariation =
+        1 + Math.sin(raceProgress * Math.PI * 4 + runner.phase) * 0.012;
+      const segmentSpeed =
+        baseSpeedBySurface[surface] *
+        accelerationFactor *
+        staminaFactor *
+        closingKick *
+        tacticalVariation;
+
+      rawElapsed += segmentDistance / segmentSpeed;
+      rawCheckpoints.push({
+        distanceMeters: segmentEnd,
+        timeSeconds: rawElapsed,
+      });
+    }
+
+    const timeScale = desiredFinishTime / rawElapsed;
+    runner.finishTimeSeconds = desiredFinishTime;
+    runner.checkpoints = rawCheckpoints.map((checkpoint, index) => ({
+      distanceMeters: checkpoint.distanceMeters,
+      timeSeconds:
+        index === rawCheckpoints.length - 1
+          ? desiredFinishTime
+          : checkpoint.timeSeconds * timeScale,
+    }));
+  });
+
+  const finishOrderByEntryId = new Map(
+    [...scoredRunners]
+      .sort((a, b) => a.finishTimeSeconds - b.finishTimeSeconds)
+      .map((runner, index) => [runner.entry.id, index + 1])
+  );
+
+  return {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    raceId: race.id,
+    distanceMeters,
+    surface,
+    durationSeconds: scoredRunners.reduce(
+      (max, runner) => Math.max(max, runner.finishTimeSeconds),
+      0
+    ),
+    runners: scoredRunners.map((runner) => ({
+      entryId: runner.entry.id,
+      lane: runner.lane,
+      displayGate: runner.displayGate,
+      horseName: runner.entry.horseName || runner.horse?.name || `Horse ${runner.index + 1}`,
+      jockeyName: runner.entry.jockeyName || `Jockey ${runner.index + 1}`,
+      silkColor: runner.silkColor,
+      rating: runner.rating,
+      carriedWeight: runner.carriedWeight,
+      speed: runner.speed,
+      stamina: runner.stamina,
+      form: runner.form,
+      phase: runner.phase,
+      performanceScore: runner.performanceScore,
+      finishTimeSeconds: runner.finishTimeSeconds,
+      position: finishOrderByEntryId.get(runner.entry.id) || runner.index + 1,
+      finishTime: formatFinishTime(runner.finishTimeSeconds),
+      checkpoints: runner.checkpoints,
+    })),
+  };
+};
+
 export const buildOfficialReplayTimeline = ({ race, entries, horses = [] }) => {
   const competingEntries = [...(entries || [])]
     .filter(
@@ -295,43 +505,56 @@ export const buildOfficialReplayTimeline = ({ race, entries, horses = [] }) => {
   );
 
   const horseById = new Map((horses || []).map((horse) => [horse.id, horse]));
+  const existingTimelineByEntryId = new Map(
+    (race?.replayTimeline?.runners || [])
+      .filter((runner) => runner?.entryId)
+      .map((runner) => [runner.entryId, runner])
+  );
   const runners = competingEntries.map((entry, index) => {
     const horse = horseById.get(entry.horseId);
+    const existingRunner = existingTimelineByEntryId.get(entry.id);
     const positionIndex = Math.max(0, Number(entry.position || index + 1) - 1);
     const recordedFinishTimeSeconds = finishTimeToSeconds(entry.finishTime);
     const finishTimeSeconds = useRecordedTiming
       ? recordedFinishTimeSeconds
       : buildVisualFinishTimeSeconds(distanceMeters, surface, positionIndex, fieldSize);
-    const checkpoints = useRecordedTiming
-      ? buildCompetitiveCheckpoints({
+    const existingCheckpoints = scaleCheckpointsToFinish(
+      existingRunner?.checkpoints,
+      finishTimeSeconds,
+      distanceMeters
+    );
+    const checkpoints = existingCheckpoints || (
+      useRecordedTiming
+        ? buildCompetitiveCheckpoints({
           distanceMeters,
           finishTimeSeconds,
           positionIndex,
           fieldSize,
           seed: hashRaceSeed(`${race.id}:${entry.id}:${entry.position || index + 1}`),
         })
-      : buildCheckpoints(distanceMeters, finishTimeSeconds, positionIndex);
+        : buildCheckpoints(distanceMeters, finishTimeSeconds, positionIndex)
+    );
+    const displayGate = existingRunner?.displayGate || visualGates[index] || index + 1;
 
     return {
       entryId: entry.id,
-      lane: entry.lane || index + 1,
-      displayGate: visualGates[index] || index + 1,
-      horseName: entry.horseName || horse?.name || `Horse ${index + 1}`,
-      jockeyName: entry.jockeyName || `Jockey ${index + 1}`,
-      silkColor: silkPalette[((visualGates[index] || index + 1) - 1) % silkPalette.length],
-      rating: Number(entry.ratingSnapshot || horse?.overallRating || 0),
-      carriedWeight: Number(entry.handicap || 0),
-      speed: Number(horse?.speedRating || entry.ratingSnapshot || 0),
-      stamina: Number(horse?.staminaRating || entry.ratingSnapshot || 0),
-      form: Number(horse?.formRating || entry.ratingSnapshot || 0),
-      phase: 0,
-      performanceScore: Math.max(0, competingEntries.length - positionIndex),
+      lane: existingRunner?.lane || entry.lane || index + 1,
+      displayGate,
+      horseName: existingRunner?.horseName || entry.horseName || horse?.name || `Horse ${index + 1}`,
+      jockeyName: existingRunner?.jockeyName || entry.jockeyName || `Jockey ${index + 1}`,
+      silkColor: existingRunner?.silkColor || silkPalette[(displayGate - 1) % silkPalette.length],
+      rating: Number(existingRunner?.rating ?? entry.ratingSnapshot ?? horse?.overallRating ?? 0),
+      carriedWeight: Number(existingRunner?.carriedWeight ?? entry.handicap ?? 0),
+      speed: Number(existingRunner?.speed ?? horse?.speedRating ?? entry.ratingSnapshot ?? 0),
+      stamina: Number(existingRunner?.stamina ?? horse?.staminaRating ?? entry.ratingSnapshot ?? 0),
+      form: Number(existingRunner?.form ?? horse?.formRating ?? entry.ratingSnapshot ?? 0),
+      phase: Number(existingRunner?.phase ?? 0),
+      performanceScore: Number(existingRunner?.performanceScore ?? Math.max(0, competingEntries.length - positionIndex)),
       finishTimeSeconds,
       position: Number(entry.position || index + 1),
       finishTime: useRecordedTiming ? entry.finishTime || '' : formatFinishTime(finishTimeSeconds),
       officialFinishTime: entry.finishTime || '',
       checkpoints,
-      displayGate: visualGates[index] || index + 1,
     };
   });
 

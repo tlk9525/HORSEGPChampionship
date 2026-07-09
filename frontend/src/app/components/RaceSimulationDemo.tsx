@@ -167,10 +167,6 @@ export default function RaceSimulationDemo() {
     },
     [elapsedSeconds, maxFinishSeconds, normalizedReplayTimelineRunners, replayEntries, replayTimelineRunners]
   );
-  const displayRankByEntryId = useMemo(
-    () => new Map(officialRows.map((entry, index) => [entry.id, index + 1])),
-    [officialRows]
-  );
   const officialFieldCount = replayTimelineRunners.length > 0
     ? normalizedReplayTimelineRunners.length
     : replayEntries.length;
@@ -440,7 +436,7 @@ export default function RaceSimulationDemo() {
 
                   {officialRows.map((runner) => {
                   const visibleEntry = selectedEntriesById.get(runner.id);
-                  const rank = displayRankByEntryId.get(runner.id) || runner.positionValue || Number(visibleEntry?.position || 0);
+                  const rank = runner.positionValue || Number(visibleEntry?.position || 0);
                   const gateNumber = Number(runner.displayGate || runner.lane || visibleEntry?.lane || 0);
                   const runnerColor = runner.silkColor || '#d4af37';
 

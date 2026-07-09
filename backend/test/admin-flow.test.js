@@ -325,6 +325,71 @@ test('admin cannot publish legacy closed registration with fewer than 10 pairs',
   assert.equal(db.races[0].status, 'registration-closed');
 });
 
+test('admin publish uses row-level persistence when available', async () => {
+  const db = baseDb();
+  db.users = [
+    ...db.users,
+    ...Array.from({ length: 10 }, (_, index) => ({
+      id: `owner-${index + 1}`,
+      name: `Owner ${index + 1}`,
+      role: 'owner',
+      status: 'active',
+    })),
+    ...Array.from({ length: 10 }, (_, index) => ({
+      id: `jockey-${index + 1}`,
+      name: `Jockey ${index + 1}`,
+      role: 'jockey',
+      status: 'active',
+    })),
+  ];
+  db.races = [{
+    id: 'race-1',
+    tournamentId: 'tournament-1',
+    name: 'Race',
+    status: 'registration-closed',
+    participants: 10,
+    ownerConfirmed: 10,
+    jockeyConfirmed: 10,
+  }];
+  db.horses = Array.from({ length: 10 }, (_, index) => ({
+    id: `horse-${index + 1}`,
+    name: `Horse ${index + 1}`,
+    ownerUserId: `owner-${index + 1}`,
+    overallRating: 70 + index,
+  }));
+  db.raceEntries = Array.from({ length: 10 }, (_, index) => ({
+    id: `entry-${index + 1}`,
+    raceId: 'race-1',
+    horseId: `horse-${index + 1}`,
+    jockeyUserId: `jockey-${index + 1}`,
+    status: 'approved',
+    lane: index + 1,
+    handicap: 126 + index,
+    ratingSnapshot: 70 + index,
+    preRaceStatus: 'ready-for-referee',
+    disqualified: false,
+  }));
+  let persistedPayload;
+  const app = new Hono();
+  app.route('/', createAdminRoutes(
+    async () => db,
+    async () => {
+      throw new Error('writeDb should not be called');
+    },
+    async (payload) => {
+      persistedPayload = payload;
+    }
+  ));
+
+  const result = await requestJson(app, '/races/race-1/publish');
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.race.status, 'published');
+  assert.equal(persistedPayload.race.status, 'published');
+  assert.equal(persistedPayload.notifications.length, 20);
+  assert.equal(persistedPayload.actionLogs.length, 1);
+});
+
 test('admin completion applies expected-versus-actual rating changes to horses', async () => {
   const db = baseDb();
   db.tournaments[0].finalDate = '2099-01-01';
@@ -461,8 +526,18 @@ test('a published race can start before schedule after referee check-in is compl
     resultStatus: 'draft',
   }];
   db.raceEntries = [
-    { id: 'entry-1', raceId: 'race-1', horseId: 'horse-1', jockeyUserId: 'jockey-1', status: 'approved', preRaceStatus: 'ready', disqualified: false },
-    { id: 'entry-2', raceId: 'race-1', horseId: 'horse-1', jockeyUserId: 'jockey-1', status: 'approved', preRaceStatus: 'absent', disqualified: true },
+    ...Array.from({ length: 5 }, (_, index) => ({
+      id: `entry-${index + 1}`,
+      raceId: 'race-1',
+      horseId: `horse-${index + 1}`,
+      jockeyUserId: `jockey-${index + 1}`,
+      status: 'approved',
+      preRaceStatus: 'ready',
+      disqualified: false,
+      lane: index + 1,
+      ratingSnapshot: 75 + index,
+    })),
+    { id: 'entry-6', raceId: 'race-1', horseId: 'horse-6', jockeyUserId: 'jockey-6', status: 'approved', preRaceStatus: 'absent', disqualified: true },
   ];
   const app = new Hono();
   app.route('/', createAdminRoutes(async () => db, async () => undefined));
@@ -471,6 +546,8 @@ test('a published race can start before schedule after referee check-in is compl
 
   assert.equal(result.status, 200);
   assert.equal(result.body.race.status, 'in-progress');
+  assert.equal(result.body.race.replayTimeline.runners.length, 5);
+  assert.equal(result.body.race.replayTimeline.runners[0].entryId, 'entry-1');
 });
 
 test('a published race cannot start while an incident is unresolved', async () => {
@@ -509,8 +586,18 @@ test('a scratched entry is not counted as an active runner when starting', async
     resultStatus: 'draft',
   }];
   db.raceEntries = [
-    { id: 'entry-1', raceId: 'race-1', horseId: 'horse-1', jockeyUserId: 'jockey-1', status: 'approved', preRaceStatus: 'ready', disqualified: false },
-    { id: 'entry-2', raceId: 'race-1', horseId: 'horse-2', jockeyUserId: 'jockey-2', status: 'scratched', preRaceStatus: 'scratched', disqualified: true },
+    ...Array.from({ length: 5 }, (_, index) => ({
+      id: `entry-${index + 1}`,
+      raceId: 'race-1',
+      horseId: `horse-${index + 1}`,
+      jockeyUserId: `jockey-${index + 1}`,
+      status: 'approved',
+      preRaceStatus: 'ready',
+      disqualified: false,
+      lane: index + 1,
+      ratingSnapshot: 75 + index,
+    })),
+    { id: 'entry-6', raceId: 'race-1', horseId: 'horse-6', jockeyUserId: 'jockey-6', status: 'scratched', preRaceStatus: 'scratched', disqualified: true },
   ];
   const app = new Hono();
   app.route('/', createAdminRoutes(async () => db, async () => undefined));
@@ -519,6 +606,7 @@ test('a scratched entry is not counted as an active runner when starting', async
 
   assert.equal(result.status, 200);
   assert.equal(result.body.race.status, 'in-progress');
+  assert.equal(result.body.race.replayTimeline.runners.length, 5);
 });
 
 test('admin rejecting a pairing keeps the approved horse registration reusable', async () => {

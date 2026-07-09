@@ -17,6 +17,7 @@ export const createApp = ({
   persistRaceEntryResult,
   persistRaceEntryReadiness,
   persistRefereeRaceAction,
+  persistAdminRaceAction,
   persistLoginSession,
   persistRegisteredUser,
   deleteSession,
@@ -63,7 +64,7 @@ export const createApp = ({
   );
   app.route('/api/owner', createOwnerRoutes(getDb, writeDb));
   app.route('/api/jockey', createJockeyRoutes(getDb, writeDb));
-  app.route('/api/admin', createAdminRoutes(getDb, writeDb));
+  app.route('/api/admin', createAdminRoutes(getDb, writeDb, persistAdminRaceAction));
   app.route(
     '/api/referee',
     createRefereeRoutes(

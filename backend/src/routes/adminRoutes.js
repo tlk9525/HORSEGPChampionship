@@ -33,7 +33,10 @@ import {
   createNotification,
   notifyAdmins,
 } from '../services/notificationService.js';
-import { buildOfficialReplayTimeline } from '../services/raceReplayTimeline.js';
+import {
+  buildOfficialReplayTimeline,
+  buildProvisionalRaceTimeline,
+} from '../services/raceReplayTimeline.js';
 
 // Helpers nội bộ
 const nonRejectedEntry = (entry) => entry.status !== 'rejected';
@@ -122,7 +125,7 @@ const addPairToRace = (db, race, pair, createdAt) => {
   race.jockeyConfirmed = race.participants;
   return true;
 };
-export const createAdminRoutes = (getDb, writeDb) => {
+export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
   const app = new Hono();
 
   // Middleware xác thực — chỉ admin mới truy cập được
@@ -547,6 +550,14 @@ export const createAdminRoutes = (getDb, writeDb) => {
       approvedJockeyCount
     );
     const fromStatus = race.status;
+    const existingNotificationIds = new Set(
+      (db.notifications || []).map((notification) => notification.id)
+    );
+    const existingActionLogIds = new Set(
+      (db.raceActionLogs || []).map((log) => log.id)
+    );
+    let affectedTournament = null;
+    let affectedHorses = [];
 
     if (action === 'close-registration') {
       if (race.status !== 'registration-open') {
@@ -686,7 +697,14 @@ export const createAdminRoutes = (getDb, writeDb) => {
       if (tournament && tournament.status !== 'completed') {
         tournament.status = 'active';
         tournament.updatedAt = race.updatedAt;
+        affectedTournament = tournament;
       }
+
+      race.replayTimeline = buildProvisionalRaceTimeline({
+        race,
+        entries,
+        horses: db.horses,
+      });
 
       raceRefereeIds(db, race).forEach((refereeId) =>
         createNotification(
@@ -798,6 +816,9 @@ export const createAdminRoutes = (getDb, writeDb) => {
           horse.updatedAt = race.updatedAt;
         }
       });
+      affectedHorses = ratingResults
+        .map(({ entry }) => db.horses.find((item) => item.id === entry.horseId))
+        .filter(Boolean);
 
       race.replayTimeline = buildOfficialReplayTimeline({
         race,
@@ -827,6 +848,7 @@ export const createAdminRoutes = (getDb, writeDb) => {
       if (tournament && tournamentHasEnded(tournament)) {
         tournament.status = 'completed';
         tournament.updatedAt = race.updatedAt;
+        affectedTournament = tournament;
       }
     }
 
@@ -839,7 +861,22 @@ export const createAdminRoutes = (getDb, writeDb) => {
       details: `${entries.length} approved participants`,
     });
 
-    await writeDb(db);
+    if (persistAdminRaceAction) {
+      await persistAdminRaceAction({
+        race,
+        raceEntries: entries,
+        horses: affectedHorses,
+        tournament: affectedTournament,
+        notifications: (db.notifications || []).filter(
+          (notification) => !existingNotificationIds.has(notification.id)
+        ),
+        actionLogs: (db.raceActionLogs || []).filter(
+          (log) => !existingActionLogIds.has(log.id)
+        ),
+      });
+    } else {
+      await writeDb(db);
+    }
     broadcastRaceUpdate(race.id);
     return c.json({
       race,
