@@ -180,6 +180,13 @@ export default function LiveRace() {
     });
   }, [competingEntries, horseById, selectedRace]);
 
+  const officialTimelineRunners = selectedRace?.replayTimeline?.runners || [];
+  const normalizedOfficialTimelineRunners = useMemo(
+    () => normalizeOfficialReplayRunners(officialTimelineRunners, selectedRace),
+    [officialTimelineRunners, selectedRace?.distance, selectedRace?.surface]
+  );
+  const simulationDurationSeconds =
+    selectedRace?.replayTimeline?.durationSeconds || simulationPlan.durationSeconds;
   const raceStartMs = selectedRace?.status === 'in-progress'
     ? Date.parse(selectedRace.updatedAt || '')
     : Number.NaN;
@@ -188,26 +195,29 @@ export default function LiveRace() {
       ? clamp(
           ((simulationNowMs - (Number.isFinite(raceStartMs) ? raceStartMs : simulationNowMs)) / 1000),
           0,
-          simulationPlan.durationSeconds
+          simulationDurationSeconds
         )
       : ['finished', 'completed'].includes(selectedRace?.status || '')
-        ? simulationPlan.durationSeconds
+        ? simulationDurationSeconds
         : 0;
-  const simulationProgressPercent = simulationPlan.durationSeconds > 0
-    ? clamp((simulationElapsedSeconds / simulationPlan.durationSeconds) * 100, 0, 100)
+  const simulationProgressPercent = simulationDurationSeconds > 0
+    ? clamp((simulationElapsedSeconds / simulationDurationSeconds) * 100, 0, 100)
     : 0;
-  const liveSimulationRunners = simulationPlan.runners.map((runner) => ({
-    ...runner,
-    progress: progressForRunner(runner, simulationElapsedSeconds),
-  }));
-  const simulationFinishedVisually =
-    simulationPlan.durationSeconds > 0 &&
-    simulationElapsedSeconds >= simulationPlan.durationSeconds;
-  const officialTimelineRunners = selectedRace?.replayTimeline?.runners || [];
-  const normalizedOfficialTimelineRunners = useMemo(
-    () => normalizeOfficialReplayRunners(officialTimelineRunners, selectedRace),
-    [officialTimelineRunners, selectedRace?.distance, selectedRace?.surface]
+  const liveSimulationRunners = (
+    normalizedOfficialTimelineRunners.length > 0
+      ? normalizedOfficialTimelineRunners.map((runner) => ({
+          ...runner,
+          entryId: runner.entryId,
+          progress: progressForRunner(runner, simulationElapsedSeconds),
+        }))
+      : simulationPlan.runners.map((runner) => ({
+          ...runner,
+          progress: progressForRunner(runner, simulationElapsedSeconds),
+        }))
   );
+  const simulationFinishedVisually =
+    simulationDurationSeconds > 0 &&
+    simulationElapsedSeconds >= simulationDurationSeconds;
   const officialReplayEntries = useMemo<DisplayRunnerRow[]>(() => {
     if (normalizedOfficialTimelineRunners.length > 0) {
       return [...normalizedOfficialTimelineRunners]
@@ -315,7 +325,7 @@ export default function LiveRace() {
   const displayProjected =
     officialReplayMode && selectedRace?.status !== 'in-progress'
       ? displayElapsed
-      : formatRaceSimulationTime(simulationPlan.durationSeconds);
+      : formatRaceSimulationTime(simulationDurationSeconds);
 
   const positionOptions = Array.from(
     { length: competingEntries.length },
@@ -349,10 +359,13 @@ export default function LiveRace() {
         .includes(currentUser.id);
   const showRefereeControl = currentUser?.role === 'referee';
 
-  const loadRaceOps = () => {
+  const loadRaceOps = (forceBootstrap = false) => {
     const requestId = ++loadRequestIdRef.current;
 
-    Promise.all([getMe().catch(() => ({ user: null as AuthUser | null })), getBootstrap()])
+    Promise.all([
+      getMe().catch(() => ({ user: null as AuthUser | null })),
+      getBootstrap({ force: forceBootstrap }),
+    ])
       .then(([me, data]) => {
         if (requestId !== loadRequestIdRef.current) return;
 
@@ -409,7 +422,7 @@ export default function LiveRace() {
     });
 
     events.addEventListener('race-update', () => {
-      loadRaceOps();
+      loadRaceOps(true);
     });
 
     events.onerror = () => undefined;
@@ -598,12 +611,17 @@ export default function LiveRace() {
       setMessage('Admin must finish the race before simulation values can be loaded into referee drafts.');
       return;
     }
-    if (simulationPlan.runners.length === 0) {
+    const draftRunners =
+      normalizedOfficialTimelineRunners.length > 0
+        ? normalizedOfficialTimelineRunners
+        : simulationPlan.runners;
+
+    if (draftRunners.length === 0) {
       setMessage('No competing entries are available for simulation drafts.');
       return;
     }
 
-    const finalOrder = [...simulationPlan.runners].sort(
+    const finalOrder = [...draftRunners].sort(
       (a, b) => a.finishTimeSeconds - b.finishTimeSeconds
     );
 
@@ -757,7 +775,9 @@ export default function LiveRace() {
                   )}
 
                   {displayEntries.map((runner) => {
-                    const rank = displayRankByEntryId.get(runner.keyId);
+                    const rank = officialReplayMode
+                      ? runner.position || displayRankByEntryId.get(runner.keyId)
+                      : displayRankByEntryId.get(runner.keyId);
                     const gateNumber = Number(runner.displayGate || runner.lane || 0);
                     const runnerColor = runner.silkColor || '#d4af37';
 

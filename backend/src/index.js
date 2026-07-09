@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 import { API_HOST, API_PORT } from './config/constants.js';
 import {
+  persistAdminRaceAction,
   persistRefereeRaceAction,
   persistRaceEntryReadiness,
   persistRaceEntryResult,
@@ -20,6 +21,7 @@ const app = createApp({
   persistRaceEntryResult,
   persistRaceEntryReadiness,
   persistRefereeRaceAction,
+  persistAdminRaceAction,
   persistLoginSession,
   persistRegisteredUser,
   deleteSession,

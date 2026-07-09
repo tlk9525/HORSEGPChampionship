@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildOfficialReplayTimeline } from '../src/services/raceReplayTimeline.js';
+import {
+  buildOfficialReplayTimeline,
+  buildProvisionalRaceTimeline,
+} from '../src/services/raceReplayTimeline.js';
 
 const baseEntry = (index, finishTime) => ({
   id: `entry-${index}`,
@@ -112,4 +115,44 @@ test('official replay timeline creates a more animated mid-race order than final
 
   assert.ok(timeline.runners.every((runner) => runner.checkpoints.length > 3));
   assert.notDeepEqual(midRaceOrder, finalOrder);
+});
+
+test('provisional timeline can be preserved when official results are approved', () => {
+  const entries = Array.from({ length: 4 }, (_, index) =>
+    baseEntry(index + 1, '')
+  ).map((entry) => ({
+    ...entry,
+    position: null,
+    finishTime: '',
+  }));
+  const provisional = buildProvisionalRaceTimeline({
+    race: {
+      id: 'race-4',
+      distance: '1700M',
+      surface: 'Turf',
+      updatedAt: '2026-07-09T00:00:00.000Z',
+    },
+    entries,
+    horses: [],
+  });
+  const officialEntries = entries.map((entry, index) => ({
+    ...entry,
+    position: index + 1,
+    finishTime: `01:${String(8 + index).padStart(2, '0')}.000`,
+  }));
+  const official = buildOfficialReplayTimeline({
+    race: {
+      id: 'race-4',
+      distance: '1700M',
+      surface: 'Turf',
+      replayTimeline: provisional,
+    },
+    entries: officialEntries,
+    horses: [],
+  });
+
+  assert.equal(official.runners[0].displayGate, provisional.runners[0].displayGate);
+  assert.equal(official.runners[0].checkpoints.length, provisional.runners[0].checkpoints.length);
+  assert.equal(official.runners[0].finishTime, '01:08.000');
+  assert.equal(official.runners[0].checkpoints.at(-1).timeSeconds, 68);
 });

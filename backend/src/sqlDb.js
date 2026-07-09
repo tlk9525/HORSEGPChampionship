@@ -79,6 +79,10 @@ const ensureRuntimeSchema = async () => {
             '. Run npm run db:init.'
         );
       }
+
+      await getPool().query(
+        'ALTER TABLE "races" ADD COLUMN IF NOT EXISTS "replayTimeline" JSONB'
+      );
     })().catch((error) => {
       runtimeSchemaPromise = undefined;
       throw error;
@@ -918,6 +922,157 @@ export const persistRefereeRaceAction = async ({
           entry.finishTime || '',
           entry.notes || '',
           entry.violationNotes || '',
+        ]
+      );
+    }
+
+    for (const notification of notifications) {
+      await client.query(
+        `INSERT INTO "notifications" (
+          "id", "userId", "type", "title", "message", "isRead", "createdAt"
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT ("id") DO NOTHING`,
+        [
+          notification.id,
+          notification.userId,
+          notification.type || 'general',
+          notification.title || '',
+          notification.message || '',
+          Boolean(notification.read),
+          notification.createdAt || nowIso(),
+        ]
+      );
+    }
+
+    for (const log of actionLogs) {
+      await client.query(
+        `INSERT INTO "raceActionLogs" (
+          "id", "raceId", "userId", "action", "fromStatus", "toStatus", "details", "createdAt"
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT ("id") DO NOTHING`,
+        [
+          log.id,
+          log.raceId,
+          log.userId || null,
+          log.action,
+          log.fromStatus || null,
+          log.toStatus || null,
+          log.details || '',
+          log.createdAt || nowIso(),
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+// Lưu thao tác Admin trên race bằng row-level update để tránh rewrite toàn DB.
+export const persistAdminRaceAction = async ({
+  race,
+  raceEntries = [],
+  horses = [],
+  tournament = null,
+  notifications = [],
+  actionLogs = [],
+}) => {
+  await ensureRuntimeSchema();
+
+  const client = await getPool().connect();
+
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE "races"
+       SET "status" = $2,
+           "participants" = $3,
+           "ownerConfirmed" = $4,
+           "jockeyConfirmed" = $5,
+           "resultStatus" = $6,
+           "awardsPublished" = $7,
+           "replayTimeline" = $8,
+           "updatedAt" = $9
+       WHERE "id" = $1`,
+      [
+        race.id,
+        race.status,
+        Number(race.participants || 0),
+        Number(race.ownerConfirmed || 0),
+        Number(race.jockeyConfirmed || 0),
+        race.resultStatus || 'draft',
+        Boolean(race.awardsPublished),
+        race.replayTimeline || null,
+        race.updatedAt || nowIso(),
+      ]
+    );
+
+    if (tournament) {
+      await client.query(
+        `UPDATE "tournaments"
+         SET "status" = $2,
+             "updatedAt" = $3
+         WHERE "id" = $1`,
+        [
+          tournament.id,
+          tournament.status,
+          tournament.updatedAt || nowIso(),
+        ]
+      );
+    }
+
+    for (const entry of raceEntries) {
+      await client.query(
+        `UPDATE "raceEntries"
+         SET "lane" = $2,
+             "handicap" = $3,
+             "ratingSnapshot" = $4,
+             "ratingChange" = $5,
+             "postRaceRating" = $6,
+             "preRaceStatus" = $7,
+             "disqualified" = $8,
+             "status" = $9,
+             "resultStatus" = $10,
+             "position" = $11,
+             "finishTime" = $12,
+             "notes" = $13,
+             "violationNotes" = $14
+         WHERE "id" = $1`,
+        [
+          entry.id,
+          entry.lane ?? null,
+          entry.handicap ?? 0,
+          entry.ratingSnapshot ?? 0,
+          entry.ratingChange ?? 0,
+          entry.postRaceRating ?? 0,
+          entry.preRaceStatus || 'pending',
+          Boolean(entry.disqualified),
+          entry.status || 'approved',
+          entry.resultStatus || 'draft',
+          entry.position ?? null,
+          entry.finishTime || '',
+          entry.notes || '',
+          entry.violationNotes || '',
+        ]
+      );
+    }
+
+    for (const horse of horses) {
+      await client.query(
+        `UPDATE "horses"
+         SET "overallRating" = $2,
+             "updatedAt" = $3
+         WHERE "id" = $1`,
+        [
+          horse.id,
+          horse.overallRating ?? 75,
+          horse.updatedAt || nowIso(),
         ]
       );
     }
