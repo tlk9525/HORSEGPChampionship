@@ -217,8 +217,7 @@ export default function LiveRace() {
   );
   const officialReplayEntries = useMemo<DisplayRunnerRow[]>(() => {
     if (normalizedOfficialTimelineRunners.length > 0) {
-      return sortRaceDisplayRunners(
-        normalizedOfficialTimelineRunners.map((runner) => ({
+      const rows = normalizedOfficialTimelineRunners.map((runner) => ({
           keyId: runner.entryId,
           lane: runner.lane,
           horseName: runner.horseName,
@@ -229,8 +228,21 @@ export default function LiveRace() {
           progress: progressForRunner(runner, simulationElapsedSeconds),
           position: runner.position,
           finishTime: runner.finishTime,
-        }))
-      ).map((runner, index) => ({
+        }));
+
+      const orderedRows =
+        simulationElapsedSeconds >= simulationPlan.durationSeconds
+          ? [...rows].sort((a, b) => {
+            const positionA = Number(a.position || 999);
+            const positionB = Number(b.position || 999);
+
+            if (positionA !== positionB) return positionA - positionB;
+
+            return String(a.keyId).localeCompare(String(b.keyId));
+          })
+          : sortRaceDisplayRunners(rows);
+
+      return orderedRows.map((runner, index) => ({
         ...runner,
         liveRank: index + 1,
       }));
