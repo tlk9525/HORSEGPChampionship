@@ -311,7 +311,7 @@ export const createRaceSimulationPlan = ({
 };
 
 export const progressForRunner = (
-  runner: RaceSimulationRunner,
+  runner: Pick<RaceSimulationRunner, 'finishTimeSeconds' | 'checkpoints'>,
   elapsedSeconds: number
 ) => {
   if (elapsedSeconds <= 0) return 0;
@@ -467,7 +467,7 @@ export const normalizeOfficialReplayRunners = (
     hasRecordedTimes && recordedTimes.length > 0
       ? Math.max(...recordedTimes) - Math.min(...recordedTimes)
       : Number.POSITIVE_INFINITY;
-  const largestGap = sortedRunners.reduce((maxGap, runner, index) => {
+  const largestGap = sortedRunners.reduce((maxGap, _runner, index) => {
     if (index === 0 || !Number.isFinite(recordedTimes[index]) || !Number.isFinite(recordedTimes[index - 1])) {
       return maxGap;
     }

@@ -209,9 +209,13 @@ export default function LiveRace() {
     simulationPlan.durationSeconds > 0 &&
     simulationElapsedSeconds >= simulationPlan.durationSeconds;
   const officialTimelineRunners = selectedRace?.replayTimeline?.runners || [];
+  const normalizedOfficialTimelineRunners = useMemo(
+    () => normalizeOfficialReplayRunners(officialTimelineRunners, selectedRace),
+    [officialTimelineRunners, selectedRace?.distance, selectedRace?.surface]
+  );
   const officialReplayEntries = useMemo<DisplayRunnerRow[]>(() => {
-    if (officialTimelineRunners.length > 0) {
-      return officialTimelineRunners.map((runner) => ({
+    if (normalizedOfficialTimelineRunners.length > 0) {
+      return normalizedOfficialTimelineRunners.map((runner) => ({
         keyId: runner.entryId,
         lane: runner.lane,
         horseName: runner.horseName,
@@ -266,9 +270,9 @@ export default function LiveRace() {
         finishTime: entry.finishTime || '',
       };
     });
-  }, [officialTimelineRunners, selectedEntries, simulationElapsedSeconds]);
+  }, [normalizedOfficialTimelineRunners, selectedEntries, simulationElapsedSeconds]);
   const hasOfficialReplayData =
-    officialTimelineRunners.length > 0 || officialReplayEntries.length > 0;
+    normalizedOfficialTimelineRunners.length > 0 || officialReplayEntries.length > 0;
   const officialReplayMode =
     ['finished', 'completed'].includes(selectedRace?.status || '') && hasOfficialReplayData;
   const displayEntries: DisplayRunnerRow[] = officialReplayMode
@@ -294,7 +298,7 @@ export default function LiveRace() {
     officialReplayMode && selectedRace?.surface ? selectedRace.surface : simulationPlan.surface;
   const displayElapsed =
     officialReplayMode && selectedRace?.status !== 'in-progress'
-      ? (officialTimelineRunners.find((entry) => entry.position === 1)?.finishTime ||
+      ? (normalizedOfficialTimelineRunners.find((entry) => entry.position === 1)?.finishTime ||
         selectedEntries.find((entry) => entry.position === 1)?.finishTime ||
         '00:00.000')
       : formatRaceSimulationTime(simulationElapsedSeconds);

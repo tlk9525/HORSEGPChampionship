@@ -6,39 +6,12 @@ import {
   TournamentRecord,
   createRace,
   getRaceBuilder,
-  updateRace,
 } from '../services/api';
 import { messageToneClasses } from '../utils/messageTone';
 
 interface CreateRacePageProps {
   onNavigate: (page: string) => void;
-  raceId?: string;
-  isEdit?: boolean;
 }
-
-const EDITABLE_RACE_STATUSES = ['registration-open', 'registration-closed'];
-
-const toDatetimeLocal = (value?: string) => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return '';
-
-  const pad = (part: number) => String(part).padStart(2, '0');
-
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-};
-
-const parseRefereeUserIds = (value?: string | string[]) => {
-  if (Array.isArray(value)) return value.filter(Boolean);
-  if (!value) return [];
-
-  return String(value)
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-};
-
-const parseDistanceMeters = (value?: string) => value?.replace(/m$/i, '') || '';
 
 const RACE_CLASS_WEIGHT_RANGES: Record<string, { minWeightLb: string; topWeightLb: string }> = {
   'Class 1': { topWeightLb: '135', minWeightLb: '115' },
@@ -51,8 +24,6 @@ const RACE_CLASS_WEIGHT_RANGES: Record<string, { minWeightLb: string; topWeightL
 
 export default function CreateRacePage({
   onNavigate,
-  raceId,
-  isEdit = false,
 }: CreateRacePageProps) {
   const fieldClass =
     'min-h-[54px] w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 outline-none focus:border-[#d4af37]/70 focus:ring-2 focus:ring-[#d4af37]/20 disabled:cursor-not-allowed disabled:opacity-60';
@@ -61,7 +32,8 @@ export default function CreateRacePage({
   const [races, setRaces] = useState<RaceRecord[]>([]);
   const [referees, setReferees] = useState<RaceBuilderReferee[]>([]);
   const [maxRacesPerTournament, setMaxRacesPerTournament] = useState(10);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -102,6 +74,8 @@ export default function CreateRacePage({
   };
 
   useEffect(() => {
+    setIsLoading(true);
+    setLoadError(false);
     getRaceBuilder()
       .then((data) => {
         setTournaments(data.tournaments);
@@ -132,68 +106,17 @@ export default function CreateRacePage({
           venue: current.venue || firstTournament?.location || '',
           refereeUserIds: data.referees[0] ? [data.referees[0].id] : [],
         }));
+        setLoadError(false);
       })
-      .catch((error) =>
-        setMessage(error instanceof Error ? error.message : 'Unable to load race builder')
-      )
+      .catch((error) => {
+        setLoadError(true);
+        setMessage(error instanceof Error ? error.message : 'Unable to load race builder');
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
   const handleSubmit = () => {
     setMessage('');
-
-    if (isEdit) {
-      if (
-        !raceId ||
-        !form.raceName ||
-        !form.raceDate ||
-        !form.startTime ||
-        !form.registrationOpensAt ||
-        !form.registrationClosesAt
-      ) {
-        setMessage('Please complete the race name, date, time and registration window.');
-        return;
-      }
-
-      const regOpens = new Date(form.registrationOpensAt);
-      const regCloses = new Date(form.registrationClosesAt);
-      const raceStartsAt = new Date(`${form.raceDate}T${form.startTime}`);
-      if (
-        !Number.isFinite(regOpens.getTime()) ||
-        !Number.isFinite(regCloses.getTime()) ||
-        !Number.isFinite(raceStartsAt.getTime())
-      ) {
-        setMessage('Race and registration times must be valid.');
-        return;
-      }
-      if (regOpens >= regCloses) {
-        setMessage('Registration close time must be after open time.');
-        return;
-      }
-      if (regCloses > raceStartsAt) {
-        setMessage('Registration must close before the race starts.');
-        return;
-      }
-
-      setIsSubmitting(true);
-      updateRace(raceId, {
-        name: form.raceName,
-        date: form.raceDate,
-        time: form.startTime,
-        registrationOpensAt: new Date(form.registrationOpensAt).toISOString(),
-        registrationClosesAt: new Date(form.registrationClosesAt).toISOString(),
-      })
-        .then(() => {
-          setMessage('Race schedule saved.');
-          setTimeout(() => onNavigate('admin'), 900);
-        })
-        .catch((error) =>
-          setMessage(error instanceof Error ? error.message : 'Unable to save race')
-        )
-        .finally(() => setIsSubmitting(false));
-      return;
-    }
-
 
     const tournamentRaceCount = races.filter(
       (race) => race.tournamentId === form.tournamentId
@@ -335,6 +258,19 @@ export default function CreateRacePage({
           {isLoading ? (
             <div className="rounded-2xl border border-white/10 bg-[#0b223d] p-6 text-gray-300">
               Loading race details...
+            </div>
+          ) : loadError ? (
+            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6">
+              <h2 className="text-2xl font-black text-white mb-2">Unable to Load Race Builder</h2>
+              <p className="text-red-200/90 mb-5">
+                {message || 'The admin race builder could not be loaded right now.'}
+              </p>
+              <button
+                onClick={() => onNavigate('admin')}
+                className="px-5 py-3 rounded-xl bg-[#d4af37] text-white font-bold hover:bg-[#b8892d]"
+              >
+                Back to Admin Panel
+              </button>
             </div>
           ) : tournaments.length === 0 ? (
             <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6">
