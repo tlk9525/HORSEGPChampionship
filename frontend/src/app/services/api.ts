@@ -574,6 +574,8 @@ export const createRace = async (race: {
   distance: string | number;
   surface: string;
   raceClass: string;
+  ratingMin: string | number;
+  ratingMax: string | number;
   registrationOpensAt: string;
   registrationClosesAt: string;
   handicapMin?: string | number;
