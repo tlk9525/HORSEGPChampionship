@@ -25,9 +25,11 @@ import {
   adminRaceAction,
   createTournament,
   decideApproval,
+  deleteRace,
   deleteTournament,
   getApprovals,
   getBootstrap,
+  updateRace as persistRace,
   updateTournament,
 } from '../services/api';
 import { statusLabel } from '../utils/domain';
@@ -307,7 +309,13 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   const handleRaceAction = (
     raceId: string,
-    action: 'close-registration' | 'publish' | 'start-race' | 'finish-race' | 'complete-results'
+    action:
+      | 'close-registration'
+      | 'publish'
+      | 'start-race'
+      | 'finish-race'
+      | 'complete-results'
+      | 'cancel-race'
   ) => {
     adminRaceAction(raceId, action)
       .then((result) => {
@@ -331,6 +339,12 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
           error instanceof Error ? error.message : 'Race action failed'
         )
       );
+  };
+
+  const confirmCancelRace = (raceId: string) => {
+    const confirmed = window.confirm('Are you sure you want to cancel this race?');
+    if (!confirmed) return;
+    handleRaceAction(raceId, 'cancel-race');
   };
 
   const raceReadiness = (raceId: string) => {

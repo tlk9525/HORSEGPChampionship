@@ -119,6 +119,7 @@ export interface RaceRecord {
   registrationClosesAt?: string;
   resultStatus?: string;
   awardsPublished?: boolean;
+  replayTimeline?: RaceReplayTimeline | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -171,6 +172,41 @@ export interface RaceEntryRecord {
   raceName?: string;
 }
 
+export interface RaceReplayCheckpoint {
+  distanceMeters: number;
+  timeSeconds: number;
+}
+
+export interface RaceReplayRunner {
+  entryId: string;
+  lane: number;
+  displayGate?: number;
+  horseName: string;
+  jockeyName: string;
+  silkColor: string;
+  rating: number;
+  carriedWeight: number;
+  speed: number;
+  stamina: number;
+  form: number;
+  phase: number;
+  performanceScore: number;
+  finishTimeSeconds: number;
+  position: number;
+  finishTime: string;
+  checkpoints: RaceReplayCheckpoint[];
+}
+
+export interface RaceReplayTimeline {
+  version: number;
+  generatedAt: string;
+  raceId: string;
+  distanceMeters: number;
+  surface: string;
+  durationSeconds: number;
+  runners: RaceReplayRunner[];
+}
+
 export interface JockeyRaceRegistration {
   id: string;
   raceId: string;
@@ -202,9 +238,32 @@ export interface ActivePairing extends HorseRaceRegistration {
   tournamentName: string;
 }
 
+export interface BootstrapPayload {
+  tournaments: TournamentRecord[];
+  horses: HorseRecord[];
+  races: RaceRecord[];
+  jockeyProfiles: JockeyProfileRecord[];
+  jockeyRaceRegistrations: JockeyRaceRegistration[];
+  jockeyInvitations: JockeyInvitation[];
+  horseRaceRegistrations: HorseRaceRegistration[];
+  raceEntries: RaceEntryRecord[];
+  users: AuthUser[];
+  notifications: NotificationItem[];
+  limits: SystemLimits;
+}
+
 const API_URL = import.meta.env.PROD
   ? '/api'
   : import.meta.env.VITE_API_URL || 'http://127.0.0.1:4000/api';
+
+const BOOTSTRAP_CACHE_TTL_MS = 10_000;
+let bootstrapCache: { data: BootstrapPayload; fetchedAt: number } | null = null;
+let bootstrapRequest: Promise<BootstrapPayload> | null = null;
+
+export function invalidateBootstrapCache() {
+  bootstrapCache = null;
+  bootstrapRequest = null;
+}
 
 // Tạo URL kết nối Server-Sent Events (SSE) để theo dõi cập nhật trực tiếp của một cuộc đua
 export const getLiveRaceEventsUrl = (raceId: string) =>
@@ -212,6 +271,7 @@ export const getLiveRaceEventsUrl = (raceId: string) =>
 
 // Hàm gửi HTTP request chung, dùng HttpOnly session cookie và báo lỗi khi response thất bại.
 const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
+  const method = String(options.method || 'GET').toUpperCase();
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
     credentials: 'include',
@@ -225,6 +285,10 @@ const request = async <T>(path: string, options: RequestInit = {}): Promise<T> =
 
   if (!response.ok) {
     throw new Error(data.message || 'Request failed');
+  }
+
+  if (method !== 'GET') {
+    invalidateBootstrapCache();
   }
 
   return data;
@@ -263,21 +327,29 @@ export const logout = async () => {
 // Lấy thông tin user đang đăng nhập từ server
 export const getMe = async () => request<{ user: AuthUser }>('/me');
 
-// Lấy toàn bộ dữ liệu khởi động: giải đấu, ngựa, cuộc đua, jockey, thông báo...
-export const getBootstrap = async () =>
-  request<{
-    tournaments: TournamentRecord[];
-    horses: HorseRecord[];
-    races: RaceRecord[];
-    jockeyProfiles: JockeyProfileRecord[];
-    jockeyRaceRegistrations: JockeyRaceRegistration[];
-    jockeyInvitations: JockeyInvitation[];
-    horseRaceRegistrations: HorseRaceRegistration[];
-    raceEntries: RaceEntryRecord[];
-    users: AuthUser[];
-    notifications: NotificationItem[];
-    limits: SystemLimits;
-  }>('/bootstrap');
+// Lấy toàn bộ dữ liệu khởi động. Cache ngắn hạn để đổi trang không gọi lại endpoint nặng liên tục.
+export const getBootstrap = async ({ force = false } = {}) => {
+  const now = Date.now();
+
+  if (!force && bootstrapCache && now - bootstrapCache.fetchedAt < BOOTSTRAP_CACHE_TTL_MS) {
+    return bootstrapCache.data;
+  }
+
+  if (!force && bootstrapRequest) {
+    return bootstrapRequest;
+  }
+
+  bootstrapRequest = request<BootstrapPayload>('/bootstrap')
+    .then((data) => {
+      bootstrapCache = { data, fetchedAt: Date.now() };
+      return data;
+    })
+    .finally(() => {
+      bootstrapRequest = null;
+    });
+
+  return bootstrapRequest;
+};
 
 // Lấy danh sách các mục đang chờ phê duyệt (admin)
 export const getApprovals = async () =>
@@ -535,7 +607,13 @@ export const deleteRace = async (raceId: string) =>
 // Admin đóng đăng ký, publish race và duyệt kết quả cuối cùng
 export const adminRaceAction = async (
   raceId: string,
-  action: 'close-registration' | 'publish' | 'start-race' | 'finish-race' | 'complete-results'
+  action:
+    | 'close-registration'
+    | 'publish'
+    | 'start-race'
+    | 'finish-race'
+    | 'complete-results'
+    | 'cancel-race'
 ) =>
   request<{ race: RaceRecord; entries: RaceEntryRecord[]; notifications: NotificationItem[] }>(
     `/admin/races/${raceId}/${action}`,
