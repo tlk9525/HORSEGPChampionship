@@ -28,20 +28,17 @@ import {
   normalizeOfficialReplayRunners,
   parseRaceDistanceMeters,
   progressForRunner,
-  sortRaceDisplayRunners,
 } from '../utils/raceSimulation';
 
 interface DisplayRunnerRow {
   keyId: string;
   lane: number | null;
-  displayGate: number | null;
   horseName: string;
   jockeyName: string;
   silkColor: string;
   rating: number;
   carriedWeight: number;
   progress: number;
-  finishTimeSeconds?: number;
   position?: number;
   finishTime?: string;
 }
@@ -180,56 +177,43 @@ export default function LiveRace() {
     });
   }, [competingEntries, horseById, selectedRace]);
 
-  const officialTimelineRunners = selectedRace?.replayTimeline?.runners || [];
-  const normalizedOfficialTimelineRunners = useMemo(
-    () => normalizeOfficialReplayRunners(officialTimelineRunners, selectedRace),
-    [officialTimelineRunners, selectedRace?.distance, selectedRace?.surface]
-  );
-  const simulationDurationSeconds =
-    selectedRace?.replayTimeline?.durationSeconds || simulationPlan.durationSeconds;
   const raceStartMs = selectedRace?.status === 'in-progress'
     ? Date.parse(selectedRace.updatedAt || '')
     : Number.NaN;
   const simulationElapsedSeconds =
     selectedRace?.status === 'in-progress'
       ? clamp(
-          ((simulationNowMs - (Number.isFinite(raceStartMs) ? raceStartMs : simulationNowMs)) / 1000),
-          0,
-          simulationDurationSeconds
-        )
+        ((simulationNowMs - (Number.isFinite(raceStartMs) ? raceStartMs : simulationNowMs)) / 1000),
+        0,
+        simulationPlan.durationSeconds
+      )
       : ['finished', 'completed'].includes(selectedRace?.status || '')
-        ? simulationDurationSeconds
+        ? simulationPlan.durationSeconds
         : 0;
-  const simulationProgressPercent = simulationDurationSeconds > 0
-    ? clamp((simulationElapsedSeconds / simulationDurationSeconds) * 100, 0, 100)
+  const simulationProgressPercent = simulationPlan.durationSeconds > 0
+    ? clamp((simulationElapsedSeconds / simulationPlan.durationSeconds) * 100, 0, 100)
     : 0;
-  const liveSimulationRunners = (
-    normalizedOfficialTimelineRunners.length > 0
-      ? normalizedOfficialTimelineRunners.map((runner) => ({
-          ...runner,
-          entryId: runner.entryId,
-          progress: progressForRunner(runner, simulationElapsedSeconds),
-        }))
-      : simulationPlan.runners.map((runner) => ({
-          ...runner,
-          progress: progressForRunner(runner, simulationElapsedSeconds),
-        }))
+  const liveSimulationRunners = simulationPlan.runners.map((runner) => ({
+    ...runner,
+    progress: progressForRunner(runner, simulationElapsedSeconds),
+  }));
+  const rankedSimulationRunners = [...liveSimulationRunners].sort((a, b) => {
+    if (simulationElapsedSeconds === 0) return a.lane - b.lane;
+    if (b.progress !== a.progress) return b.progress - a.progress;
+    return a.finishTimeSeconds - b.finishTimeSeconds;
+  });
+  const simulationRankByEntryId = new Map(
+    rankedSimulationRunners.map((runner, index) => [runner.entryId, index + 1])
   );
   const simulationFinishedVisually =
-    simulationDurationSeconds > 0 &&
-    simulationElapsedSeconds >= simulationDurationSeconds;
+    simulationPlan.durationSeconds > 0 &&
+    simulationElapsedSeconds >= simulationPlan.durationSeconds;
+  const officialTimelineRunners = selectedRace?.replayTimeline?.runners || [];
   const officialReplayEntries = useMemo<DisplayRunnerRow[]>(() => {
-    if (normalizedOfficialTimelineRunners.length > 0) {
-      return [...normalizedOfficialTimelineRunners]
-        .sort(
-          (a, b) =>
-            Number(a.displayGate || a.lane || 999) -
-            Number(b.displayGate || b.lane || 999)
-        )
-        .map((runner) => ({
+    if (officialTimelineRunners.length > 0) {
+      return officialTimelineRunners.map((runner) => ({
         keyId: runner.entryId,
         lane: runner.lane,
-        displayGate: runner.displayGate || runner.lane,
         horseName: runner.horseName,
         jockeyName: runner.jockeyName,
         silkColor: runner.silkColor,
@@ -263,21 +247,17 @@ export default function LiveRace() {
       return Number.isFinite(finishSeconds) ? Math.max(max, finishSeconds) : max;
     }, 0);
 
-      return fallbackEntries
-      .sort((a, b) => Number(a.lane || 999) - Number(b.lane || 999))
-      .map((entry) => {
+    return fallbackEntries.map((entry) => {
       const finishSeconds = parseFinishTimeSeconds(entry.finishTime);
 
       return {
         keyId: entry.id,
         lane: entry.lane,
-        displayGate: entry.lane,
         horseName: entry.horseName || 'Unknown horse',
         jockeyName: entry.jockeyName || 'Unknown jockey',
         silkColor: '#d4af37',
         rating: Number(entry.ratingSnapshot || 0),
         carriedWeight: Number(entry.handicap || 0),
-        finishTimeSeconds: finishSeconds,
         progress:
           fallbackMaxFinishSeconds > 0 && Number.isFinite(finishSeconds)
             ? Math.min(finishSeconds / fallbackMaxFinishSeconds, 1)
@@ -285,31 +265,27 @@ export default function LiveRace() {
         position: Number(entry.position || 0),
         finishTime: entry.finishTime || '',
       };
-      });
-  }, [normalizedOfficialTimelineRunners, officialTimelineRunners, selectedEntries, simulationElapsedSeconds]);
+    });
+  }, [officialTimelineRunners, selectedEntries, simulationElapsedSeconds]);
   const hasOfficialReplayData =
-    normalizedOfficialTimelineRunners.length > 0 || officialReplayEntries.length > 0;
+    officialTimelineRunners.length > 0 || officialReplayEntries.length > 0;
   const officialReplayMode =
     ['finished', 'completed'].includes(selectedRace?.status || '') && hasOfficialReplayData;
   const displayEntries: DisplayRunnerRow[] = officialReplayMode
-    ? sortRaceDisplayRunners(officialReplayEntries)
-    : sortRaceDisplayRunners(
-        liveSimulationRunners.map((runner) => ({
-          keyId: runner.entryId,
-          lane: runner.lane,
-          displayGate: runner.displayGate,
-          horseName: runner.horseName,
-          jockeyName: runner.jockeyName,
-          silkColor: runner.silkColor,
-          rating: runner.rating,
-          carriedWeight: runner.carriedWeight,
-          progress: runner.progress,
-          finishTimeSeconds: runner.finishTimeSeconds,
-        }))
-      );
-  const displayRankByEntryId = new Map(
-    displayEntries.map((entry, index) => [entry.keyId, index + 1])
-  );
+    ? officialReplayEntries
+    : liveSimulationRunners.map((runner) => ({
+      keyId: runner.entryId,
+      lane: runner.lane,
+      horseName: runner.horseName,
+      jockeyName: runner.jockeyName,
+      silkColor: runner.silkColor,
+      rating: runner.rating,
+      carriedWeight: runner.carriedWeight,
+      progress: runner.progress,
+    }));
+  const displayRankByEntryId = officialReplayMode
+    ? new Map(officialReplayEntries.map((entry, index) => [entry.keyId, index + 1]))
+    : simulationRankByEntryId;
   const displayDistance =
     officialReplayMode && selectedRace?.distance
       ? selectedRace.distance
@@ -318,14 +294,14 @@ export default function LiveRace() {
     officialReplayMode && selectedRace?.surface ? selectedRace.surface : simulationPlan.surface;
   const displayElapsed =
     officialReplayMode && selectedRace?.status !== 'in-progress'
-      ? (normalizedOfficialTimelineRunners.find((entry) => entry.position === 1)?.finishTime ||
+      ? (officialTimelineRunners.find((entry) => entry.position === 1)?.finishTime ||
         selectedEntries.find((entry) => entry.position === 1)?.finishTime ||
         '00:00.000')
       : formatRaceSimulationTime(simulationElapsedSeconds);
   const displayProjected =
     officialReplayMode && selectedRace?.status !== 'in-progress'
       ? displayElapsed
-      : formatRaceSimulationTime(simulationDurationSeconds);
+      : formatRaceSimulationTime(simulationPlan.durationSeconds);
 
   const positionOptions = Array.from(
     { length: competingEntries.length },
@@ -352,20 +328,17 @@ export default function LiveRace() {
 
   const canOperate =
     currentUser?.role === 'referee' &&
-      selectedRace &&
-      String(selectedRace.refereeUserIds || selectedRace.refereeUserId || '')
-        .split(',')
-        .map((id) => id.trim())
-        .includes(currentUser.id);
+    selectedRace &&
+    String(selectedRace.refereeUserIds || selectedRace.refereeUserId || '')
+      .split(',')
+      .map((id) => id.trim())
+      .includes(currentUser.id);
   const showRefereeControl = currentUser?.role === 'referee';
 
-  const loadRaceOps = (forceBootstrap = false) => {
+  const loadRaceOps = () => {
     const requestId = ++loadRequestIdRef.current;
 
-    Promise.all([
-      getMe().catch(() => ({ user: null as AuthUser | null })),
-      getBootstrap({ force: forceBootstrap }),
-    ])
+    Promise.all([getMe().catch(() => ({ user: null as AuthUser | null })), getBootstrap()])
       .then(([me, data]) => {
         if (requestId !== loadRequestIdRef.current) return;
 
@@ -374,11 +347,11 @@ export default function LiveRace() {
         const visibleRaces =
           authenticatedUser?.role === 'referee'
             ? data.races.filter((race) =>
-                String(race.refereeUserIds || race.refereeUserId || '')
-                  .split(',')
-                  .map((id) => id.trim())
-                  .includes(authenticatedUser.id)
-              )
+              String(race.refereeUserIds || race.refereeUserId || '')
+                .split(',')
+                .map((id) => id.trim())
+                .includes(authenticatedUser.id)
+            )
             : data.races;
 
         setRaces(visibleRaces);
@@ -422,7 +395,7 @@ export default function LiveRace() {
     });
 
     events.addEventListener('race-update', () => {
-      loadRaceOps(true);
+      loadRaceOps();
     });
 
     events.onerror = () => undefined;
@@ -515,13 +488,13 @@ export default function LiveRace() {
       currentEntries.map((currentEntry) =>
         currentEntry.id === entry.id
           ? {
-              ...currentEntry,
-              preRaceStatus: readiness,
-              disqualified: ['absent', 'scratched'].includes(readiness),
-              status: readiness === 'scratched' ? 'scratched' : currentEntry.status,
-              resultStatus:
-                readiness === 'scratched' ? 'disqualified' : currentEntry.resultStatus,
-            }
+            ...currentEntry,
+            preRaceStatus: readiness,
+            disqualified: ['absent', 'scratched'].includes(readiness),
+            status: readiness === 'scratched' ? 'scratched' : currentEntry.status,
+            resultStatus:
+              readiness === 'scratched' ? 'disqualified' : currentEntry.resultStatus,
+          }
           : currentEntry
       )
     );
@@ -544,12 +517,12 @@ export default function LiveRace() {
           currentEntries.map((currentEntry) =>
             currentEntry.id === entry.id
               ? {
-                  ...currentEntry,
-                  preRaceStatus: previousPreRaceStatus,
-                  disqualified: previousDisqualified,
-                  status: previousStatus,
-                  resultStatus: previousResultStatus,
-                }
+                ...currentEntry,
+                preRaceStatus: previousPreRaceStatus,
+                disqualified: previousDisqualified,
+                status: previousStatus,
+                resultStatus: previousResultStatus,
+              }
               : currentEntry
           )
         );
@@ -611,17 +584,12 @@ export default function LiveRace() {
       setMessage('Admin must finish the race before simulation values can be loaded into referee drafts.');
       return;
     }
-    const draftRunners =
-      normalizedOfficialTimelineRunners.length > 0
-        ? normalizedOfficialTimelineRunners
-        : simulationPlan.runners;
-
-    if (draftRunners.length === 0) {
+    if (simulationPlan.runners.length === 0) {
       setMessage('No competing entries are available for simulation drafts.');
       return;
     }
 
-    const finalOrder = [...draftRunners].sort(
+    const finalOrder = [...simulationPlan.runners].sort(
       (a, b) => a.finishTimeSeconds - b.finishTimeSeconds
     );
 
@@ -690,11 +658,10 @@ export default function LiveRace() {
 
         {selectedRace && (
           <div
-            className={`grid gap-8 ${
-              showRefereeControl
-                ? 'lg:grid-cols-[minmax(0,1fr),360px]'
-                : 'mx-auto max-w-[1200px] lg:grid-cols-1'
-            }`}
+            className={`grid gap-8 ${showRefereeControl
+              ? 'lg:grid-cols-[minmax(0,1fr),360px]'
+              : 'mx-auto max-w-[1200px] lg:grid-cols-1'
+              }`}
           >
             <div className="space-y-5">
               <div className="bg-[#12304f] border border-white/10 rounded-2xl p-6">
@@ -765,7 +732,7 @@ export default function LiveRace() {
                   )}
                 </div>
 
-      <div className="space-y-2 p-3 sm:p-5">
+                <div className="space-y-2 p-3 sm:p-5">
                   {displayEntries.length === 0 && (
                     <div className="rounded-xl border border-dashed border-white/15 bg-[#071a2f] p-5 text-center text-gray-500">
                       {officialReplayMode
@@ -775,11 +742,7 @@ export default function LiveRace() {
                   )}
 
                   {displayEntries.map((runner) => {
-                    const rank = officialReplayMode
-                      ? runner.position || displayRankByEntryId.get(runner.keyId)
-                      : displayRankByEntryId.get(runner.keyId);
-                    const gateNumber = Number(runner.displayGate || runner.lane || 0);
-                    const runnerColor = runner.silkColor || '#d4af37';
+                    const rank = displayRankByEntryId.get(runner.keyId);
 
                     return (
                       <div
@@ -788,12 +751,9 @@ export default function LiveRace() {
                       >
                         <div
                           className="flex h-9 w-9 items-center justify-center rounded-xl text-sm font-black text-[#071a2f]"
-                          style={{
-                            backgroundColor: runnerColor,
-                            boxShadow: `0 0 0 1px ${runnerColor}55 inset`,
-                          }}
+                          style={{ backgroundColor: officialReplayMode ? '#d4af37' : runner.silkColor }}
                         >
-                          {gateNumber || '-'}
+                          {runner.lane || '-'}
                         </div>
 
                         <div className="hidden min-w-0 sm:block">
@@ -817,27 +777,27 @@ export default function LiveRace() {
                           <div className="absolute inset-y-0 left-[18px] right-[18px]">
                             <div className="absolute inset-y-0 right-0 z-20 w-1 translate-x-1/2 bg-[repeating-linear-gradient(0deg,#fff_0_4px,#111_4px_8px)] opacity-80" />
                             {officialReplayMode ? (
-                            <div
-                              className="absolute top-1/2 z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-lg"
-                              style={{
-                                left: `${runner.progress * 100}%`,
-                                  backgroundColor: runnerColor,
-                                  boxShadow: `0 0 18px ${runnerColor}80`,
-                              }}
-                              title={`${runner.horseName}: P${rank || '-'}`}
-                            >
+                              <div
+                                className="absolute top-1/2 z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-lg"
+                                style={{
+                                  left: `${runner.progress * 100}%`,
+                                  backgroundColor: '#d4af37',
+                                  boxShadow: '0 0 18px rgba(212,175,55,0.5)',
+                                }}
+                                title={`${runner.horseName}: P${rank || '-'}`}
+                              >
                                 <span className="text-base">♞</span>
                               </div>
                             ) : (
-                            <div
-                              className="absolute top-1/2 z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-lg"
-                              style={{
-                                left: `${runner.progress * 100}%`,
-                                backgroundColor: runner.silkColor,
-                                boxShadow: `0 0 18px ${runner.silkColor}80`,
-                              }}
-                              title={`${runner.horseName}: ${Math.round(runner.progress * 100)}%`}
-                            >
+                              <div
+                                className="absolute top-1/2 z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-lg"
+                                style={{
+                                  left: `${runner.progress * 100}%`,
+                                  backgroundColor: runner.silkColor,
+                                  boxShadow: `0 0 18px ${runner.silkColor}80`,
+                                }}
+                                title={`${runner.horseName}: ${Math.round(runner.progress * 100)}%`}
+                              >
                                 <span className="text-base">♞</span>
                               </div>
                             )}
@@ -846,9 +806,8 @@ export default function LiveRace() {
 
                         <div className="text-center">
                           <div
-                            className={`text-xl font-black ${
-                              rank === 1 ? 'text-[#f6d77a]' : 'text-white'
-                            }`}
+                            className={`text-xl font-black ${rank === 1 ? 'text-[#f6d77a]' : 'text-white'
+                              }`}
                           >
                             P{rank}
                           </div>
@@ -949,65 +908,65 @@ export default function LiveRace() {
                           selectedRace.resultStatus === 'draft' &&
                           entry.status === 'approved' &&
                           entry.preRaceStatus !== 'absent' && (
-                          <div className="grid grid-cols-2 gap-3">
-                            <select
-                              aria-label={`Position for ${entry.horseName}`}
-                              value={
-                                resultDrafts[entry.id]?.position ??
-                                (entry.position ? String(entry.position) : '')
-                              }
-                              onChange={(event) =>
-                                updateDraft(entry, { position: event.target.value })
-                              }
-                              className="bg-[#111] border border-white/10 rounded-xl px-3 py-2 text-white"
-                            >
-                              <option value="">Select position</option>
-                              {positionOptions.map((position) => (
-                                <option
-                                  key={position}
-                                  value={position}
-                                >
-                                  Position {position}
-                                </option>
-                              ))}
-                            </select>
+                            <div className="grid grid-cols-2 gap-3">
+                              <select
+                                aria-label={`Position for ${entry.horseName}`}
+                                value={
+                                  resultDrafts[entry.id]?.position ??
+                                  (entry.position ? String(entry.position) : '')
+                                }
+                                onChange={(event) =>
+                                  updateDraft(entry, { position: event.target.value })
+                                }
+                                className="bg-[#111] border border-white/10 rounded-xl px-3 py-2 text-white"
+                              >
+                                <option value="">Select position</option>
+                                {positionOptions.map((position) => (
+                                  <option
+                                    key={position}
+                                    value={position}
+                                  >
+                                    Position {position}
+                                  </option>
+                                ))}
+                              </select>
 
-                            <input
-                              placeholder="Finish time"
-                              value={resultDrafts[entry.id]?.finishTime ?? entry.finishTime ?? ''}
-                              onChange={(event) =>
-                                updateDraft(entry, { finishTime: event.target.value })
-                              }
-                              className="bg-[#111] border border-white/10 rounded-xl px-3 py-2 text-white"
-                            />
+                              <input
+                                placeholder="Finish time"
+                                value={resultDrafts[entry.id]?.finishTime ?? entry.finishTime ?? ''}
+                                onChange={(event) =>
+                                  updateDraft(entry, { finishTime: event.target.value })
+                                }
+                                className="bg-[#111] border border-white/10 rounded-xl px-3 py-2 text-white"
+                              />
 
-                            <input
-                              placeholder="Notes"
-                              value={resultDrafts[entry.id]?.notes ?? entry.notes ?? ''}
-                              onChange={(event) =>
-                                updateDraft(entry, { notes: event.target.value })
-                              }
-                              className="bg-[#111] border border-white/10 rounded-xl px-3 py-2 text-white"
-                            />
+                              <input
+                                placeholder="Notes"
+                                value={resultDrafts[entry.id]?.notes ?? entry.notes ?? ''}
+                                onChange={(event) =>
+                                  updateDraft(entry, { notes: event.target.value })
+                                }
+                                className="bg-[#111] border border-white/10 rounded-xl px-3 py-2 text-white"
+                              />
 
-                            <input
-                              placeholder="Violations"
-                              value={resultDrafts[entry.id]?.violationNotes ?? entry.violationNotes ?? ''}
-                              onChange={(event) =>
-                                updateDraft(entry, { violationNotes: event.target.value })
-                              }
-                              className="bg-[#111] border border-white/10 rounded-xl px-3 py-2 text-white"
-                            />
+                              <input
+                                placeholder="Violations"
+                                value={resultDrafts[entry.id]?.violationNotes ?? entry.violationNotes ?? ''}
+                                onChange={(event) =>
+                                  updateDraft(entry, { violationNotes: event.target.value })
+                                }
+                                className="bg-[#111] border border-white/10 rounded-xl px-3 py-2 text-white"
+                              />
 
-                            <button
-                              onClick={() => submitResult(entry)}
-                              disabled={recordingEntryId === entry.id}
-                              className="col-span-2 py-3 bg-[#d4af37] hover:bg-[#b8892d] disabled:cursor-not-allowed disabled:opacity-60 rounded-xl text-white font-bold"
-                            >
-                              {recordingEntryId === entry.id ? 'Recording...' : 'Record Result'}
-                            </button>
-                          </div>
-                        )}
+                              <button
+                                onClick={() => submitResult(entry)}
+                                disabled={recordingEntryId === entry.id}
+                                className="col-span-2 py-3 bg-[#d4af37] hover:bg-[#b8892d] disabled:cursor-not-allowed disabled:opacity-60 rounded-xl text-white font-bold"
+                              >
+                                {recordingEntryId === entry.id ? 'Recording...' : 'Record Result'}
+                              </button>
+                            </div>
+                          )}
                       </div>
                     </div>
                   ))}
@@ -1018,82 +977,82 @@ export default function LiveRace() {
             {showRefereeControl && (
               <div className="space-y-5">
                 <div className="bg-[#12304f] border border-white/10 rounded-2xl p-6 sticky top-24">
-                <div className="flex items-center gap-3 mb-5">
-                  <ShieldCheck className="w-6 h-6 text-[#d4af37]" />
-                  <h2 className="text-2xl font-black text-white">
-                    Referee Control
-                  </h2>
-                </div>
-
-                <div className="space-y-3 text-gray-300 text-sm mb-6">
-                  <div className="flex justify-between gap-3">
-                            <span>Check-in</span>
-                    <span className="text-white font-bold">
-                      {readyEntries.length}/{activeEntries.length} Ready
-                    </span>
+                  <div className="flex items-center gap-3 mb-5">
+                    <ShieldCheck className="w-6 h-6 text-[#d4af37]" />
+                    <h2 className="text-2xl font-black text-white">
+                      Referee Control
+                    </h2>
                   </div>
 
-                  <div className="flex justify-between gap-3">
-                    <span>Start status</span>
-                    <span className="text-white font-bold">
-                      {statusLabel(selectedRace.status)}
-                    </span>
+                  <div className="space-y-3 text-gray-300 text-sm mb-6">
+                    <div className="flex justify-between gap-3">
+                      <span>Check-in</span>
+                      <span className="text-white font-bold">
+                        {readyEntries.length}/{activeEntries.length} Ready
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between gap-3">
+                      <span>Start status</span>
+                      <span className="text-white font-bold">
+                        {statusLabel(selectedRace.status)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between gap-3">
+                      <span>Unchecked</span>
+                      <span className="text-white font-bold">
+                        {uncheckedEntries.length}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between gap-3">
+                      <span>Result approval</span>
+                      <span className="text-white font-bold">Admin completes</span>
+                    </div>
                   </div>
 
-                  <div className="flex justify-between gap-3">
-                    <span>Unchecked</span>
-                    <span className="text-white font-bold">
-                      {uncheckedEntries.length}
-                    </span>
-                  </div>
+                  {selectedRace.status === 'published' && (
+                    <div className="mt-3 rounded-xl border border-white/10 bg-[#071a2f] p-4 text-sm text-gray-400">
+                      Check in every participant. Admin starts the race after check-in is complete.
+                    </div>
+                  )}
 
-                  <div className="flex justify-between gap-3">
-                    <span>Result approval</span>
-                    <span className="text-white font-bold">Admin completes</span>
-                  </div>
-                </div>
+                  {selectedRace.status === 'in-progress' && (
+                    <div className="mt-3 rounded-xl border border-white/10 bg-[#071a2f] p-4 text-sm text-gray-400">
+                      Race is running. Admin must finish the race before Referee can enter results.
+                    </div>
+                  )}
 
-                {selectedRace.status === 'published' && (
-                  <div className="mt-3 rounded-xl border border-white/10 bg-[#071a2f] p-4 text-sm text-gray-400">
-                    Check in every participant. Admin starts the race after check-in is complete.
-                  </div>
-                )}
+                  {selectedRace.status === 'finished' && selectedRace.resultStatus === 'draft' && (
+                    <button
+                      onClick={loadSimulationDrafts}
+                      disabled={!canOperate || simulationPlan.runners.length === 0}
+                      className="w-full mt-3 flex items-center justify-center gap-2 py-4 bg-[#d4af37] hover:bg-[#e7c95d] disabled:cursor-not-allowed disabled:opacity-50 rounded-xl text-[#071a2f] font-black transition-all"
+                    >
+                      Load Simulation Drafts
+                    </button>
+                  )}
 
-                {selectedRace.status === 'in-progress' && (
-                  <div className="mt-3 rounded-xl border border-white/10 bg-[#071a2f] p-4 text-sm text-gray-400">
-                    Race is running. Admin must finish the race before Referee can enter results.
-                  </div>
-                )}
-
-                {selectedRace.status === 'finished' && selectedRace.resultStatus === 'draft' && (
                   <button
-                    onClick={loadSimulationDrafts}
-                    disabled={!canOperate || simulationPlan.runners.length === 0}
-                    className="w-full mt-3 flex items-center justify-center gap-2 py-4 bg-[#d4af37] hover:bg-[#e7c95d] disabled:cursor-not-allowed disabled:opacity-50 rounded-xl text-[#071a2f] font-black transition-all"
+                    onClick={submitResults}
+                    disabled={
+                      !canOperate ||
+                      publishingResults ||
+                      selectedRace.status !== 'finished' ||
+                      selectedRace.resultStatus !== 'draft'
+                    }
+                    className="w-full mt-3 flex items-center justify-center gap-2 py-4 bg-white/10 hover:bg-white/15 disabled:text-gray-500 rounded-xl text-white font-bold transition-all"
                   >
-                    Load Simulation Drafts
+                    {publishingResults ? 'Submitting...' : 'Submit Results for Admin Review'}
                   </button>
-                )}
 
-                <button
-                  onClick={submitResults}
-                  disabled={
-                    !canOperate ||
-                    publishingResults ||
-                    selectedRace.status !== 'finished' ||
-                    selectedRace.resultStatus !== 'draft'
-                  }
-                  className="w-full mt-3 flex items-center justify-center gap-2 py-4 bg-white/10 hover:bg-white/15 disabled:text-gray-500 rounded-xl text-white font-bold transition-all"
-                >
-                  {publishingResults ? 'Submitting...' : 'Submit Results for Admin Review'}
-                </button>
-
-                <div className="mt-5 rounded-xl bg-[#071a2f] border border-white/10 p-4 text-gray-400">
-                  <Timer className="inline-block w-4 h-4 mr-2 text-[#d4af37]" />
-                  Submitting sends recorded results to Admin. They become official only after Admin approval.
+                  <div className="mt-5 rounded-xl bg-[#071a2f] border border-white/10 p-4 text-gray-400">
+                    <Timer className="inline-block w-4 h-4 mr-2 text-[#d4af37]" />
+                    Submitting sends recorded results to Admin. They become official only after Admin approval.
+                  </div>
                 </div>
               </div>
-            </div>
             )}
           </div>
         )}

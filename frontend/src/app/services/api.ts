@@ -592,7 +592,10 @@ export const createRace = async (race: {
 // Lưu thay đổi lịch race (admin)
 export const updateRace = async (
   raceId: string,
-  race: Pick<RaceRecord, 'name' | 'date' | 'time'>
+  race: Pick<
+    RaceRecord,
+    'name' | 'date' | 'time' | 'registrationOpensAt' | 'registrationClosesAt'
+  >
 ) =>
   request<{ race: RaceRecord }>(`/admin/races/${raceId}`, {
     method: 'PATCH',

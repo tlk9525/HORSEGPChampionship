@@ -6,11 +6,14 @@ import {
   TournamentRecord,
   createRace,
   getRaceBuilder,
+  updateRace,
 } from '../services/api';
 import { messageToneClasses } from '../utils/messageTone';
 
 interface CreateRacePageProps {
   onNavigate: (page: string) => void;
+  raceId?: string;
+  isEdit?: boolean;
 }
 
 const EDITABLE_RACE_STATUSES = ['registration-open', 'registration-closed'];
@@ -48,6 +51,8 @@ const RACE_CLASS_WEIGHT_RANGES: Record<string, { minWeightLb: string; topWeightL
 
 export default function CreateRacePage({
   onNavigate,
+  raceId,
+  isEdit = false,
 }: CreateRacePageProps) {
   const fieldClass =
     'min-h-[54px] w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 outline-none focus:border-[#d4af37]/70 focus:ring-2 focus:ring-[#d4af37]/20 disabled:cursor-not-allowed disabled:opacity-60';
@@ -112,9 +117,9 @@ export default function CreateRacePage({
         );
         const usedNumbers = firstTournament
           ? existingRaces
-              .filter((race) => race.tournamentId === firstTournament.id)
-              .map((race) => Number(String(race.raceNumber || '').replace(/^R/i, '')))
-              .filter((number) => Number.isFinite(number))
+            .filter((race) => race.tournamentId === firstTournament.id)
+            .map((race) => Number(String(race.raceNumber || '').replace(/^R/i, '')))
+            .filter((number) => Number.isFinite(number))
           : [];
         const nextRaceNumber = firstTournament
           ? `R${usedNumbers.length > 0 ? Math.max(...usedNumbers) + 1 : 1}`
@@ -136,6 +141,59 @@ export default function CreateRacePage({
 
   const handleSubmit = () => {
     setMessage('');
+
+    if (isEdit) {
+      if (
+        !raceId ||
+        !form.raceName ||
+        !form.raceDate ||
+        !form.startTime ||
+        !form.registrationOpensAt ||
+        !form.registrationClosesAt
+      ) {
+        setMessage('Please complete the race name, date, time and registration window.');
+        return;
+      }
+
+      const regOpens = new Date(form.registrationOpensAt);
+      const regCloses = new Date(form.registrationClosesAt);
+      const raceStartsAt = new Date(`${form.raceDate}T${form.startTime}`);
+      if (
+        !Number.isFinite(regOpens.getTime()) ||
+        !Number.isFinite(regCloses.getTime()) ||
+        !Number.isFinite(raceStartsAt.getTime())
+      ) {
+        setMessage('Race and registration times must be valid.');
+        return;
+      }
+      if (regOpens >= regCloses) {
+        setMessage('Registration close time must be after open time.');
+        return;
+      }
+      if (regCloses > raceStartsAt) {
+        setMessage('Registration must close before the race starts.');
+        return;
+      }
+
+      setIsSubmitting(true);
+      updateRace(raceId, {
+        name: form.raceName,
+        date: form.raceDate,
+        time: form.startTime,
+        registrationOpensAt: new Date(form.registrationOpensAt).toISOString(),
+        registrationClosesAt: new Date(form.registrationClosesAt).toISOString(),
+      })
+        .then(() => {
+          setMessage('Race schedule saved.');
+          setTimeout(() => onNavigate('admin'), 900);
+        })
+        .catch((error) =>
+          setMessage(error instanceof Error ? error.message : 'Unable to save race')
+        )
+        .finally(() => setIsSubmitting(false));
+      return;
+    }
+
 
     const tournamentRaceCount = races.filter(
       (race) => race.tournamentId === form.tournamentId
@@ -296,324 +354,324 @@ export default function CreateRacePage({
               </button>
             </div>
           ) : (
-          <div className="grid lg:grid-cols-[minmax(0,1fr),360px] gap-8">
-            <div className="grid md:grid-cols-2 gap-x-6 gap-y-5">
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Tournament</label>
-                <select
-                  className={fieldClass}
-                  value={form.tournamentId}
-                  onChange={(event) => handleTournamentChange(event.target.value)}
-                >
-                  {tournamentOptions.map((tournament) => (
-                    <option
-                      key={tournament.id}
-                      value={tournament.id}
-                      disabled={
-                        races.filter((race) => race.tournamentId === tournament.id).length >=
-                        maxRacesPerTournament
-                      }
-                    >
-                      {tournament.name} ({races.filter((race) => race.tournamentId === tournament.id).length}/{maxRacesPerTournament})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Race Number</label>
-                <input
-                  placeholder={form.tournamentId ? getNextRaceNumber(form.tournamentId) : 'R1'}
-                  className={fieldClass}
-                  value={form.raceNumber}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      raceNumber: event.target.value,
-                    })
-                  }
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Race Name</label>
-                <input
-                  placeholder={`${selectedTournament?.name || 'Tournament'} ${form.raceNumber || 'R1'}`}
-                  className={fieldClass}
-                  value={form.raceName}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      raceName: event.target.value,
-                    })
-                  }
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Race Date</label>
-                <input
-                  type="date"
-                  className={fieldClass}
-                  value={form.raceDate}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      raceDate: event.target.value,
-                    })
-                  }
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Start Time</label>
-                <input
-                  type="time"
-                  className={fieldClass}
-                  value={form.startTime}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      startTime: event.target.value,
-                    })
-                  }
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Registration Opens</label>
-                <input
-                  type="datetime-local"
-                  className={fieldClass}
-                  value={form.registrationOpensAt}
-                  onChange={(event) =>
-                    setForm({ ...form, registrationOpensAt: event.target.value })
-                  }
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Registration Closes</label>
-                <input
-                  type="datetime-local"
-                  className={fieldClass}
-                  value={form.registrationClosesAt}
-                  onChange={(event) =>
-                    setForm({ ...form, registrationClosesAt: event.target.value })
-                  }
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Prize Pool (USD)</label>
-                <input
-                  type="number"
-                  min="0"
-                  placeholder="e.g. 150000"
-                  className={fieldClass}
-                  value={form.totalPrize}
-                  onChange={(event) =>
-                    setForm({ ...form, totalPrize: event.target.value })
-                  }
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Venue</label>
-                <input
-                  placeholder="Churchill Downs"
-                  className={fieldClass}
-                  value={form.venue}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      venue: event.target.value,
-                    })
-                  }
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Distance (m)</label>
-                <input
-                  type="number"
-                  min="1"
-                  className={fieldClass}
-                  value={form.distance}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      distance: event.target.value,
-                    })
-                  }
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Surface</label>
-                <select
-                  className={fieldClass}
-                  value={form.surfaceType}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      surfaceType: event.target.value,
-                    })
-                  }
-                >
-                  <option value="">Select surface</option>
-                  <option>Turf</option>
-                  <option>Dirt</option>
-                  <option>Synthetic</option>
-                </select>
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Race Class</label>
-                <select
-                  className={fieldClass}
-                  value={form.raceClass}
-                  onChange={(event) => handleRaceClassChange(event.target.value)}
-                >
-                  <option value="">Select class</option>
-                  <option value="Class 1">Class 1 (101-140)</option>
-                  <option value="Class 2">Class 2 (81-100)</option>
-                  <option value="Class 3">Class 3 (61-80)</option>
-                  <option value="Class 4">Class 4 (41-60)</option>
-                  <option value="Class 5">Class 5 (0-40)</option>
-                  <option value="Open">Open (0-140)</option>
-                </select>
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Minimum Weight (lb)</label>
-                <input
-                  type="number"
-                  min="110"
-                  max="135"
-                  step="1"
-                  className={fieldClass}
-                  value={form.handicapMin}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      handicapMin: event.target.value,
-                    })
-                  }
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Top Weight (lb)</label>
-                <input
-                  type="number"
-                  min="110"
-                  max="135"
-                  step="1"
-                  className={fieldClass}
-                  value={form.handicapMax}
-                  onChange={(event) =>
-                    setForm({
-                      ...form,
-                      handicapMax: event.target.value,
-                    })
-                  }
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="block text-gray-300 mb-2">Assigned Referees (Hold Cmd/Ctrl to select multiple)</label>
-                <select
-                  multiple
-                  className={`${fieldClass} min-h-[120px]`}
-                  value={form.refereeUserIds}
-                  onChange={(event) => {
-                    const options = Array.from(event.target.selectedOptions);
-                    setForm({
-                      ...form,
-                      refereeUserIds: options.map(opt => opt.value),
-                    });
-                  }}
-                >
-                  {referees.map((referee) => (
-                    <option key={referee.id} value={referee.id} className="p-1">
-                      {referee.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="space-y-5">
-              <div className="rounded-2xl border border-white/10 bg-[#0b223d] p-6 sticky top-24">
-                <div className="flex items-center gap-3 mb-4">
-                  <Bell className="w-6 h-6 text-[#d4af37]" />
-
-                  <h2 className="text-2xl font-black text-white">
-                    Race Registration Window
-                  </h2>
+            <div className="grid lg:grid-cols-[minmax(0,1fr),360px] gap-8">
+              <div className="grid md:grid-cols-2 gap-x-6 gap-y-5">
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Tournament</label>
+                  <select
+                    className={fieldClass}
+                    value={form.tournamentId}
+                    onChange={(event) => handleTournamentChange(event.target.value)}
+                  >
+                    {tournamentOptions.map((tournament) => (
+                      <option
+                        key={tournament.id}
+                        value={tournament.id}
+                        disabled={
+                          races.filter((race) => race.tournamentId === tournament.id).length >=
+                          maxRacesPerTournament
+                        }
+                      >
+                        {tournament.name} ({races.filter((race) => race.tournamentId === tournament.id).length}/{maxRacesPerTournament})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                <p className="text-gray-400 mb-5">
-                  Each race has its own registration window. Owners can register horses once the window opens. Prize is awarded per race.
-                </p>
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Race Number</label>
+                  <input
+                    placeholder={form.tournamentId ? getNextRaceNumber(form.tournamentId) : 'R1'}
+                    className={fieldClass}
+                    value={form.raceNumber}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        raceNumber: event.target.value,
+                      })
+                    }
+                  />
+                </div>
 
-                <div className="space-y-3 text-sm text-gray-300 mb-6">
-                  <div className="flex justify-between gap-3">
-                    <span>Race registration opens</span>
-                    <span className="text-white font-bold text-right">
-                      {form.registrationOpensAt
-                        ? new Date(form.registrationOpensAt).toLocaleString()
-                        : 'Not set'}
-                    </span>
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Race Name</label>
+                  <input
+                    placeholder={`${selectedTournament?.name || 'Tournament'} ${form.raceNumber || 'R1'}`}
+                    className={fieldClass}
+                    value={form.raceName}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        raceName: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Race Date</label>
+                  <input
+                    type="date"
+                    className={fieldClass}
+                    value={form.raceDate}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        raceDate: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Start Time</label>
+                  <input
+                    type="time"
+                    className={fieldClass}
+                    value={form.startTime}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        startTime: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Registration Opens</label>
+                  <input
+                    type="datetime-local"
+                    className={fieldClass}
+                    value={form.registrationOpensAt}
+                    onChange={(event) =>
+                      setForm({ ...form, registrationOpensAt: event.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Registration Closes</label>
+                  <input
+                    type="datetime-local"
+                    className={fieldClass}
+                    value={form.registrationClosesAt}
+                    onChange={(event) =>
+                      setForm({ ...form, registrationClosesAt: event.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Prize Pool (USD)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 150000"
+                    className={fieldClass}
+                    value={form.totalPrize}
+                    onChange={(event) =>
+                      setForm({ ...form, totalPrize: event.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Venue</label>
+                  <input
+                    placeholder="Churchill Downs"
+                    className={fieldClass}
+                    value={form.venue}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        venue: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Distance (m)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    className={fieldClass}
+                    value={form.distance}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        distance: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Surface</label>
+                  <select
+                    className={fieldClass}
+                    value={form.surfaceType}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        surfaceType: event.target.value,
+                      })
+                    }
+                  >
+                    <option value="">Select surface</option>
+                    <option>Turf</option>
+                    <option>Dirt</option>
+                    <option>Synthetic</option>
+                  </select>
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Race Class</label>
+                  <select
+                    className={fieldClass}
+                    value={form.raceClass}
+                    onChange={(event) => handleRaceClassChange(event.target.value)}
+                  >
+                    <option value="">Select class</option>
+                    <option value="Class 1">Class 1 (101-140)</option>
+                    <option value="Class 2">Class 2 (81-100)</option>
+                    <option value="Class 3">Class 3 (61-80)</option>
+                    <option value="Class 4">Class 4 (41-60)</option>
+                    <option value="Class 5">Class 5 (0-40)</option>
+                    <option value="Open">Open (0-140)</option>
+                  </select>
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Minimum Weight (lb)</label>
+                  <input
+                    type="number"
+                    min="110"
+                    max="135"
+                    step="1"
+                    className={fieldClass}
+                    value={form.handicapMin}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        handicapMin: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Top Weight (lb)</label>
+                  <input
+                    type="number"
+                    min="110"
+                    max="135"
+                    step="1"
+                    className={fieldClass}
+                    value={form.handicapMax}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        handicapMax: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Assigned Referees (Hold Cmd/Ctrl to select multiple)</label>
+                  <select
+                    multiple
+                    className={`${fieldClass} min-h-[120px]`}
+                    value={form.refereeUserIds}
+                    onChange={(event) => {
+                      const options = Array.from(event.target.selectedOptions);
+                      setForm({
+                        ...form,
+                        refereeUserIds: options.map(opt => opt.value),
+                      });
+                    }}
+                  >
+                    {referees.map((referee) => (
+                      <option key={referee.id} value={referee.id} className="p-1">
+                        {referee.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                <div className="rounded-2xl border border-white/10 bg-[#0b223d] p-6 sticky top-24">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Bell className="w-6 h-6 text-[#d4af37]" />
+
+                    <h2 className="text-2xl font-black text-white">
+                      Race Registration Window
+                    </h2>
                   </div>
 
-                  <div className="flex justify-between gap-3">
-                    <span>Race registration closes</span>
-                    <span className="text-white font-bold text-right">
-                      {form.registrationClosesAt
-                        ? new Date(form.registrationClosesAt).toLocaleString()
-                        : 'Not set'}
-                    </span>
-                  </div>
+                  <p className="text-gray-400 mb-5">
+                    Each race has its own registration window. Owners can register horses once the window opens. Prize is awarded per race.
+                  </p>
 
-                  <div className="flex justify-between gap-3">
-                    <span>Initial status</span>
-                    <span className="text-white font-bold">
-                      {form.registrationOpensAt &&
+                  <div className="space-y-3 text-sm text-gray-300 mb-6">
+                    <div className="flex justify-between gap-3">
+                      <span>Race registration opens</span>
+                      <span className="text-white font-bold text-right">
+                        {form.registrationOpensAt
+                          ? new Date(form.registrationOpensAt).toLocaleString()
+                          : 'Not set'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between gap-3">
+                      <span>Race registration closes</span>
+                      <span className="text-white font-bold text-right">
+                        {form.registrationClosesAt
+                          ? new Date(form.registrationClosesAt).toLocaleString()
+                          : 'Not set'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between gap-3">
+                      <span>Initial status</span>
+                      <span className="text-white font-bold">
+                        {form.registrationOpensAt &&
                           Date.now() < new Date(form.registrationOpensAt).getTime()
-                        ? 'Registration Scheduled'
-                        : 'Registration Open'}
-                    </span>
+                          ? 'Registration Scheduled'
+                          : 'Registration Open'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between gap-3">
+                      <span>Entry approval</span>
+                      <span className="text-white font-bold">Admin</span>
+                    </div>
+
+                    <div className="flex justify-between gap-3">
+                      <span>Gate + assigned weight</span>
+                      <span className="text-white font-bold">System</span>
+                    </div>
                   </div>
 
-                  <div className="flex justify-between gap-3">
-                    <span>Entry approval</span>
-                    <span className="text-white font-bold">Admin</span>
-                  </div>
-
-                  <div className="flex justify-between gap-3">
-                    <span>Gate + assigned weight</span>
-                    <span className="text-white font-bold">System</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={handleSubmit}
-                  disabled={
-                    isSubmitting ||
-                    !form.tournamentId ||
-                    races.filter((race) => race.tournamentId === form.tournamentId).length >=
+                  <button
+                    onClick={handleSubmit}
+                    disabled={
+                      isSubmitting ||
+                      !form.tournamentId ||
+                      races.filter((race) => race.tournamentId === form.tournamentId).length >=
                       maxRacesPerTournament
-                  }
-                  className="w-full px-8 py-4 bg-[#d4af37] hover:bg-[#b8892d] disabled:opacity-60 rounded-2xl text-white font-bold transition-all"
-                >
-                  <CalendarClock className="inline-block w-5 h-5 mr-2" />
-                  {isSubmitting ? 'Creating Race...' : 'Create Race'}
-                </button>
+                    }
+                    className="w-full px-8 py-4 bg-[#d4af37] hover:bg-[#b8892d] disabled:opacity-60 rounded-2xl text-white font-bold transition-all"
+                  >
+                    <CalendarClock className="inline-block w-5 h-5 mr-2" />
+                    {isSubmitting ? 'Creating Race...' : 'Create Race'}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
           )}
         </div>
       </div>
