@@ -25,11 +25,9 @@ import {
   adminRaceAction,
   createTournament,
   decideApproval,
-  deleteRace,
   deleteTournament,
   getApprovals,
   getBootstrap,
-  updateRace as persistRace,
   updateTournament,
 } from '../services/api';
 import { statusLabel } from '../utils/domain';
@@ -38,23 +36,6 @@ import { messageToneClasses } from '../utils/messageTone';
 interface AdminPanelProps {
   onNavigate: (page: string) => void;
 }
-
-const formatDateInput = (value: string) => {
-  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-
-  if (isoMatch) {
-    return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
-  }
-
-  const digits = value.replace(/\D/g, '').slice(0, 8);
-  const parts = [
-    digits.slice(0, 2),
-    digits.slice(2, 4),
-    digits.slice(4, 8),
-  ].filter(Boolean);
-
-  return parts.join('/');
-};
 
 const dateInputToIso = (value: string) => {
   const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -242,70 +223,6 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   const [showViewModal, setShowViewModal] =
     useState<RaceRecord | null>(null);
-
-  const [editRace, setEditRace] =
-    useState<RaceRecord | null>(null);
-  const [deleteRaceTarget, setDeleteRaceTarget] =
-    useState<RaceRecord | null>(null);
-
-  const updateRace = () => {
-    if (!editRace) return;
-
-    const raceDate = editRace.date ? dateInputToIso(editRace.date) : '';
-
-    if (editRace.date && !raceDate) {
-      setApprovalMessage('Race date must be valid.');
-      return;
-    }
-
-    persistRace(editRace.id, {
-      name: editRace.name,
-      date: raceDate,
-      time: editRace.time,
-    })
-      .then(({ race }) => {
-        setRaces((current) =>
-          current.map((item) => (item.id === race.id ? race : item))
-        );
-        setEditRace(null);
-        setApprovalMessage('Race schedule saved.');
-      })
-      .catch((error) =>
-        setApprovalMessage(
-          error instanceof Error ? error.message : 'Unable to save race'
-        )
-      );
-  };
-
-  const requestDeleteRace = (race: RaceRecord) => {
-    setDeleteRaceTarget(race);
-  };
-
-  const confirmDeleteRace = () => {
-    if (!deleteRaceTarget) return;
-
-    const race = deleteRaceTarget;
-    deleteRace(race.id)
-      .then(() => {
-        setRaces((current) => current.filter((item) => item.id !== race.id));
-        setRaceEntries((current) =>
-          current.filter((entry) => entry.raceId !== race.id)
-        );
-        if (editRace?.id === race.id) setEditRace(null);
-        setDeleteRaceTarget(null);
-        setApprovalMessage('Race deleted.');
-      })
-      .catch((error) =>
-        setApprovalMessage(
-          error instanceof Error ? error.message : 'Unable to delete race'
-        )
-      );
-  };
-
-  const removeRace = () => {
-    if (!editRace) return;
-    requestDeleteRace(editRace);
-  };
 
   const handleRaceAction = (
     raceId: string,
@@ -897,12 +814,10 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                                     </button>
 
                                     <button
-                                      onClick={() =>
-                                        setEditRace({
-                                          ...race,
-                                          date: formatDateInput(race.date || ''),
-                                        })
-                                      }
+                                      onClick={() => {
+                                        sessionStorage.setItem('selectedRaceId', race.id);
+                                        onNavigate('edit-race');
+                                      }}
                                       disabled={!['registration-open', 'registration-closed'].includes(race.status)}
                                       className="flex items-center gap-2 px-4 py-2 bg-[#d4af37]/10 text-[#d4af37] rounded-xl hover:bg-[#d4af37] hover:text-white transition-all border border-[#d4af37]/30 text-sm font-semibold disabled:opacity-50 disabled:hover:bg-[#d4af37]/10 disabled:hover:text-[#d4af37]"
                                     >
@@ -1064,144 +979,6 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
             </div>
           </div>
         </div>
-
-        {/* EDIT MODAL */}
-
-        {editRace && (
-
-          <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-50">
-
-            <div className="bg-[#12304f] p-8 rounded-3xl w-full max-w-lg border border-white/10">
-
-              <h2 className="text-3xl font-black text-white mb-8">
-                Edit Race
-              </h2>
-
-              <div className="space-y-5">
-
-                <label className="space-y-2 block">
-                  <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
-                    Race name
-                  </span>
-                  <input
-                    type="text"
-                    value={editRace.name}
-                    onChange={(e) =>
-                      setEditRace({
-                        ...editRace,
-                        name:
-                          e.target.value,
-                      })
-                    }
-                    className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                  />
-                </label>
-
-                <div className="grid md:grid-cols-2 gap-5">
-                  <label className="space-y-2 block">
-                    <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
-                      Race date
-                    </span>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      placeholder="dd/MM/yyyy"
-                      value={editRace.date}
-                      onChange={(e) =>
-                        setEditRace({
-                          ...editRace,
-                          date:
-                            formatDateInput(e.target.value),
-                        })
-                      }
-                      maxLength={10}
-                      className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                    />
-                  </label>
-
-                  <label className="space-y-2 block">
-                    <span className="text-sm font-bold uppercase tracking-[0.16em] text-[#d4af37]">
-                      Race time
-                    </span>
-                    <input
-                      type="time"
-                      value={editRace.time}
-                      onChange={(e) =>
-                        setEditRace({
-                          ...editRace,
-                          time:
-                            e.target.value,
-                        })
-                      }
-                      className="w-full bg-[#071a2f] border border-white/10 rounded-2xl px-5 py-4 text-white"
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <div className="flex gap-4 mt-8">
-
-                <button
-                  onClick={removeRace}
-                  className="flex-1 flex items-center justify-center gap-2 py-4 bg-red-600 hover:bg-red-700 rounded-2xl text-white font-bold"
-                >
-                  <Trash2 className="w-5 h-5" />
-                  Delete
-                </button>
-
-                <button
-                  onClick={() =>
-                    setEditRace(null)
-                  }
-                  className="flex-1 py-4 bg-white/10 rounded-2xl text-white"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  onClick={updateRace}
-                  className="flex-1 py-4 bg-[#d4af37] rounded-2xl text-white font-bold"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {deleteRaceTarget && (
-          <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-[60] p-4">
-            <div className="bg-[#12304f] p-8 rounded-3xl w-full max-w-lg border border-red-500/30">
-              <div className="flex items-center gap-3 text-red-300 mb-4">
-                <Trash2 className="w-6 h-6" />
-                <h2 className="text-2xl font-black text-white">
-                  Delete Race?
-                </h2>
-              </div>
-
-              <p className="text-gray-300 leading-relaxed">
-                Are you sure you want to delete <span className="font-bold text-white">{deleteRaceTarget.name}</span>? This action cannot be undone.
-              </p>
-
-              <div className="flex gap-4 mt-8">
-                <button
-                  onClick={() => setDeleteRaceTarget(null)}
-                  className="flex-1 py-4 bg-white/10 rounded-2xl text-white"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  onClick={confirmDeleteRace}
-                  className="flex-1 flex items-center justify-center gap-2 py-4 bg-red-600 hover:bg-red-700 rounded-2xl text-white font-bold"
-                >
-                  <Trash2 className="w-5 h-5" />
-                  Delete
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {deleteTournamentTarget && (
           <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-[60] p-4">
