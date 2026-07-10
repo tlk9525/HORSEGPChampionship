@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import {
   ACTIVE_TOURNAMENT_STATUSES,
   MAX_OWNER_HORSES,
-  RACE_CLASSES,
 } from '../config/constants.js';
 import { requireRole } from '../services/authService.js';
 import {
@@ -24,6 +23,7 @@ import {
   horseOverallRating,
   numeric,
   officialHorseRating,
+  raceEligibilityRange,
 } from '../services/handicapService.js';
 
 const validRatingComponents = (values) =>
@@ -170,9 +170,9 @@ export const createOwnerRoutes = (getDb, writeDb) => {
           ) {
             return false;
           }
-          if (race.raceClass && RACE_CLASSES[race.raceClass]) {
+          const { min, max } = raceEligibilityRange(race);
+          if (Number.isFinite(min) && Number.isFinite(max)) {
             const rating = officialHorseRating(horse);
-            const { min, max } = RACE_CLASSES[race.raceClass];
             if (rating < min || rating > max) {
               return false;
             }
@@ -329,11 +329,11 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     if (!horse) return c.json({ message: 'Owner can only register approved horses they own' }, 400);
     if (!tournament) return c.json({ message: 'Tournament is not active for race registration' }, 400);
 
-    if (race.raceClass && RACE_CLASSES[race.raceClass]) {
+    const { min, max } = raceEligibilityRange(race);
+    if (Number.isFinite(min) && Number.isFinite(max)) {
       const rating = officialHorseRating(horse);
-      const { min, max } = RACE_CLASSES[race.raceClass];
       if (rating < min || rating > max) {
-        return c.json({ message: `${horse.name || 'Horse'} rating (${rating}) is not eligible for ${race.raceClass} (${min}-${max}).` }, 400);
+        return c.json({ message: `${horse.name || 'Horse'} rating (${rating}) is not eligible for ${race.raceClass || 'this race'} (${min}-${max}).` }, 400);
       }
     }
 

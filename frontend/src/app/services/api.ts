@@ -105,6 +105,8 @@ export interface RaceRecord {
   distance?: string;
   surface?: string;
   raceClass?: string;
+  ratingMin?: number;
+  ratingMax?: number;
   handicapMin?: number;
   handicapMax?: number;
   totalPrize?: number;
@@ -572,6 +574,8 @@ export const createRace = async (race: {
   distance: string | number;
   surface: string;
   raceClass: string;
+  ratingMin: string | number;
+  ratingMax: string | number;
   registrationOpensAt: string;
   registrationClosesAt: string;
   handicapMin?: string | number;
@@ -592,10 +596,16 @@ export const createRace = async (race: {
 // Lưu thay đổi lịch race (admin)
 export const updateRace = async (
   raceId: string,
-  race: Pick<
-    RaceRecord,
-    'name' | 'date' | 'time' | 'registrationOpensAt' | 'registrationClosesAt'
-  >
+  race: {
+    name: string;
+    date: string;
+    time: string;
+    raceClass: string;
+    ratingMin: string | number;
+    ratingMax: string | number;
+    registrationOpensAt: string;
+    registrationClosesAt: string;
+  }
 ) =>
   request<{ race: RaceRecord }>(`/admin/races/${raceId}`, {
     method: 'PATCH',

@@ -5,7 +5,6 @@ import {
   MAX_RACE_FIELD_SIZE,
   MAX_TOURNAMENT_RACES,
   MIN_READIED_PARTICIPANTS,
-  RACE_CLASSES,
   RACE_CLASS_WEIGHT_RANGES,
 } from '../config/constants.js';
 import { requireRole } from '../services/authService.js';
@@ -26,6 +25,7 @@ import {
   computePostRaceRating,
   computeRaceHandicap,
   officialHorseRating,
+  raceEligibilityRange,
 } from '../services/handicapService.js';
 import { broadcastRaceUpdate } from '../services/liveRaceEvents.js';
 import { recordRaceAction } from '../services/raceAuditService.js';
@@ -86,11 +86,12 @@ const validatePairForRace = (db, race, pair) => {
   if (existingEntry) return null;
 
   const horse = db.horses.find((h) => h.id === pair.horseId);
-  if (horse && race.raceClass && RACE_CLASSES[race.raceClass]) {
+  const ratingRange = raceEligibilityRange(race);
+  if (horse && ratingRange) {
     const rating = officialHorseRating(horse);
-    const { min, max } = RACE_CLASSES[race.raceClass];
+    const { min, max } = ratingRange;
     if (rating < min || rating > max) {
-      return `${horse.name || 'Horse'} rating (${rating}) is not eligible for ${race.raceClass} (${min}-${max}).`;
+      return `${horse.name || 'Horse'} rating (${rating}) is not eligible for ${race.raceClass || 'this race'} (${min}-${max}).`;
     }
   }
 
@@ -298,7 +299,7 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
     const db = c.get('db');
     const {
       tournamentId, raceNumber, name, round, date, time, venue, distance, surface,
-      raceClass, handicapMin, handicapMax, totalPrize, refereeUserId, refereeUserIds,
+      raceClass, ratingMin, ratingMax, handicapMin, handicapMax, totalPrize, refereeUserId, refereeUserIds,
       registrationOpensAt: reqRegOpens, registrationClosesAt: reqRegCloses,
     } = await c.req.json();
 
@@ -307,9 +308,6 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
       !refereeUserId
     ) {
       return c.json({ message: 'Race name, schedule, venue, distance, class, weights and referee are required' }, 400);
-    }
-    if (!RACE_CLASSES[raceClass]) {
-      return c.json({ message: 'Invalid race class' }, 400);
     }
 
     const selectedRefereeIds = Array.from(
@@ -364,10 +362,19 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
     }
     const distanceMeters = Number(distance);
     const classWeightRange = RACE_CLASS_WEIGHT_RANGES[raceClass] || RACE_CLASS_WEIGHT_RANGES.Open;
+    const defaultRatingRange = raceEligibilityRange({ raceClass });
+    const minRating = Number(ratingMin ?? defaultRatingRange.min);
+    const maxRating = Number(ratingMax ?? defaultRatingRange.max);
     const minHandicap = Number(handicapMin ?? classWeightRange.minWeightLb);
     const maxHandicap = Number(handicapMax ?? classWeightRange.topWeightLb);
     if (!Number.isFinite(distanceMeters) || distanceMeters < 400 || distanceMeters > 10000) {
       return c.json({ message: 'Race distance must be between 400m and 10,000m' }, 400);
+    }
+    if (!String(raceClass || '').trim()) {
+      return c.json({ message: 'Race class is required' }, 400);
+    }
+    if (!Number.isFinite(minRating) || !Number.isFinite(maxRating) || minRating < 0 || maxRating > 140 || maxRating < minRating) {
+      return c.json({ message: 'Rating range must be valid and stay between 0 and 140' }, 400);
     }
     if (
       !Number.isFinite(minHandicap) ||
@@ -394,6 +401,7 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
       id: randomUUID(), tournamentId: tournament.id, raceNumber: raceNumber || '',
       name, round: round || '', date, time, venue,
       distance: `${distanceMeters}m`, surface, raceClass,
+      ratingMin: Math.round(minRating), ratingMax: Math.round(maxRating),
       handicapMin: minHandicap, handicapMax: maxHandicap,
       totalPrize: Number(totalPrize) || 0, status: 'registration-open',
       participants: 0, ownerConfirmed: 0, jockeyConfirmed: 0,
@@ -439,7 +447,7 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
       return c.json({ message: 'Only unpublished races can be edited' }, 400);
     }
 
-    const { name, date, time, registrationOpensAt, registrationClosesAt } = await c.req.json();
+    const { name, date, time, raceClass, ratingMin, ratingMax, registrationOpensAt, registrationClosesAt } = await c.req.json();
     if (!String(name || '').trim() || !date || !time || !registrationOpensAt || !registrationClosesAt) {
       return c.json({ message: 'Race name, date, time and registration window are required' }, 400);
     }
@@ -461,11 +469,29 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
       return c.json({ message: 'Registration must close before the race starts' }, 400);
     }
 
+    const nextRaceClass = String(raceClass ?? race.raceClass ?? '').trim();
+    const defaultRatingRange = raceEligibilityRange(race);
+    const nextRatingMin = Number(ratingMin ?? race.ratingMin ?? defaultRatingRange.min);
+    const nextRatingMax = Number(ratingMax ?? race.ratingMax ?? defaultRatingRange.max);
+    if (
+      !nextRaceClass ||
+      !Number.isFinite(nextRatingMin) ||
+      !Number.isFinite(nextRatingMax) ||
+      nextRatingMin < 0 ||
+      nextRatingMax > 140 ||
+      nextRatingMax < nextRatingMin
+    ) {
+      return c.json({ message: 'Race class and rating range must be valid' }, 400);
+    }
+
     race.name = String(name).trim();
     race.date = date;
     race.raceDate = date;
     race.time = time;
     race.raceTime = time;
+    race.raceClass = nextRaceClass;
+    race.ratingMin = Math.round(nextRatingMin);
+    race.ratingMax = Math.round(nextRatingMax);
     race.registrationOpensAt = regOpens.toISOString();
     race.registrationClosesAt = regCloses.toISOString();
     race.updatedAt = new Date().toISOString();

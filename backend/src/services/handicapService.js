@@ -16,6 +16,14 @@ export const MIN_CARRIED_WEIGHT_LB = 110;
 export const MAX_CARRIED_WEIGHT_LB = 135;
 const RATING_K_FACTOR = 10;
 const MIN_RATED_FIELD_SIZE = 4;
+const LEGACY_RACE_CLASS_RATING_RANGES = {
+  'Class 1': { min: 101, max: 140 },
+  'Class 2': { min: 81, max: 100 },
+  'Class 3': { min: 61, max: 80 },
+  'Class 4': { min: 41, max: 60 },
+  'Class 5': { min: 0, max: 40 },
+  Open: { min: 0, max: 140 },
+};
 
 const ratingComponent = (value, fallback = 75) =>
   clamp(numeric(value, fallback), 0, 100);
@@ -44,6 +52,26 @@ export const officialHorseRating = (horse = {}) => {
   return Math.round(clamp(rating, 0, 140));
 };
 
+export const raceEligibilityRange = (race = {}) => {
+  const minFromRace = Number(race.ratingMin);
+  const maxFromRace = Number(race.ratingMax);
+  const hasStoredRange =
+    Number.isFinite(minFromRace) && Number.isFinite(maxFromRace);
+
+  if (hasStoredRange) {
+    return {
+      min: Math.round(clamp(minFromRace, 0, 140)),
+      max: Math.round(clamp(Math.max(minFromRace, maxFromRace), 0, 140)),
+    };
+  }
+
+  const legacyRange = LEGACY_RACE_CLASS_RATING_RANGES[race.raceClass];
+  if (legacyRange) {
+    return legacyRange;
+  }
+
+  return LEGACY_RACE_CLASS_RATING_RANGES.Open;
+};
 
 export const computeRaceHandicap = (horse, race, highestFieldRating) => {
   const rating = officialHorseRating(horse);
