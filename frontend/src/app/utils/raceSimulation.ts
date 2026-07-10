@@ -311,7 +311,7 @@ export const createRaceSimulationPlan = ({
 };
 
 export const progressForRunner = (
-  runner: RaceSimulationRunner,
+  runner: Pick<RaceSimulationRunner, 'finishTimeSeconds' | 'checkpoints'>,
   elapsedSeconds: number
 ) => {
   if (elapsedSeconds <= 0) return 0;
@@ -348,18 +348,18 @@ export const sortRaceDisplayRunners = <T extends RaceDisplayRunnerLike>(runners:
       return progressB - progressA;
     }
 
-    const finishTimeA = Number(a.finishTimeSeconds ?? Number.POSITIVE_INFINITY);
-    const finishTimeB = Number(b.finishTimeSeconds ?? Number.POSITIVE_INFINITY);
-
-    if (finishTimeA !== finishTimeB) {
-      return finishTimeA - finishTimeB;
-    }
-
     const gateA = Number(a.displayGate ?? a.lane ?? 999);
     const gateB = Number(b.displayGate ?? b.lane ?? 999);
 
     if (gateA !== gateB) {
       return gateA - gateB;
+    }
+
+    const finishTimeA = Number(a.finishTimeSeconds ?? Number.POSITIVE_INFINITY);
+    const finishTimeB = Number(b.finishTimeSeconds ?? Number.POSITIVE_INFINITY);
+
+    if (finishTimeA !== finishTimeB) {
+      return finishTimeA - finishTimeB;
     }
 
     return String(a.entryId || a.keyId || '').localeCompare(String(b.entryId || b.keyId || ''));
@@ -394,11 +394,24 @@ const parseReplayTimeSeconds = (value?: string) => {
 const buildOfficialCheckpoints = (
   distanceMeters: number,
   finishTimeSeconds: number,
-  positionIndex: number
+  positionIndex: number,
+  seed: number
 ) => {
   const checkpointSize = distanceMeters <= 1200 ? 50 : 100;
-  const checkpoints = [{ distanceMeters: 0, timeSeconds: 0 }];
-  const easedExponent = 0.9 + Math.min(positionIndex, 12) * 0.01;
+  const rawCheckpoints = [{ distanceMeters: 0, timeSeconds: 0 }];
+  const random = mulberry32(seed || 1);
+  const styleRoll = random();
+  const phaseShift = random() * Math.PI * 2;
+  const burstStart = clamp(0.32 + random() * 0.28, 0.18, 0.72);
+  const burstEnd = clamp(burstStart + 0.18 + random() * 0.18, burstStart + 0.08, 0.94);
+  const style =
+    styleRoll < 0.34
+      ? { early: 1.28, middle: 0.92, late: 0.76 }
+      : styleRoll < 0.67
+        ? { early: 1.0, middle: 1.0, late: 1.0 }
+        : { early: 0.82, middle: 0.96, late: 1.24 };
+  const laneBias = clamp(1.04 - positionIndex * 0.012 + (random() - 0.5) * 0.04, 0.88, 1.1);
+  const fieldBias = clamp(1 + (Math.max(1, positionIndex) - 1) * -0.002 + (random() - 0.5) * 0.03, 0.94, 1.06);
 
   for (
     let checkpointDistance = checkpointSize;
@@ -407,25 +420,57 @@ const buildOfficialCheckpoints = (
   ) {
     const safeDistance = Math.min(checkpointDistance, distanceMeters);
     const progress = safeDistance / distanceMeters;
-    checkpoints.push({
+    const earlyPhase = clamp(1 - progress / 0.38, 0, 1);
+    const middlePhase = clamp(1 - Math.abs(progress - 0.56) / 0.22, 0, 1);
+    const latePhase = clamp((progress - 0.68) / 0.32, 0, 1);
+    const burstPulse =
+      progress >= burstStart && progress <= burstEnd
+        ? 1.08 + Math.sin(((progress - burstStart) / Math.max(burstEnd - burstStart, 0.001)) * Math.PI) * 0.12
+        : 1;
+    const tacticalVariation = 1 + Math.sin(progress * Math.PI * 4 + phaseShift) * 0.035;
+    const tempoMultiplier = clamp(
+      (style.early * earlyPhase) +
+        (style.middle * middlePhase * 0.9) +
+        (style.late * latePhase * 1.05) +
+        0.48,
+      0.8,
+      1.34
+    );
+    const previous = rawCheckpoints.at(-1);
+    const segmentDistance = safeDistance - (previous?.distanceMeters ?? 0);
+    const segmentBaseSpeed =
+      Math.max(12, distanceMeters / Math.max(finishTimeSeconds, 1)) * laneBias * fieldBias;
+    const segmentSpeed =
+      segmentBaseSpeed * tempoMultiplier * burstPulse * tacticalVariation;
+
+    rawCheckpoints.push({
       distanceMeters: safeDistance,
-      timeSeconds: finishTimeSeconds * Math.pow(progress, easedExponent),
+      timeSeconds: (previous?.timeSeconds ?? 0) + segmentDistance / Math.max(segmentSpeed, 0.001),
     });
   }
 
-  if (checkpoints.at(-1)?.distanceMeters !== distanceMeters) {
-    checkpoints.push({
+  if (rawCheckpoints.at(-1)?.distanceMeters !== distanceMeters) {
+    rawCheckpoints.push({
       distanceMeters,
-      timeSeconds: finishTimeSeconds,
+      timeSeconds: rawCheckpoints.at(-1)?.timeSeconds || 0,
     });
   } else {
-    checkpoints[checkpoints.length - 1] = {
+    rawCheckpoints[rawCheckpoints.length - 1] = {
       distanceMeters,
-      timeSeconds: finishTimeSeconds,
+      timeSeconds: rawCheckpoints.at(-1)?.timeSeconds || 0,
     };
   }
 
-  return checkpoints;
+  const rawElapsed = rawCheckpoints.at(-1)?.timeSeconds || finishTimeSeconds;
+  const timeScale = rawElapsed > 0 ? finishTimeSeconds / rawElapsed : 1;
+
+  return rawCheckpoints.map((checkpoint, index) => ({
+    distanceMeters: checkpoint.distanceMeters,
+    timeSeconds:
+      index === rawCheckpoints.length - 1
+        ? finishTimeSeconds
+        : checkpoint.timeSeconds * timeScale,
+  }));
 };
 
 const buildVisualFinishTimeSeconds = (
@@ -448,7 +493,7 @@ const buildVisualFinishTimeSeconds = (
 
 export const normalizeOfficialReplayRunners = (
   runners: RaceReplayRunner[],
-  race?: Pick<RaceRecord, 'distance' | 'surface'>
+  race?: Pick<RaceRecord, 'id' | 'distance' | 'surface'>
 ) => {
   const sortedRunners = [...(runners || [])].sort((a, b) => {
     if (Number(a.position || 999) !== Number(b.position || 999)) {
@@ -467,7 +512,7 @@ export const normalizeOfficialReplayRunners = (
     hasRecordedTimes && recordedTimes.length > 0
       ? Math.max(...recordedTimes) - Math.min(...recordedTimes)
       : Number.POSITIVE_INFINITY;
-  const largestGap = sortedRunners.reduce((maxGap, runner, index) => {
+  const largestGap = sortedRunners.reduce((maxGap, _runner, index) => {
     if (index === 0 || !Number.isFinite(recordedTimes[index]) || !Number.isFinite(recordedTimes[index - 1])) {
       return maxGap;
     }
@@ -482,14 +527,21 @@ export const normalizeOfficialReplayRunners = (
       ...runner,
       displayGate: runner.displayGate || index + 1,
       finishTimeSeconds: parseReplayTimeSeconds(runner.finishTime),
-      checkpoints:
-        Array.isArray(runner.checkpoints) && runner.checkpoints.length > 0
-          ? runner.checkpoints
-          : buildOfficialCheckpoints(
-              distanceMeters,
-              parseReplayTimeSeconds(runner.finishTime),
-              index
-            ),
+      checkpoints: buildOfficialCheckpoints(
+        distanceMeters,
+        parseReplayTimeSeconds(runner.finishTime),
+        index,
+        hashRaceSeed(
+          [
+            race?.id || 'official-replay',
+            runner.entryId || '',
+            runner.position || index + 1,
+            runner.displayGate || runner.lane || index + 1,
+            distanceMeters,
+            surface,
+          ].join(':')
+        )
+      ),
     }));
   }
 
@@ -510,7 +562,17 @@ export const normalizeOfficialReplayRunners = (
       checkpoints: buildOfficialCheckpoints(
         distanceMeters,
         finishTimeSeconds,
-        index
+        index,
+        hashRaceSeed(
+          [
+            race?.id || 'official-replay',
+            runner.entryId || '',
+            runner.position || index + 1,
+            displayGate,
+            distanceMeters,
+            surface,
+          ].join(':')
+        )
       ),
       silkColor: silkPalette[index % silkPalette.length],
     };

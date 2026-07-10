@@ -143,18 +143,20 @@ export default function RaceSimulationDemo() {
     () => {
       if (replayTimelineRunners.length > 0) {
         return sortRaceDisplayRunners([...normalizedReplayTimelineRunners])
-          .map((runner) => ({
+          .map((runner, index) => ({
           ...runner,
           id: runner.entryId,
+          liveRank: index + 1,
           positionValue: runner.position,
           progress: progressForRunner(runner, elapsedSeconds),
         }));
       }
 
       return sortRaceDisplayRunners([...replayEntries])
-          .map((entry) => ({
+          .map((entry, index) => ({
           ...entry,
           id: entry.id,
+          liveRank: index + 1,
           positionValue: entry.positionValue,
           displayGate: entry.displayGate ?? entry.lane ?? entry.positionValue,
           silkColor: entry.silkColor ?? '#d4af37',
@@ -434,9 +436,10 @@ export default function RaceSimulationDemo() {
                   </div>
                 )}
 
-                  {officialRows.map((runner) => {
+                  {officialRows.map((runner, index) => {
                   const visibleEntry = selectedEntriesById.get(runner.id);
-                  const rank = runner.positionValue || Number(visibleEntry?.position || 0);
+                  const liveRank = runner.liveRank || index + 1;
+                  const finalRank = runner.positionValue || Number(visibleEntry?.position || 0);
                   const gateNumber = Number(runner.displayGate || runner.lane || visibleEntry?.lane || 0);
                   const runnerColor = runner.silkColor || '#d4af37';
 
@@ -460,7 +463,7 @@ export default function RaceSimulationDemo() {
                           {visibleEntry?.horseName || runner.horseName}
                         </div>
                         <div className="truncate text-xs text-gray-400">
-                          {visibleEntry?.jockeyName || runner.jockeyName} • Position {rank} • {visibleEntry?.finishTime}
+                          {visibleEntry?.jockeyName || runner.jockeyName} • Official P{finalRank || '-'} • {visibleEntry?.finishTime}
                         </div>
                       </div>
 
@@ -492,10 +495,10 @@ export default function RaceSimulationDemo() {
                       <div className="text-center">
                         <div
                           className={`text-xl font-black ${
-                            rank === 1 ? 'text-[#f6d77a]' : 'text-white'
+                            liveRank === 1 ? 'text-[#f6d77a]' : 'text-white'
                           }`}
                         >
-                          P{rank}
+                          P{liveRank}
                         </div>
                         <div className="text-[10px] uppercase text-gray-500">
                           {Math.round(runner.progress * 100)}%
