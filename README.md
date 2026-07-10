@@ -1,195 +1,214 @@
-# 🏇 Hệ thống quản lý giải đua ngựa
+# Hệ thống quản lý giải đua ngựa
 
-Ứng dụng quản lý giải đua ngựa trực tuyến. Hệ thống hỗ trợ quản trị viên tạo giải và cuộc đua, chủ ngựa đăng ký ngựa theo từng cuộc đua, jockey xác nhận lời mời, trọng tài kiểm tra trước giờ chạy và ghi kết quả, sau đó quản trị viên duyệt kết quả chính thức.
+Ứng dụng web quản lý giải đua ngựa theo vai trò. Hệ thống cho phép admin tạo giải và cuộc đua, owner đăng ký ngựa, jockey đăng ký hoặc nhận lời mời, referee kiểm tra trước giờ chạy và ghi kết quả, sau đó admin duyệt kết quả chính thức để cập nhật rating.
 
-## 📋 Mục lục
+## Tổng quan nhanh
 
-- [Tính năng](#-tính-năng)
-- [Công nghệ sử dụng](#-công-nghệ-sử-dụng)
-- [Cấu trúc dự án](#-cấu-trúc-dự-án)
-- [Vai trò người dùng](#-vai-trò-người-dùng)
-- [Quy trình nghiệp vụ](#-quy-trình-nghiệp-vụ)
-- [Cơ chế Rating và Handicap](#-cơ-chế-rating-và-handicap)
-- [Cài đặt & Chạy](#-cài-đặt--chạy)
-- [Biến môi trường](#-biến-môi-trường)
-- [Các lệnh npm](#-các-lệnh-npm)
-- [API](#-api)
+- Frontend: React 18 + TypeScript + Vite + Tailwind CSS.
+- Backend: Node.js ESM + Hono.
+- Database: PostgreSQL.
+- Auth: session cookie `HttpOnly`.
+- Realtime: Server-Sent Events cho màn hình live race.
+- Deployment: frontend dùng `vercel.json` rewrite `/api` sang backend render.
 
----
+## Mục lục
 
-## ✨ Tính năng
+- [Tính năng](#tính-năng)
+- [Kiến trúc](#kiến-trúc)
+- [Công nghệ](#công-nghệ)
+- [Cấu trúc dự án](#cấu-trúc-dự-án)
+- [Vai trò người dùng](#vai-trò-người-dùng)
+- [Quy trình nghiệp vụ](#quy-trình-nghiệp-vụ)
+- [Rating và Handicap](#rating-và-handicap)
+- [Cài đặt & Chạy](#cài-đặt--chạy)
+- [Biến môi trường](#biến-môi-trường)
+- [Scripts](#scripts)
+- [API chính](#api-chính)
+- [Tài liệu liên quan](#tài-liệu-liên-quan)
 
-- **Quản lý giải đấu**: Quản trị viên tạo giải đấu, tạo nhiều cuộc đua trong cùng giải và phân công trọng tài.
-- **Đăng ký ngựa theo từng cuộc đua**: Chủ ngựa chỉ đăng ký ngựa vào các cuộc đua đang mở đăng ký.
-- **Ghép cặp ngựa - jockey**: Jockey đăng ký khả dụng hoặc nhận lời mời từ chủ ngựa; quản trị viên duyệt cặp cuối cùng.
-- **Phân quyền đa vai trò**: Quản trị viên, chủ ngựa, jockey, trọng tài và khán giả có giao diện riêng.
-- **Theo dõi cuộc đua trực tiếp**: Cập nhật trạng thái cuộc đua theo thời gian thực qua Server-Sent Events (SSE).
-- **Tính handicap và rating**: Lưu rating trước cuộc đua, tính trọng lượng được chỉ định, cập nhật rating sau khi kết quả được duyệt chính thức.
-- **Hồ sơ công khai**: Mọi vai trò có thể xem hồ sơ ngựa, hồ sơ jockey, lịch sử đua và kết quả.
-- **Thông báo nội bộ**: Gửi thông báo theo từng vai trò khi có lời mời, phê duyệt hoặc thay đổi trạng thái.
+## Tính năng
 
----
+- Quản lý giải đấu, nhiều cuộc đua trong cùng một giải, và phân công referee.
+- Đăng ký ngựa theo từng race, không dùng đăng ký chung cho cả giải.
+- Ghép cặp owner - jockey theo từng race hoặc qua lời mời.
+- Phân quyền rõ theo 5 vai trò: admin, owner, jockey, referee, spectator.
+- Theo dõi cuộc đua trực tiếp bằng SSE.
+- Tính rating và handicap theo luật nội bộ của dự án.
+- Xem hồ sơ ngựa, hồ sơ jockey, lịch sử race và kết quả công khai.
+- Gửi thông báo nội bộ khi có đăng ký, phê duyệt, hay đổi trạng thái.
 
-## 🛠 Công nghệ sử dụng
+## Kiến trúc
+
+Luồng dữ liệu chính của app:
+
+1. Browser tải React frontend.
+2. Frontend gọi `/api/bootstrap` để lấy dữ liệu tổng hợp ban đầu.
+3. Người dùng thao tác trên UI theo vai trò.
+4. Frontend gọi API Hono để ghi vào PostgreSQL.
+5. Một số thay đổi phát SSE để cập nhật màn live race.
+6. Kết quả chính thức được duyệt thì backend cập nhật rating và trạng thái hoàn tất.
+
+Frontend hiện được tách rõ hơn để dễ đọc:
+
+- [`frontend/src/App.tsx`](frontend/src/App.tsx) chỉ giữ shell, auth guard và render khung chính.
+- [`frontend/src/app/routing.ts`](frontend/src/app/routing.ts) chứa map page, role và helper redirect.
+- [`frontend/src/app/AppRoutes.tsx`](frontend/src/app/AppRoutes.tsx) chứa toàn bộ route tree.
+
+Backend được chia theo lớp:
+
+- `routes/`: API theo domain hoặc theo vai trò.
+- `services/`: nghiệp vụ dùng chung.
+- `sqlDb.js`: đọc/ghi PostgreSQL và chuẩn hoá dữ liệu trả về cho frontend.
+
+## Công nghệ
 
 | Tầng | Công nghệ |
-|------|-----------|
-| Giao diện | React 18, TypeScript, Vite, Tailwind CSS |
-| Máy chủ API | Node.js (ESM), Hono |
-| Cơ sở dữ liệu | PostgreSQL |
-| Biểu tượng giao diện | Lucide React |
-| Điều hướng | React Router DOM v7 |
+|---|---|
+| UI | React 18, TypeScript, Vite, Tailwind CSS |
+| Router | React Router DOM v7 |
+| API | Node.js ESM, Hono |
+| DB | PostgreSQL |
+| Biểu tượng | Lucide React |
+| Chart | Recharts |
 
----
-
-## 📁 Cấu trúc dự án
+## Cấu trúc dự án
 
 ```text
 Horse Racing Tournament Website/
-├── frontend/                         # Phần giao diện người dùng
+├── frontend/
 │   ├── index.html
 │   ├── vite.config.ts
 │   ├── tailwind.config.js
 │   └── src/
-│       ├── App.tsx                   # Điều hướng trang và kiểm tra phiên đăng nhập
-│       ├── main.tsx                  # Điểm khởi chạy React
-│       ├── app/
-│       │   ├── components/           # Các trang chính của hệ thống
-│       │   │   ├── AdminPanel.tsx          # Bảng quản trị: duyệt hồ sơ, tạo giải, tạo cuộc đua
-│       │   │   ├── CreateRacePage.tsx      # Form tạo hoặc chỉnh sửa cuộc đua
-│       │   │   ├── Footer.tsx              # Chân trang
-│       │   │   ├── HorseDetails.tsx        # Hồ sơ chi tiết của một ngựa và lịch sử đua
-│       │   │   ├── HorseDirectoryPage.tsx  # Danh bạ hồ sơ ngựa cho mọi vai trò
-│       │   │   ├── HorseManagement.tsx     # Chủ ngựa quản lý danh sách ngựa của mình
-│       │   │   ├── JockeyDirectoryPage.tsx # Danh bạ hồ sơ jockey cho mọi vai trò
-│       │   │   ├── JockeyPage.tsx          # Cổng jockey: cập nhật hồ sơ, nhận lời mời
-│       │   │   ├── LandingPage.tsx         # Trang giới thiệu trước khi đăng nhập
-│       │   │   ├── LiveRace.tsx            # Theo dõi và thao tác cuộc đua trực tiếp
-│       │   │   ├── LoginPage.tsx           # Đăng nhập và đăng ký tài khoản
-│       │   │   ├── Navbar.tsx              # Thanh điều hướng theo vai trò
-│       │   │   ├── RaceDetails.tsx         # Race card, danh sách xuất phát và thông tin cuộc đua
-│       │   │   ├── RaceRegistrationPage.tsx # Chủ ngựa đăng ký ngựa vào cuộc đua
-│       │   │   ├── RegisterHorsePage.tsx   # Tạo hoặc chỉnh sửa hồ sơ ngựa
-│       │   │   ├── ResultsPage.tsx         # Tra cứu kết quả chính thức
-│       │   │   ├── TournamentDetails.tsx   # Thông tin chi tiết giải đấu
-│       │   │   └── TournamentPage.tsx      # Danh sách giải đấu và lịch các cuộc đua
-│       │   ├── services/
-│       │   │   └── api.ts            # Kiểu dữ liệu và hàm gọi API
-│       │   └── utils/
-│       │       ├── domain.ts         # Định dạng trạng thái và đơn vị hiển thị
-│       │       └── messageTone.ts    # Chọn màu thông báo thành công/lỗi/cảnh báo
-│       └── styles/
-│           └── index.css             # CSS đầu vào cho Tailwind
+│       ├── App.tsx
+│       ├── main.tsx
+│       └── app/
+│           ├── AppRoutes.tsx
+│           ├── routing.ts
+│           ├── components/
+│           │   ├── AdminPanel.tsx
+│           │   ├── CreateRacePage.tsx
+│           │   ├── EditRacePage.tsx
+│           │   ├── HorseDetails.tsx
+│           │   ├── HorseDirectoryPage.tsx
+│           │   ├── HorseManagement.tsx
+│           │   ├── JockeyDirectoryPage.tsx
+│           │   ├── JockeyPage.tsx
+│           │   ├── LandingPage.tsx
+│           │   ├── LiveRace.tsx
+│           │   ├── LoginPage.tsx
+│           │   ├── Navbar.tsx
+│           │   ├── RaceDetails.tsx
+│           │   ├── RaceRegistrationPage.tsx
+│           │   ├── RaceSimulationDemo.tsx
+│           │   ├── RegisterHorsePage.tsx
+│           │   ├── ResultsPage.tsx
+│           │   ├── TournamentDetails.tsx
+│           │   └── TournamentPage.tsx
+│           ├── services/
+│           │   └── api.ts
+│           └── utils/
+│               ├── domain.ts
+│               ├── messageTone.ts
+│               └── rating.ts
 │
-├── backend/                          # Phần máy chủ API
+├── backend/
 │   └── src/
-│       ├── app.js                    # Khởi tạo ứng dụng Hono để chạy và test
-│       ├── index.js                  # Khởi động HTTP server
-│       ├── sqlDb.js                  # Đọc/ghi dữ liệu PostgreSQL
+│       ├── app.js
+│       ├── index.js
+│       ├── sqlDb.js
 │       ├── config/
-│       │   └── constants.js          # Hằng số cấu hình hệ thống
-│       ├── http/
-│       │   └── respond.js            # Tiện ích đọc request và trả response
+│       │   └── constants.js
 │       ├── routes/
-│       │   ├── adminRoutes.js        # API cho quản trị viên
-│       │   ├── authRoutes.js         # API đăng nhập, đăng ký, đăng xuất
-│       │   ├── jockeyRoutes.js       # API cho jockey
-│       │   ├── notificationRoutes.js # API thông báo
-│       │   ├── ownerRoutes.js        # API cho chủ ngựa
-│       │   ├── publicRoutes.js       # API dữ liệu công khai và dữ liệu khởi động
-│       │   └── refereeRoutes.js      # API cho trọng tài
+│       │   ├── adminRoutes.js
+│       │   ├── authRoutes.js
+│       │   ├── jockeyRoutes.js
+│       │   ├── notificationRoutes.js
+│       │   ├── ownerRoutes.js
+│       │   ├── publicRoutes.js
+│       │   └── refereeRoutes.js
 │       └── services/
-│           ├── authService.js        # Xác thực phiên đăng nhập và phân quyền
-│           ├── domainService.js      # Hàm nghiệp vụ dùng chung
-│           ├── handicapService.js    # Tính rating sau đua và trọng lượng handicap
-│           ├── liveRaceEvents.js     # Phát sự kiện cuộc đua trực tiếp qua SSE
-│           ├── notificationService.js # Tạo thông báo trong hệ thống
-│           └── raceAuditService.js   # Ghi log kiểm tra trạng thái cuộc đua
+│           ├── authService.js
+│           ├── domainService.js
+│           ├── handicapService.js
+│           ├── liveRaceEvents.js
+│           ├── notificationService.js
+│           ├── raceAuditService.js
+│           └── raceReplayTimeline.js
 │
-├── database/
-│   └── postgres/
-│       ├── schema.sql               # Tạo bảng cơ sở dữ liệu
-│       └── seed.sql                 # Dữ liệu mẫu ban đầu
-│
-├── docs/                             # Tài liệu thiết kế và nghiệp vụ
-│   ├── erd.drawio                   # Sơ đồ ERD
-│   ├── STD.drawio                   # Sơ đồ chuyển trạng thái tổng quát
-│   ├── business-flow-and-roles.md   # Luồng nghiệp vụ và quyền từng vai trò
-│   ├── race-state-diagram.drawio    # Sơ đồ trạng thái cuộc đua
-│   ├── tournament-state-diagram.drawio # Sơ đồ trạng thái giải đấu
-│   ├── schema-erd.md                 # Mô tả ERD dạng Markdown
-│   ├── horse-racing-erd-explanation.xlsx # Giải thích ERD
-│   └── horse-racing-status-reference.docx # Bảng tham chiếu trạng thái
-│
+├── database/postgres/
+│   ├── schema.sql
+│   └── seed.sql
+├── docs/
+│   ├── business-flow-and-roles.md
+│   ├── erd.drawio
+│   ├── schema-erd.md
+│   ├── STD.drawio
+│   ├── race-state-diagram.drawio
+│   ├── tournament-state-diagram.drawio
+│   └── horse-racing-status-reference.docx
 ├── scripts/
-│   └── run-postgres-file.mjs         # Chạy file SQL lên PostgreSQL
-│
-├── .env.example                      # Mẫu biến môi trường
-├── .gitignore
+│   └── run-postgres-file.mjs
 └── package.json
 ```
 
----
+## Vai trò người dùng
 
-## 👥 Vai trò người dùng
+| Vai trò | Quyền chính |
+|---|---|
+| Admin | Tạo giải, tạo race, phân công referee, duyệt hồ sơ và duyệt kết quả |
+| Owner | Tạo hồ sơ ngựa, đăng ký ngựa vào race đang mở, chọn hoặc mời jockey |
+| Jockey | Công bố hồ sơ, đăng ký khả dụng, chấp nhận hoặc từ chối lời mời |
+| Referee | Kiểm tra trước race, ghi kết quả nháp, nộp cho admin duyệt |
+| Spectator | Xem giải, race card, hồ sơ công khai, trạng thái live và kết quả |
 
-| Vai trò | Quyền hạn |
-|---------|-----------|
-| **Admin** | Tạo giải đấu, tạo cuộc đua, chọn hạng đua, phân công trọng tài, duyệt hồ sơ và duyệt kết quả chính thức |
-| **Owner** | Tạo hồ sơ ngựa, đăng ký ngựa vào từng cuộc đua đang mở, chọn hoặc mời jockey phù hợp |
-| **Jockey** | Công bố hồ sơ cá nhân, đăng ký khả dụng theo cuộc đua, chấp nhận hoặc từ chối lời mời cưỡi ngựa |
-| **Referee** | Kiểm tra trước cuộc đua, đánh dấu sẵn sàng/vắng mặt/sự cố, ghi kết quả nháp và nộp cho Admin duyệt |
-| **Spectator** | Xem giải đấu, race card, hồ sơ ngựa, hồ sơ jockey, trạng thái trực tiếp và kết quả |
+## Quy trình nghiệp vụ
 
----
-
-## 🔁 Quy trình nghiệp vụ
-
-Tài liệu nghiệp vụ chi tiết nằm tại [docs/business-flow-and-roles.md](docs/business-flow-and-roles.md).
+Tài liệu chi tiết hơn nằm ở [`docs/business-flow-and-roles.md`](docs/business-flow-and-roles.md).
 
 Luồng chính:
 
 1. Admin tạo một giải đấu.
-2. Admin tạo nhiều cuộc đua thuộc giải đấu đó, ví dụ 10 cuộc đua.
-3. Mỗi cuộc đua có vòng đời đăng ký riêng, không đăng ký chung cho toàn giải.
-4. Admin mở đăng ký cho từng cuộc đua.
-5. Owner đăng ký một ngựa đã được duyệt vào cuộc đua đang mở.
-6. Jockey đăng ký khả dụng cho cùng cuộc đua, hoặc Owner mời một jockey đang khả dụng.
-7. Jockey chấp nhận hoặc từ chối lời mời cưỡi ngựa.
-8. Admin duyệt đăng ký ngựa hoặc duyệt cặp Owner - Jockey.
-9. Khi đóng đăng ký, hệ thống lưu rating hiện tại, tính trọng lượng được chỉ định, bốc cổng chạy và tạo danh sách xuất phát.
+2. Admin tạo nhiều race trong giải đó.
+3. Mỗi race có vòng đời đăng ký riêng.
+4. Admin mở đăng ký cho race.
+5. Owner đăng ký ngựa đã được duyệt.
+6. Jockey đăng ký khả dụng hoặc nhận lời mời từ owner.
+7. Jockey chấp nhận hoặc từ chối lời mời.
+8. Admin duyệt đăng ký hoặc duyệt cặp owner - jockey.
+9. Khi đóng đăng ký, hệ thống snapshot rating, tính handicap và xếp lane.
 10. Admin công bố danh sách xuất phát.
-11. Referee kiểm tra từng entry được phân công, gồm ngựa, jockey, trang bị và điều kiện sẵn sàng.
-12. Referee đánh dấu từng thí sinh là sẵn sàng, vắng mặt, gạch khỏi danh sách hoặc có sự cố.
-13. Admin bắt đầu cuộc đua khi các entry đã được kiểm tra và có ít nhất một thí sinh sẵn sàng.
-14. Admin kết thúc cuộc đua.
-15. Referee ghi vị trí về đích, thời gian, ghi chú, vi phạm và hình phạt nếu có.
-16. Referee nộp kết quả nháp cho Admin xem xét.
-17. Admin duyệt kết quả chính thức.
-18. Hệ thống cập nhật rating của ngựa từ kết quả chính thức.
-19. Cuộc đua chuyển sang trạng thái hoàn tất.
+11. Referee kiểm tra từng entry trước giờ chạy.
+12. Referee đánh dấu ready, absent, incident hoặc scratched.
+13. Admin bắt đầu race khi điều kiện hợp lệ.
+14. Admin kết thúc race.
+15. Referee nhập kết quả nháp.
+16. Admin duyệt kết quả chính thức.
+17. Hệ thống cập nhật rating sau race.
+18. Race chuyển sang completed.
 
-Trạng thái được tách riêng:
+### Trạng thái
 
-| Nhóm trạng thái | Trạng thái trong hệ thống |
-|-----------------|---------------------------|
-| Vòng đời cuộc đua | `draft`, `registration-open`, `registration-closed`, `published`, `in-progress`, `finished`, `completed`, `cancelled` |
+| Nhóm | Trạng thái |
+|---|---|
+| Vòng đời race | `draft`, `registration-open`, `registration-closed`, `published`, `in-progress`, `finished`, `completed`, `cancelled` |
 | Phê duyệt đăng ký | `pending-jockey`, `pending-admin`, `approved`, `rejected`, `cancelled` |
-| Entry trong danh sách xuất phát | `approved`, `scratched` |
-| Kiểm tra trước cuộc đua | `pending`, `ready`, `absent`, `incident`, `scratched` |
+| Entry xuất phát | `approved`, `scratched` |
+| Kiểm tra trước race | `pending`, `ready`, `absent`, `incident`, `scratched` |
 | Kết quả | `draft`, `submitted`, `official`, `disqualified` |
 
-Ghi chú triển khai: bước kiểm tra trước cuộc đua được biểu diễn bằng trạng thái Race `published` kết hợp với `preRaceStatus` của từng entry. Bước nộp kết quả nháp được biểu diễn bằng Race `finished` kết hợp với `resultStatus = submitted`.
+Ghi chú triển khai:
 
----
+- `published` + `preRaceStatus` dùng để biểu diễn giai đoạn kiểm tra trước race.
+- `finished` + `resultStatus = submitted` dùng để biểu diễn việc nộp kết quả nháp.
 
-## 📊 Cơ chế Rating và Handicap
+## Rating và Handicap
 
-Đây là cơ chế minh bạch do hệ thống định nghĩa để phục vụ giải đấu. Nó không phải công thức rating chính thức của HKJC.
+Đây là công thức nội bộ của dự án, không phải rating chính thức của HKJC.
 
-### 1. Rating ban đầu
+### Rating ban đầu
 
-Khi ngựa chưa có `overallRating` chính thức, rating ban đầu được tính từ hồ sơ:
+Khi ngựa chưa có `overallRating`, hệ thống tính từ hồ sơ:
 
 ```text
 Rating ban đầu =
@@ -199,17 +218,13 @@ Rating ban đầu =
   + Sức khỏe × 10%
 ```
 
-Kết quả được làm tròn và giới hạn trong khoảng `0-140`. Sau khi ngựa đã thi đấu, `overallRating` là rating chính thức và các thuộc tính hồ sơ không tự ghi đè rating này.
+Kết quả được làm tròn và giới hạn trong khoảng `0-140`.
 
-### 2. Rating snapshot trước cuộc đua
+### Snapshot trước race
 
-Admin chỉ được đóng đăng ký khi đủ đúng `MAX_RACE_FIELD_SIZE` cặp ngựa - jockey khác nhau đã được duyệt, mặc định là `10`.
+Khi đóng đăng ký, hệ thống lưu rating hiện tại vào `ratingSnapshot` để tránh rating thay đổi trong lúc race đang diễn ra.
 
-Khi đóng đăng ký, hệ thống lưu rating hiện tại của từng ngựa vào `ratingSnapshot`. Mọi phép tính sau cuộc đua sử dụng snapshot này để tránh việc rating bị thay đổi trong lúc cuộc đua đang diễn ra.
-
-### 3. Điểm kỳ vọng
-
-Mỗi ngựa được so sánh lần lượt với các đối thủ có kết quả hợp lệ:
+### Điểm kỳ vọng
 
 ```text
 Điểm kỳ vọng với một đối thủ =
@@ -221,121 +236,68 @@ Mỗi ngựa được so sánh lần lượt với các đối thủ có kết q
 
 Ý nghĩa:
 
-- `0.50`: hai bên có rating tương đương.
-- Nhỏ hơn `0.50`: ngựa đang bị đánh giá yếu hơn nhóm đua.
-- Lớn hơn `0.50`: ngựa đang được đánh giá mạnh hơn nhóm đua.
+- `0.50`: hai bên ngang nhau.
+- Nhỏ hơn `0.50`: ngựa bị đánh giá thấp hơn nhóm đua.
+- Lớn hơn `0.50`: ngựa được đánh giá cao hơn nhóm đua.
 
-Ví dụ, ngựa rating `65` gặp đối thủ rating `70` có điểm kỳ vọng khoảng `0.33`.
-
-### 4. Điểm thực tế và thay đổi rating
-
-Điểm thực tế được chuẩn hóa theo vị trí về đích:
+### Rating sau race
 
 ```text
 Điểm thực tế = (Số ngựa có kết quả - Vị trí) / (Số ngựa có kết quả - 1)
-```
 
-Trong cuộc đua có 10 ngựa hợp lệ, hạng nhất có điểm thực tế `1.00`, hạng cuối có điểm thực tế `0.00`.
-
-```text
 Mức thay đổi rating thô =
   10 × (Điểm thực tế - Điểm kỳ vọng chung) × Hệ số số lượng ngựa
 
 Rating Change = round(clamp(Mức thay đổi rating thô, -8, +8))
-Rating sau cuộc đua = clamp(Rating Snapshot + Rating Change, 0, 140)
+Rating sau race = clamp(Rating Snapshot + Rating Change, 0, 140)
 ```
-
-Số ngựa có kết quả chỉ tính các ngựa thật sự có kết quả hợp lệ; ngựa `absent` hoặc `disqualified` không tham gia phép tính.
 
 | Số ngựa có kết quả | Hệ số |
 |---:|---:|
 | 8-10 | `1.00` |
 | 6-7 | `0.75` |
 | 4-5 | `0.50` |
-| Dưới 4 | Không thay đổi rating |
+| Dưới 4 | Không đổi rating |
 
-Với 10 ngựa có rating bằng nhau, mức thay đổi rating lần lượt là:
+### Handicap
 
-| Vị trí | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
-|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| Thay đổi | +5 | +4 | +3 | +2 | +1 | -1 | -2 | -3 | -4 | -5 |
-
-Ngựa rating `65` thắng chín đối thủ rating `70` nhận khoảng `+7`, vì kết quả thực tế cao hơn đáng kể so với điểm kỳ vọng.
-
-Rating chỉ được ghi vào `horse.overallRating` sau khi Referee nộp kết quả nháp và Admin duyệt kết quả chính thức.
-
-### 5. Trọng lượng được chỉ định / Handicap
-
-Handicap là trọng lượng được chỉ định cho cuộc đua, tính bằng pound (`lb`), không phải trọng lượng cơ thể của ngựa.
+Handicap là trọng lượng được chỉ định cho race, tính bằng `lb`.
 
 ```text
 Trọng lượng được chỉ định =
-  Handicap Max - (Rating cao nhất trong cuộc đua - Rating của ngựa)
-
-Trọng lượng được chỉ định = clamp(Trọng lượng được chỉ định, Handicap Min, Handicap Max)
+  Handicap Max - (Rating cao nhất trong race - Rating của ngựa)
 ```
 
-Quy tắc chính:
+Sau đó hệ thống clamp kết quả trong khoảng `Handicap Min` đến `Handicap Max`.
 
-- Ngựa có rating cao nhất mang mức `Handicap Max`.
-- Thấp hơn `1` điểm rating thì giảm `1 lb`.
-- Không được thấp hơn `Handicap Min`.
-- Kết quả được làm tròn về pound nguyên.
+Nguồn logic chính: [`backend/src/services/handicapService.js`](backend/src/services/handicapService.js).
 
-Ví dụ cuộc đua có khoảng `115-135 lb`, rating cao nhất là `90`:
-
-| Rating | Trọng lượng được chỉ định |
-|---:|---:|
-| 90 | 135 lb |
-| 85 | 130 lb |
-| 80 | 125 lb |
-| 60 | 115 lb do chạm mức tối thiểu |
-
-Khoảng trọng lượng mặc định:
-
-| Hạng đua | Rating hợp lệ | Handicap Min-Max |
-|---|---:|---:|
-| Class 1 | 101-140 | 115-135 lb |
-| Class 2 | 81-100 | 115-135 lb |
-| Class 3 | 61-80 | 113-133 lb |
-| Class 4 | 41-60 | 112-132 lb |
-| Class 5 | 0-40 | 110-130 lb |
-| Open | 0-140 | 110-135 lb |
-
-`Jockey Weight` và `Horse Weight` là dữ liệu riêng để hiển thị. Phiên bản hiện tại chưa tự tính ballast hoặc kiểm tra tổng trọng lượng jockey + trang bị có bằng trọng lượng được chỉ định hay không.
-
-Nguồn xử lý chính: `backend/src/services/handicapService.js`.
-
----
-
-## 🚀 Cài đặt & Chạy
+## Cài đặt & Chạy
 
 ### Yêu cầu
 
-- Node.js >= 18
-- PostgreSQL >= 14
+- Node.js 18 trở lên
+- PostgreSQL 14 trở lên
 
-### 1. Cài đặt dependencies
+### Cài dependencies
 
 ```bash
 npm install
 ```
 
-### 2. Cấu hình biến môi trường
+### Tạo file môi trường
 
 ```bash
 cp .env.example .env
 ```
 
-Chỉnh sửa file `.env` với thông tin kết nối PostgreSQL của bạn.
-
-### 3. Khởi tạo database
+### Khởi tạo database
 
 ```bash
 npm run db:init
 ```
 
-Hoặc chạy thủ công với biến môi trường inline:
+Hoặc chạy bằng biến môi trường inline:
 
 ```bash
 POSTGRES_HOST=127.0.0.1 \
@@ -346,119 +308,142 @@ POSTGRES_PASSWORD=postgres \
 npm run db:init
 ```
 
-### 4. Chạy backend API
+### Chạy backend
 
 ```bash
 npm run api
 ```
 
-API sẽ chạy tại: `http://127.0.0.1:4000`
+Backend mặc định chạy tại `http://127.0.0.1:4000`.
 
-### 5. Chạy frontend
+### Chạy frontend
 
 ```bash
 npm run dev
 ```
 
-Giao diện sẽ chạy tại: `http://127.0.0.1:5173`
+Frontend mặc định chạy tại `http://127.0.0.1:5173`.
 
----
+### Kiểm tra nhanh toàn dự án
 
-## ⚙️ Biến môi trường
+```bash
+npm run check
+```
+
+## Biến môi trường
 
 | Biến | Mặc định | Mô tả |
-|------|----------|-------|
+|---|---|---|
 | `POSTGRES_HOST` | `127.0.0.1` | Host PostgreSQL |
 | `POSTGRES_PORT` | `5432` | Port PostgreSQL |
 | `POSTGRES_DATABASE` | `horse_racing` | Tên database |
-| `POSTGRES_USER` | `postgres` | Tên tài khoản DB |
-| `POSTGRES_PASSWORD` | `postgres` | Mật khẩu DB |
-| `API_PORT` | `4000` | Port backend API |
-| `API_HOST` | `127.0.0.1` | Host backend API |
+| `POSTGRES_USER` | `postgres` | User DB |
+| `POSTGRES_PASSWORD` | `postgres` | Password DB |
+| `API_PORT` | `4000` | Port backend |
+| `API_HOST` | `127.0.0.1` | Host backend |
 | `FRONTEND_URL` | `http://127.0.0.1:5173/` | URL frontend |
-| `VITE_API_URL` | `http://127.0.0.1:4000/api` | URL API cho frontend |
-| `MAX_OWNER_HORSES` | `10` | Số ngựa tối đa mỗi owner |
-| `MAX_RACE_FIELD_SIZE` | `10` | Số thí sinh tối đa mỗi race |
-| `MAX_TOURNAMENT_RACES` | `10` | Số race tối đa mỗi giải |
-| `SESSION_DAYS` | `7` | Thời hạn phiên đăng nhập (ngày) |
-| `SESSION_COOKIE_NAME` | `horse-racing-session` | Tên cookie phiên đăng nhập |
+| `VITE_API_URL` | `http://127.0.0.1:4000/api` | API URL cho frontend |
+| `MAX_OWNER_HORSES` | `10` | Số ngựa tối đa của owner |
+| `MAX_RACE_FIELD_SIZE` | `10` | Số entry tối đa của race |
+| `MAX_TOURNAMENT_RACES` | `10` | Số race tối đa trong một giải |
+| `SESSION_DAYS` | `7` | Thời hạn session |
+| `SESSION_COOKIE_NAME` | `horse-racing-session` | Tên cookie đăng nhập |
 | `COOKIE_SECURE` | Production: `true` | Chỉ gửi cookie qua HTTPS |
-| `COOKIE_SAME_SITE` | `Lax` | Chính sách SameSite của cookie |
+| `COOKIE_SAME_SITE` | `Lax` | Chính sách SameSite |
 
-> **Triển khai cloud:** Backend dùng `DATABASE_URL` và `POSTGRES_SSL=true`. Frontend production gọi `/api`; `vercel.json` proxy API qua Render để cookie `HttpOnly` vẫn là first-party trên Safari.
-
----
-
-## 📦 Các lệnh npm
+## Scripts
 
 | Lệnh | Mô tả |
-|------|-------|
-| `npm run dev` | Chạy frontend ở chế độ development |
-| `npm run api` | Chạy backend API server |
-| `npm run db:init` | Tạo schema + nạp dữ liệu mẫu |
-| `npm run db:schema` | Chỉ chạy schema (tạo bảng) |
-| `npm run db:seed` | Chỉ nạp dữ liệu mẫu |
-| `npm test` | Chạy test nghiệp vụ backend |
+|---|---|
+| `npm run dev` | Chạy frontend dev server |
+| `npm run api` | Chạy backend API |
+| `npm run start` | Alias của `npm run api` |
+| `npm run db:init` | Tạo schema và seed dữ liệu |
+| `npm run db:schema` | Chỉ tạo schema |
+| `npm run db:seed` | Chỉ seed dữ liệu |
+| `npm test` | Chạy test backend |
 | `npm run typecheck` | Kiểm tra TypeScript |
-| `npm run check` | Chạy typecheck, test và production build |
 | `npm run build` | Build frontend production |
-| `npm run preview` | Xem trước bản build production |
+| `npm run preview` | Xem bản build |
+| `npm run check` | Typecheck + test + build |
 
-## 🔌 API
+## API chính
 
-### Xác thực
-| Phương thức | Đường dẫn | Mô tả |
-|--------|----------|-------|
-| `GET` | `/api/me` | Lấy thông tin người dùng hiện tại |
+### Auth
+
+| Method | Path | Mô tả |
+|---|---|---|
+| `GET` | `/api/me` | Lấy người dùng hiện tại |
 | `POST` | `/api/login` | Đăng nhập |
-| `POST` | `/api/register` | Đăng ký tài khoản mới |
+| `POST` | `/api/register` | Đăng ký |
 | `POST` | `/api/logout` | Đăng xuất |
 
 ### Dữ liệu chung
-| Phương thức | Đường dẫn | Mô tả |
-|--------|----------|-------|
-| `GET` | `/api/bootstrap` | Tải toàn bộ dữ liệu khởi động |
-| `GET` | `/api/health` | Kiểm tra trạng thái server |
-| `GET` | `/api/live/races/:id/events` | Luồng SSE theo dõi cuộc đua trực tiếp |
 
-### Quản trị viên
-| Phương thức | Đường dẫn | Mô tả |
-|--------|----------|-------|
-| `GET` | `/api/admin/approvals` | Danh sách chờ phê duyệt |
-| `POST` | `/api/admin/approvals/:type/:id` | Phê duyệt / từ chối |
-| `POST` | `/api/admin/tournaments` | Tạo giải đấu |
-| `POST` | `/api/admin/races` | Tạo cuộc đua |
-| `PATCH` | `/api/admin/races/:id` | Sửa lịch cuộc đua chưa công bố |
-| `POST` | `/api/admin/races/:id/:action` | Đóng đăng ký, công bố, bắt đầu, kết thúc hoặc hoàn tất cuộc đua |
+| Method | Path | Mô tả |
+|---|---|---|
+| `GET` | `/api/bootstrap` | Dữ liệu khởi động |
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/live/races/:id/events` | SSE cho live race |
 
-### Chủ ngựa
-| Phương thức | Đường dẫn | Mô tả |
-|--------|----------|-------|
-| `GET` | `/api/owner/portal` | Cổng làm việc của chủ ngựa |
-| `POST` | `/api/owner/horses` | Đăng ký ngựa mới |
-| `POST` | `/api/owner/horses/:id` | Cập nhật thông tin ngựa |
-| `POST` | `/api/owner/race-registrations` | Đăng ký ngựa vào cuộc đua |
+### Admin
+
+| Method | Path | Mô tả |
+|---|---|---|
+| `GET` | `/api/admin/approvals` | Danh sách chờ duyệt |
+| `POST` | `/api/admin/approvals/:type/:id` | Duyệt / từ chối |
+| `POST` | `/api/admin/tournaments` | Tạo giải |
+| `PATCH` | `/api/admin/tournaments/:id` | Cập nhật giải |
+| `DELETE` | `/api/admin/tournaments/:id` | Xóa giải và dữ liệu liên quan |
+| `GET` | `/api/admin/race-builder` | Dữ liệu tạo race |
+| `POST` | `/api/admin/races` | Tạo race |
+| `PATCH` | `/api/admin/races/:id` | Sửa race chưa công bố |
+| `DELETE` | `/api/admin/races/:id` | Xóa race chưa công bố |
+| `POST` | `/api/admin/races/:id/:action` | Đóng đăng ký, công bố, bắt đầu, kết thúc, hoàn tất |
+
+### Owner
+
+| Method | Path | Mô tả |
+|---|---|---|
+| `GET` | `/api/owner/portal` | Dữ liệu portal owner |
+| `GET` | `/api/owner/race-registration?raceId=...` | Dữ liệu đăng ký race |
+| `POST` | `/api/owner/horses` | Tạo ngựa |
+| `POST` | `/api/owner/horses/:id` | Cập nhật ngựa |
+| `POST` | `/api/owner/race-registrations` | Đăng ký ngựa vào race |
 
 ### Jockey
-| Phương thức | Đường dẫn | Mô tả |
-|--------|----------|-------|
-| `GET` | `/api/jockey/portal` | Cổng làm việc của jockey |
-| `POST` | `/api/jockey/profile` | Lưu hồ sơ jockey |
-| `POST` | `/api/jockey/race-registrations` | Đăng ký tham gia cuộc đua |
-| `POST` | `/api/jockey/invitations/:id` | Phản hồi lời mời |
 
-### Trọng tài
-| Phương thức | Đường dẫn | Mô tả |
-|--------|----------|-------|
-| `POST` | `/api/referee/races/:id/submit-results` | Nộp kết quả nháp để Admin duyệt chính thức |
-| `POST` | `/api/referee/race-entries/:id/readiness/ready` | Đánh dấu sẵn sàng |
-| `POST` | `/api/referee/race-entries/:id/readiness/absent` | Đánh dấu vắng mặt |
-| `POST` | `/api/referee/race-entries/:id/readiness/incident` | Đánh dấu sự cố cần xử lý trước khi bắt đầu |
-| `POST` | `/api/referee/race-entries/:id/readiness/scratched` | Gạch khỏi danh sách thí sinh đang chạy |
-| `POST` | `/api/referee/race-entries/:id/result` | Ghi kết quả thí sinh |
+| Method | Path | Mô tả |
+|---|---|---|
+| `GET` | `/api/jockey/portal` | Dữ liệu portal jockey |
+| `POST` | `/api/jockey/profile` | Lưu hồ sơ jockey |
+| `POST` | `/api/jockey/race-registrations` | Đăng ký race |
+| `POST` | `/api/jockey/invitations/:id` | Trả lời lời mời |
+
+### Referee
+
+| Method | Path | Mô tả |
+|---|---|---|
+| `POST` | `/api/referee/races/:id/submit-results` | Nộp kết quả nháp |
+| `POST` | `/api/referee/race-entries/:id/readiness/ready` | Đánh dấu ready |
+| `POST` | `/api/referee/race-entries/:id/readiness/absent` | Đánh dấu absent |
+| `POST` | `/api/referee/race-entries/:id/readiness/incident` | Đánh dấu incident |
+| `POST` | `/api/referee/race-entries/:id/readiness/scratched` | Đánh dấu scratched |
+| `POST` | `/api/referee/race-entries/:id/result` | Ghi kết quả entry |
 
 ### Thông báo
-| Phương thức | Đường dẫn | Mô tả |
-|--------|----------|-------|
+
+| Method | Path | Mô tả |
+|---|---|---|
 | `GET` | `/api/notifications` | Danh sách thông báo |
 | `POST` | `/api/notifications/:id/read` | Đánh dấu đã đọc |
+
+## Tài liệu liên quan
+
+- [`docs/business-flow-and-roles.md`](docs/business-flow-and-roles.md)
+- [`docs/schema-erd.md`](docs/schema-erd.md)
+- [`docs/erd.drawio`](docs/erd.drawio)
+- [`docs/STD.drawio`](docs/STD.drawio)
+- [`docs/race-state-diagram.drawio`](docs/race-state-diagram.drawio)
+- [`docs/tournament-state-diagram.drawio`](docs/tournament-state-diagram.drawio)
+- [`vercel.json`](vercel.json)
