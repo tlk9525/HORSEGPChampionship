@@ -13,8 +13,6 @@ interface EditRacePageProps {
   onNavigate: (page: string) => void;
 }
 
-const RACE_CLASS_PRESETS = ['Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Open'];
-
 const EDITABLE_RACE_STATUSES = ['registration-open', 'registration-closed'];
 
 const toDatetimeLocal = (value?: string) => {
@@ -44,9 +42,6 @@ export default function EditRacePage({
     raceName: '',
     raceDate: '',
     startTime: '',
-    raceClass: '',
-    ratingMin: '',
-    ratingMax: '',
     registrationOpensAt: '',
     registrationClosesAt: '',
   });
@@ -71,9 +66,6 @@ export default function EditRacePage({
           raceName: race.name,
           raceDate: race.date || '',
           startTime: race.time || '',
-          raceClass: race.raceClass || '',
-          ratingMin: race.ratingMin != null ? String(race.ratingMin) : '',
-          ratingMax: race.ratingMax != null ? String(race.ratingMax) : '',
           registrationOpensAt: toDatetimeLocal(race.registrationOpensAt),
           registrationClosesAt: toDatetimeLocal(race.registrationClosesAt),
         });
@@ -110,13 +102,10 @@ export default function EditRacePage({
       !form.raceName ||
       !form.raceDate ||
       !form.startTime ||
-      !form.raceClass ||
-      form.ratingMin === '' ||
-      form.ratingMax === '' ||
       !form.registrationOpensAt ||
       !form.registrationClosesAt
     ) {
-      setMessage('Please complete the race name, class, rating range, date, time and registration window.');
+      setMessage('Please complete the race name, date, time and registration window.');
       return;
     }
 
@@ -139,23 +128,12 @@ export default function EditRacePage({
       setMessage('Registration must close before the race starts.');
       return;
     }
-    if (
-      Number(form.ratingMin) < 0 ||
-      Number(form.ratingMax) > 140 ||
-      Number(form.ratingMin) > Number(form.ratingMax)
-    ) {
-      setMessage('Rating range must stay between 0 and 140.');
-      return;
-    }
 
     setIsSubmitting(true);
     updateRace(raceId, {
       name: form.raceName,
       date: form.raceDate,
       time: form.startTime,
-      raceClass: form.raceClass,
-      ratingMin: form.ratingMin,
-      ratingMax: form.ratingMax,
       registrationOpensAt: regOpens.toISOString(),
       registrationClosesAt: regCloses.toISOString(),
     })
@@ -340,57 +318,9 @@ export default function EditRacePage({
                 <div className="min-w-0">
                   <label className="block text-gray-300 mb-2">Race Class</label>
                   <input
-                    list="edit-race-class-presets"
-                    placeholder="Class 4, Open, or custom label"
                     className={fieldClass}
-                    value={form.raceClass}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-                        raceClass: event.target.value,
-                      })
-                    }
-                  />
-                  <datalist id="edit-race-class-presets">
-                    {RACE_CLASS_PRESETS.map((raceClass) => (
-                      <option key={raceClass} value={raceClass} />
-                    ))}
-                  </datalist>
-                </div>
-
-                <div className="min-w-0">
-                  <label className="block text-gray-300 mb-2">Minimum Rating</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="140"
-                    step="1"
-                    className={fieldClass}
-                    value={form.ratingMin}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-                        ratingMin: event.target.value,
-                      })
-                    }
-                  />
-                </div>
-
-                <div className="min-w-0">
-                  <label className="block text-gray-300 mb-2">Maximum Rating</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="140"
-                    step="1"
-                    className={fieldClass}
-                    value={form.ratingMax}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-                        ratingMax: event.target.value,
-                      })
-                    }
+                    value={editingRace.raceClass || 'N/A'}
+                    disabled={true}
                   />
                 </div>
 
