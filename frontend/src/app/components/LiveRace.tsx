@@ -28,6 +28,7 @@ import {
   normalizeOfficialReplayRunners,
   parseRaceDistanceMeters,
   progressForRunner,
+  sortRaceDisplayRunners,
 } from '../utils/raceSimulation';
 
 interface DisplayRunnerRow {
@@ -41,6 +42,7 @@ interface DisplayRunnerRow {
   progress: number;
   position?: number;
   finishTime?: string;
+  liveRank?: number;
 }
 
 const parseFinishTimeSeconds = (value?: string) => {
@@ -215,17 +217,22 @@ export default function LiveRace() {
   );
   const officialReplayEntries = useMemo<DisplayRunnerRow[]>(() => {
     if (normalizedOfficialTimelineRunners.length > 0) {
-      return normalizedOfficialTimelineRunners.map((runner) => ({
-        keyId: runner.entryId,
-        lane: runner.lane,
-        horseName: runner.horseName,
-        jockeyName: runner.jockeyName,
-        silkColor: runner.silkColor,
-        rating: runner.rating,
-        carriedWeight: runner.carriedWeight,
-        progress: progressForRunner(runner, simulationElapsedSeconds),
-        position: runner.position,
-        finishTime: runner.finishTime,
+      return sortRaceDisplayRunners(
+        normalizedOfficialTimelineRunners.map((runner) => ({
+          keyId: runner.entryId,
+          lane: runner.lane,
+          horseName: runner.horseName,
+          jockeyName: runner.jockeyName,
+          silkColor: runner.silkColor,
+          rating: runner.rating,
+          carriedWeight: runner.carriedWeight,
+          progress: progressForRunner(runner, simulationElapsedSeconds),
+          position: runner.position,
+          finishTime: runner.finishTime,
+        }))
+      ).map((runner, index) => ({
+        ...runner,
+        liveRank: index + 1,
       }));
     }
 
@@ -288,7 +295,7 @@ export default function LiveRace() {
       progress: runner.progress,
     }));
   const displayRankByEntryId = officialReplayMode
-    ? new Map(officialReplayEntries.map((entry, index) => [entry.keyId, index + 1]))
+    ? new Map(officialReplayEntries.map((entry) => [entry.keyId, entry.liveRank || 0]))
     : simulationRankByEntryId;
   const displayDistance =
     officialReplayMode && selectedRace?.distance
@@ -766,7 +773,7 @@ export default function LiveRace() {
                           </div>
                           <div className="truncate text-xs text-gray-400">
                             {officialReplayMode
-                              ? `Jockey ${runner.jockeyName} • Position ${rank || '-'} • ${runner.finishTime || ''}`
+                              ? `Jockey ${runner.jockeyName} • Official P${runner.position || '-'} • ${runner.finishTime || ''}`
                               : `${runner.jockeyName} • R${runner.rating} • ${runner.carriedWeight}lb`}
                           </div>
                         </div>
