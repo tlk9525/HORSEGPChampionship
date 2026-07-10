@@ -30,6 +30,7 @@ const RaceSimulationDemo = lazy(() => import('./app/components/RaceSimulationDem
 const ResultsPage = lazy(() => import('./app/components/ResultsPage'));
 const AdminPanel = lazy(() => import('./app/components/AdminPanel'));
 const CreateRacePage = lazy(() => import('./app/components/CreateRacePage'));
+const EditRacePage = lazy(() => import('./app/components/EditRacePage'));
 const LoginPage = lazy(() => import('./app/components/LoginPage'));
 
 const roleHome: Record<string, string> = {
@@ -330,7 +331,7 @@ export default function App() {
               />
               <Route
                 path="/admin/races/:raceId/edit"
-                element={<CreateRacePage mode="edit" onNavigate={navigate} />}
+                element={<EditRacePage onNavigate={navigate} />}
               />
               <Route
                 path="/login"
