@@ -141,22 +141,45 @@ export default function RaceSimulationDemo() {
 
   const officialRows = useMemo(
     () => {
+      const sortFinalOrder = <T extends { positionValue?: number; finishTimeSeconds?: number; liveRank?: number }>(rows: T[]) =>
+        [...rows].sort((a, b) => {
+          const positionA = Number(a.positionValue || 999);
+          const positionB = Number(b.positionValue || 999);
+
+          if (positionA !== positionB) return positionA - positionB;
+
+          const finishTimeA = Number(a.finishTimeSeconds ?? Number.POSITIVE_INFINITY);
+          const finishTimeB = Number(b.finishTimeSeconds ?? Number.POSITIVE_INFINITY);
+
+          if (finishTimeA !== finishTimeB) return finishTimeA - finishTimeB;
+
+          return Number(a.liveRank || 999) - Number(b.liveRank || 999);
+        });
+
       if (replayTimelineRunners.length > 0) {
-        return sortRaceDisplayRunners([...normalizedReplayTimelineRunners])
-          .map((runner, index) => ({
+        const rows = normalizedReplayTimelineRunners.map((runner) => ({
           ...runner,
           id: runner.entryId,
-          liveRank: index + 1,
+          liveRank: 0,
           positionValue: runner.position,
           progress: progressForRunner(runner, elapsedSeconds),
         }));
+
+        const orderedRows =
+          timelineDurationSeconds > 0 && elapsedSeconds >= timelineDurationSeconds
+            ? sortFinalOrder(rows)
+            : sortRaceDisplayRunners(rows);
+
+        return orderedRows.map((runner, index) => ({
+          ...runner,
+          liveRank: index + 1,
+        }));
       }
 
-      return sortRaceDisplayRunners([...replayEntries])
-          .map((entry, index) => ({
+      const rows = replayEntries.map((entry) => ({
           ...entry,
           id: entry.id,
-          liveRank: index + 1,
+          liveRank: 0,
           positionValue: entry.positionValue,
           displayGate: entry.displayGate ?? entry.lane ?? entry.positionValue,
           silkColor: entry.silkColor ?? '#d4af37',
@@ -166,8 +189,18 @@ export default function RaceSimulationDemo() {
               ? Math.min(elapsedSeconds / entry.finishSeconds, 1)
               : 0,
         }));
+
+      const orderedRows =
+        timelineDurationSeconds > 0 && elapsedSeconds >= timelineDurationSeconds
+          ? sortFinalOrder(rows)
+          : sortRaceDisplayRunners(rows);
+
+      return orderedRows.map((entry, index) => ({
+        ...entry,
+        liveRank: index + 1,
+      }));
     },
-    [elapsedSeconds, maxFinishSeconds, normalizedReplayTimelineRunners, replayEntries, replayTimelineRunners]
+    [elapsedSeconds, maxFinishSeconds, normalizedReplayTimelineRunners, replayEntries, replayTimelineRunners, timelineDurationSeconds]
   );
   const officialFieldCount = replayTimelineRunners.length > 0
     ? normalizedReplayTimelineRunners.length
@@ -524,19 +557,19 @@ export default function RaceSimulationDemo() {
                     </div>
                   )}
 
-                  {replayEntries.map((runner, index) => (
+                  {officialRows.map((runner) => (
                     <div
                       key={runner.id}
                       className={`grid grid-cols-[32px,12px,1fr] items-center gap-3 rounded-xl border p-3 ${
-                        index === 0
+                        runner.liveRank === 1
                           ? 'border-[#d4af37]/30 bg-[#d4af37]/10'
                           : 'border-white/[0.06] bg-[#071a2f]'
                       }`}
                     >
-                      <span className="font-black text-white">{runner.positionValue}</span>
+                      <span className="font-black text-white">{runner.liveRank}</span>
                       <span className="h-3 w-3 rounded-full" style={{ backgroundColor: runner.silkColor || '#d4af37' }} />
                       <span className="truncate text-sm font-bold text-gray-200">
-                        {runner.horseName} • {runner.finishTime}
+                        {runner.horseName} • Official P{runner.positionValue || '-'} • {runner.finishTime}
                       </span>
                     </div>
                   ))}
