@@ -84,6 +84,8 @@ CREATE TABLE "races" (
   "distance" VARCHAR(64),
   "surface" VARCHAR(64),
   "raceClass" VARCHAR(128),
+  "ratingMin" NUMERIC(6, 2) NOT NULL DEFAULT 0,
+  "ratingMax" NUMERIC(6, 2) NOT NULL DEFAULT 140,
   "handicapMin" NUMERIC(6, 2) NOT NULL DEFAULT 110,
   "handicapMax" NUMERIC(6, 2) NOT NULL DEFAULT 135,
   "totalPrize" NUMERIC(14, 2) NOT NULL DEFAULT 0,

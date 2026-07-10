@@ -176,6 +176,22 @@ INSERT INTO "races" ("id", "tournamentId", "raceNumber", "name", "raceDate", "ra
 
 UPDATE "races"
 SET
+  "ratingMin" = CASE "raceClass"
+    WHEN 'Class 1' THEN 101
+    WHEN 'Class 2' THEN 81
+    WHEN 'Class 3' THEN 61
+    WHEN 'Class 4' THEN 41
+    WHEN 'Class 5' THEN 0
+    ELSE 0
+  END,
+  "ratingMax" = CASE "raceClass"
+    WHEN 'Class 1' THEN 140
+    WHEN 'Class 2' THEN 100
+    WHEN 'Class 3' THEN 80
+    WHEN 'Class 4' THEN 60
+    WHEN 'Class 5' THEN 40
+    ELSE 140
+  END,
   "handicapMin" = CASE "raceClass"
     WHEN 'Class 1' THEN 115
     WHEN 'Class 2' THEN 115

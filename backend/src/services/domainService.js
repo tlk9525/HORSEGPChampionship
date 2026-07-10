@@ -1,9 +1,8 @@
 import {
   ACTIVE_TOURNAMENT_STATUSES,
-  RACE_CLASSES,
   USER_ROLES,
 } from '../config/constants.js';
-import { officialHorseRating } from './handicapService.js';
+import { officialHorseRating, raceEligibilityRange } from './handicapService.js';
 
 // Lấy tên chủ ngựa (owner) từ userId, trả về 'Unknown Owner' nếu không tìm thấy
 export const ownerName = (db, userId) =>
@@ -315,12 +314,12 @@ const approvalWarnings = (db, { horseId, jockeyUserId, raceId } = {}) => {
     warnings.push('Jockey certificate has not been provided.');
   }
 
-  if (horse && race?.raceClass && RACE_CLASSES[race.raceClass]) {
+  if (horse) {
     const rating = officialHorseRating(horse);
-    const { min, max } = RACE_CLASSES[race.raceClass];
+    const { min, max } = raceEligibilityRange(race);
     if (rating < min || rating > max) {
       warnings.push(
-        `Horse rating ${rating} is outside ${race.raceClass} eligibility (${min}-${max}).`
+        `Horse rating ${rating} is outside ${race?.raceClass || 'this race'} eligibility (${min}-${max}).`
       );
     }
   }
