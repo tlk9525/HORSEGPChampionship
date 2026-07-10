@@ -439,9 +439,26 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
       return c.json({ message: 'Only unpublished races can be edited' }, 400);
     }
 
-    const { name, date, time } = await c.req.json();
-    if (!String(name || '').trim() || !date || !time) {
-      return c.json({ message: 'Race name, date and time are required' }, 400);
+    const { name, date, time, registrationOpensAt, registrationClosesAt } = await c.req.json();
+    if (!String(name || '').trim() || !date || !time || !registrationOpensAt || !registrationClosesAt) {
+      return c.json({ message: 'Race name, date, time and registration window are required' }, 400);
+    }
+
+    const regOpens = new Date(registrationOpensAt);
+    const regCloses = new Date(registrationClosesAt);
+    const raceStartsAt = new Date(`${date}T${time}`);
+    if (
+      !Number.isFinite(regOpens.getTime()) ||
+      !Number.isFinite(regCloses.getTime()) ||
+      !Number.isFinite(raceStartsAt.getTime())
+    ) {
+      return c.json({ message: 'Race and registration times must be valid' }, 400);
+    }
+    if (regOpens >= regCloses) {
+      return c.json({ message: 'Registration close time must be after open time' }, 400);
+    }
+    if (regCloses > raceStartsAt) {
+      return c.json({ message: 'Registration must close before the race starts' }, 400);
     }
 
     race.name = String(name).trim();
@@ -449,6 +466,8 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
     race.raceDate = date;
     race.time = time;
     race.raceTime = time;
+    race.registrationOpensAt = regOpens.toISOString();
+    race.registrationClosesAt = regCloses.toISOString();
     race.updatedAt = new Date().toISOString();
     recordRaceAction(db, {
       raceId: race.id,
@@ -456,7 +475,7 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
       action: 'edit-race',
       fromStatus: race.status,
       toStatus: race.status,
-      details: `Updated schedule to ${date} ${time}`,
+      details: `Updated schedule to ${date} ${time} and registration window`,
     });
 
     await writeDb(db);

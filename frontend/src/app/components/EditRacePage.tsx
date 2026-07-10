@@ -42,6 +42,8 @@ export default function EditRacePage({
     raceName: '',
     raceDate: '',
     startTime: '',
+    registrationOpensAt: '',
+    registrationClosesAt: '',
   });
 
   useEffect(() => {
@@ -64,6 +66,8 @@ export default function EditRacePage({
           raceName: race.name,
           raceDate: race.date || '',
           startTime: race.time || '',
+          registrationOpensAt: toDatetimeLocal(race.registrationOpensAt),
+          registrationClosesAt: toDatetimeLocal(race.registrationClosesAt),
         });
       })
       .catch((error) =>
@@ -93,8 +97,35 @@ export default function EditRacePage({
   const handleSubmit = () => {
     setMessage('');
 
-    if (!raceId || !form.raceName || !form.raceDate || !form.startTime) {
-      setMessage('Please complete the race name, date and time.');
+    if (
+      !raceId ||
+      !form.raceName ||
+      !form.raceDate ||
+      !form.startTime ||
+      !form.registrationOpensAt ||
+      !form.registrationClosesAt
+    ) {
+      setMessage('Please complete the race name, date, time and registration window.');
+      return;
+    }
+
+    const regOpens = new Date(form.registrationOpensAt);
+    const regCloses = new Date(form.registrationClosesAt);
+    const raceStartsAt = new Date(`${form.raceDate}T${form.startTime}`);
+    if (
+      !Number.isFinite(regOpens.getTime()) ||
+      !Number.isFinite(regCloses.getTime()) ||
+      !Number.isFinite(raceStartsAt.getTime())
+    ) {
+      setMessage('Race and registration times must be valid.');
+      return;
+    }
+    if (regOpens >= regCloses) {
+      setMessage('Registration close time must be after open time.');
+      return;
+    }
+    if (regCloses > raceStartsAt) {
+      setMessage('Registration must close before the race starts.');
       return;
     }
 
@@ -103,6 +134,8 @@ export default function EditRacePage({
       name: form.raceName,
       date: form.raceDate,
       time: form.startTime,
+      registrationOpensAt: regOpens.toISOString(),
+      registrationClosesAt: regCloses.toISOString(),
     })
       .then(() => {
         setMessage('Race schedule saved.');
@@ -219,6 +252,36 @@ export default function EditRacePage({
                       setForm({
                         ...form,
                         startTime: event.target.value,
+                      })
+                    }
+                    />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Registration Opens</label>
+                  <input
+                    type="datetime-local"
+                    className={fieldClass}
+                    value={form.registrationOpensAt}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        registrationOpensAt: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Registration Closes</label>
+                  <input
+                    type="datetime-local"
+                    className={fieldClass}
+                    value={form.registrationClosesAt}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        registrationClosesAt: event.target.value,
                       })
                     }
                   />
