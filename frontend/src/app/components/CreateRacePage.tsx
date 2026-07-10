@@ -13,13 +13,17 @@ interface CreateRacePageProps {
   onNavigate: (page: string) => void;
 }
 
-const RACE_CLASS_WEIGHT_RANGES: Record<string, { minWeightLb: string; topWeightLb: string }> = {
-  'Class 1': { topWeightLb: '135', minWeightLb: '115' },
-  'Class 2': { topWeightLb: '135', minWeightLb: '115' },
-  'Class 3': { topWeightLb: '133', minWeightLb: '113' },
-  'Class 4': { topWeightLb: '132', minWeightLb: '112' },
-  'Class 5': { topWeightLb: '130', minWeightLb: '110' },
-  Open: { topWeightLb: '135', minWeightLb: '110' },
+const CUSTOM_RACE_CLASS = 'Custom';
+const RACE_CLASS_SETTINGS: Record<
+  string,
+  { minWeightLb: string; topWeightLb: string; ratingMin: string; ratingMax: string }
+> = {
+  'Class 1': { topWeightLb: '135', minWeightLb: '115', ratingMin: '101', ratingMax: '140' },
+  'Class 2': { topWeightLb: '135', minWeightLb: '115', ratingMin: '81', ratingMax: '100' },
+  'Class 3': { topWeightLb: '133', minWeightLb: '113', ratingMin: '61', ratingMax: '80' },
+  'Class 4': { topWeightLb: '132', minWeightLb: '112', ratingMin: '41', ratingMax: '60' },
+  'Class 5': { topWeightLb: '130', minWeightLb: '110', ratingMin: '0', ratingMax: '40' },
+  Open: { topWeightLb: '135', minWeightLb: '110', ratingMin: '0', ratingMax: '140' },
 };
 
 export default function CreateRacePage({
@@ -49,6 +53,8 @@ export default function CreateRacePage({
     distance: '',
     surfaceType: '',
     raceClass: '',
+    ratingMin: '',
+    ratingMax: '',
     handicapMin: '',
     handicapMax: '',
     totalPrize: '',
@@ -170,6 +176,9 @@ export default function CreateRacePage({
       return;
     }
     if (
+      Number(form.ratingMin) < 0 ||
+      Number(form.ratingMax) > 140 ||
+      Number(form.ratingMin) > Number(form.ratingMax) ||
       Number(form.handicapMin) < 110 ||
       Number(form.handicapMax) > 135 ||
       Number(form.handicapMin) > Number(form.handicapMax)
@@ -191,6 +200,8 @@ export default function CreateRacePage({
       distance: form.distance,
       surface: form.surfaceType,
       raceClass: form.raceClass,
+      ratingMin: form.ratingMin,
+      ratingMax: form.ratingMax,
       handicapMin: form.handicapMin,
       handicapMax: form.handicapMax,
       totalPrize: form.totalPrize,
@@ -220,13 +231,24 @@ export default function CreateRacePage({
   };
 
   const handleRaceClassChange = (raceClass: string) => {
-    const weightRange = RACE_CLASS_WEIGHT_RANGES[raceClass];
+    const preset = RACE_CLASS_SETTINGS[raceClass];
+    const fallback = RACE_CLASS_SETTINGS.Open;
 
     setForm((current) => ({
       ...current,
       raceClass,
-      handicapMin: weightRange?.minWeightLb || current.handicapMin,
-      handicapMax: weightRange?.topWeightLb || current.handicapMax,
+      ratingMin:
+        preset?.ratingMin ||
+        (raceClass === CUSTOM_RACE_CLASS ? current.ratingMin || fallback.ratingMin : current.ratingMin),
+      ratingMax:
+        preset?.ratingMax ||
+        (raceClass === CUSTOM_RACE_CLASS ? current.ratingMax || fallback.ratingMax : current.ratingMax),
+      handicapMin:
+        preset?.minWeightLb ||
+        (raceClass === CUSTOM_RACE_CLASS ? current.handicapMin || fallback.minWeightLb : current.handicapMin),
+      handicapMax:
+        preset?.topWeightLb ||
+        (raceClass === CUSTOM_RACE_CLASS ? current.handicapMax || fallback.topWeightLb : current.handicapMax),
     }));
   };
 
@@ -475,7 +497,44 @@ export default function CreateRacePage({
                     <option value="Class 4">Class 4 (41-60)</option>
                     <option value="Class 5">Class 5 (0-40)</option>
                     <option value="Open">Open (0-140)</option>
+                    <option value={CUSTOM_RACE_CLASS}>Custom</option>
                   </select>
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Minimum Rating</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="140"
+                    step="1"
+                    className={fieldClass}
+                    value={form.ratingMin}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        ratingMin: event.target.value,
+                      })
+                    }
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Maximum Rating</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="140"
+                    step="1"
+                    className={fieldClass}
+                    value={form.ratingMax}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        ratingMax: event.target.value,
+                      })
+                    }
+                  />
                 </div>
 
                 <div className="min-w-0">

@@ -299,7 +299,7 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
     const db = c.get('db');
     const {
       tournamentId, raceNumber, name, round, date, time, venue, distance, surface,
-      raceClass, handicapMin, handicapMax, totalPrize, refereeUserId, refereeUserIds,
+      raceClass, ratingMin, ratingMax, handicapMin, handicapMax, totalPrize, refereeUserId, refereeUserIds,
       registrationOpensAt: reqRegOpens, registrationClosesAt: reqRegCloses,
     } = await c.req.json();
 
@@ -362,10 +362,21 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
     }
     const distanceMeters = Number(distance);
     const classWeightRange = RACE_CLASS_WEIGHT_RANGES[raceClass] || RACE_CLASS_WEIGHT_RANGES.Open;
+    const minRating = Number(ratingMin ?? 0);
+    const maxRating = Number(ratingMax ?? 140);
     const minHandicap = Number(handicapMin ?? classWeightRange.minWeightLb);
     const maxHandicap = Number(handicapMax ?? classWeightRange.topWeightLb);
     if (!Number.isFinite(distanceMeters) || distanceMeters < 400 || distanceMeters > 10000) {
       return c.json({ message: 'Race distance must be between 400m and 10,000m' }, 400);
+    }
+    if (
+      !Number.isFinite(minRating) ||
+      !Number.isFinite(maxRating) ||
+      minRating < 0 ||
+      maxRating > 140 ||
+      maxRating < minRating
+    ) {
+      return c.json({ message: 'Rating range must be between 0 and 140' }, 400);
     }
     if (
       !Number.isFinite(minHandicap) ||
@@ -392,6 +403,7 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
       id: randomUUID(), tournamentId: tournament.id, raceNumber: raceNumber || '',
       name, round: round || '', date, time, venue,
       distance: `${distanceMeters}m`, surface, raceClass,
+      ratingMin: Math.round(minRating), ratingMax: Math.round(maxRating),
       handicapMin: minHandicap, handicapMax: maxHandicap,
       totalPrize: Number(totalPrize) || 0, status: 'registration-open',
       participants: 0, ownerConfirmed: 0, jockeyConfirmed: 0,
