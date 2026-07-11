@@ -37,6 +37,7 @@ import {
   buildOfficialReplayTimeline,
   buildProvisionalRaceTimeline,
 } from '../services/raceReplayTimeline.js';
+import { settleRaceBets } from '../services/bettingService.js';
 
 // Helpers nội bộ
 const nonRejectedEntry = (entry) => entry.status !== 'rejected';
@@ -587,6 +588,8 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
     );
     let affectedTournament = null;
     let affectedHorses = [];
+    let settledBets = [];
+    let affectedSpectators = [];
 
     if (action === 'close-registration') {
       if (race.status !== 'registration-open') {
@@ -855,6 +858,12 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
         horses: db.horses,
       });
 
+      const settlement = settleRaceBets(db, race.id, entries);
+      settledBets = (db.bets || []).filter(
+        (bet) => bet.raceId === race.id && bet.settledAt
+      );
+      affectedSpectators = settlement.affectedUsers || [];
+
       const recipientIds = new Set();
       entries.forEach((entry) => {
         const horse = db.horses.find((item) => item.id === entry.horseId);
@@ -896,6 +905,8 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
         raceEntries: entries,
         horses: affectedHorses,
         tournament: affectedTournament,
+        bets: settledBets,
+        users: affectedSpectators,
         notifications: (db.notifications || []).filter(
           (notification) => !existingNotificationIds.has(notification.id)
         ),

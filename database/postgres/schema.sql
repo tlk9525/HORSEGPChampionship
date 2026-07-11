@@ -2,6 +2,7 @@
 -- Run:
 --   npm run db:init
 
+DROP TABLE IF EXISTS "bets";
 DROP TABLE IF EXISTS "notifications";
 DROP TABLE IF EXISTS "sessions";
 DROP TABLE IF EXISTS "raceActionLogs";
@@ -25,6 +26,7 @@ CREATE TABLE "users" (
   "password" VARCHAR(255) NOT NULL,
   "role" VARCHAR(32) NOT NULL CHECK ("role" IN ('admin', 'owner', 'jockey', 'referee', 'spectator')),
   "status" VARCHAR(32) NOT NULL DEFAULT 'active' CHECK ("status" IN ('pending', 'active', 'approved', 'rejected', 'suspended', 'locked')),
+  "credits" NUMERIC(12, 2),
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -298,6 +300,32 @@ CREATE TABLE "raceEntries" (
 );
 
 CREATE INDEX "idx_race_entries_race" ON "raceEntries" ("raceId");
+
+CREATE TABLE "bets" (
+  "id" VARCHAR(64) PRIMARY KEY,
+  "userId" VARCHAR(64) NOT NULL,
+  "raceId" VARCHAR(64) NOT NULL,
+  "raceEntryId" VARCHAR(64) NOT NULL,
+  "amount" NUMERIC(12, 2) NOT NULL CHECK ("amount" > 0),
+  "status" VARCHAR(32) NOT NULL DEFAULT 'pending'
+    CHECK ("status" IN ('pending', 'won', 'lost', 'cancelled', 'refunded')),
+  "payout" NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "settledAt" TIMESTAMPTZ,
+  CONSTRAINT "uq_bet_user_entry" UNIQUE ("userId", "raceEntryId"),
+  CONSTRAINT "fk_bets_user"
+    FOREIGN KEY ("userId") REFERENCES "users" ("id")
+    ON DELETE CASCADE,
+  CONSTRAINT "fk_bets_race"
+    FOREIGN KEY ("raceId") REFERENCES "races" ("id")
+    ON DELETE CASCADE,
+  CONSTRAINT "fk_bets_race_entry"
+    FOREIGN KEY ("raceEntryId") REFERENCES "raceEntries" ("id")
+    ON DELETE CASCADE
+);
+
+CREATE INDEX "idx_bets_user" ON "bets" ("userId", "status");
+CREATE INDEX "idx_bets_race" ON "bets" ("raceId", "status");
 
 CREATE TABLE "refereeReports" (
   "id" VARCHAR(64) PRIMARY KEY,

@@ -6,6 +6,32 @@ export interface AuthUser {
   email: string;
   role: UserRole;
   status: 'pending' | 'active' | 'rejected';
+  credits?: number | null;
+}
+
+export interface BetRecord {
+  id: string;
+  userId: string;
+  raceId: string;
+  raceEntryId: string;
+  amount: number;
+  status: 'pending' | 'won' | 'lost' | 'cancelled' | 'refunded';
+  payout?: number;
+  createdAt: string;
+  settledAt?: string | null;
+  horseName?: string;
+  jockeyName?: string;
+  raceName?: string;
+}
+
+export interface RacePot {
+  raceId: string;
+  total: number;
+}
+
+export interface SpectatorWallet {
+  credits: number;
+  bets: BetRecord[];
 }
 
 export interface ApprovalItem {
@@ -668,3 +694,15 @@ export const recordRaceResult = async (
       body: JSON.stringify(result),
     }
   );
+
+export const getSpectatorWallet = () =>
+  request<SpectatorWallet>('/spectator/wallet');
+
+export const getRacePots = () =>
+  request<{ pots: RacePot[] }>('/spectator/pots');
+
+export const placeBet = (raceEntryId: string, amount: number) =>
+  request<{ bet: BetRecord; credits: number }>('/spectator/bets', {
+    method: 'POST',
+    body: JSON.stringify({ raceEntryId, amount }),
+  });

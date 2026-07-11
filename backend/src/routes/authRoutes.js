@@ -9,6 +9,8 @@ import {
   SELF_REGISTRATION_ROLES,
   SESSION_COOKIE_NAME,
   SESSION_DAYS,
+  SPECTATOR_STARTING_CREDITS,
+  USER_ROLES,
 } from '../config/constants.js';
 import { authenticate, publicUser } from '../services/authService.js';
 import {
@@ -139,6 +141,7 @@ export const createAuthRoutes = (
       password: await bcrypt.hash(String(password), 12),
       role,
       status: needsApproval ? 'pending' : 'active',
+      credits: role === USER_ROLES.SPECTATOR ? SPECTATOR_STARTING_CREDITS : null,
       createdAt,
       updatedAt: createdAt,
     };

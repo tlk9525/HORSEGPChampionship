@@ -10,6 +10,7 @@ import { createNotificationRoutes } from './routes/notificationRoutes.js';
 import { createOwnerRoutes } from './routes/ownerRoutes.js';
 import { createPublicRoutes } from './routes/publicRoutes.js';
 import { createRefereeRoutes } from './routes/refereeRoutes.js';
+import { createSpectatorRoutes } from './routes/spectatorRoutes.js';
 
 export const createApp = ({
   getDb,
@@ -76,6 +77,7 @@ export const createApp = ({
     )
   );
   app.route('/api/notifications', createNotificationRoutes(getDb, writeDb));
+  app.route('/api/spectator', createSpectatorRoutes(getDb, writeDb));
 
   return app;
 };

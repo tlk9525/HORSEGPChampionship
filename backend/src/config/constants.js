@@ -8,6 +8,8 @@ export const MAX_RACE_FIELD_SIZE = Number(process.env.MAX_RACE_FIELD_SIZE || 10)
 export const MIN_READIED_PARTICIPANTS = Number(process.env.MIN_READIED_PARTICIPANTS || 5);
 export const MAX_TOURNAMENT_RACES = Number(process.env.MAX_TOURNAMENT_RACES || 10);
 export const MAX_OWNER_HORSES = Number(process.env.MAX_OWNER_HORSES || 10);
+export const SPECTATOR_STARTING_CREDITS = Number(process.env.SPECTATOR_STARTING_CREDITS || 100);
+export const BETTING_CLOSE_BEFORE_RACE_MS = 60 * 1000;
 export const SESSION_DAYS = Number(process.env.SESSION_DAYS || 7);
 export const SESSION_COOKIE_NAME =
   process.env.SESSION_COOKIE_NAME || 'horse-racing-session';

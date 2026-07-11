@@ -58,6 +58,7 @@ const requiredRuntimeTables = [
   'refereeReports',
   'notifications',
   'sessions',
+  'bets',
 ];
 
 const ensureRuntimeSchema = async () => {
@@ -83,6 +84,50 @@ const ensureRuntimeSchema = async () => {
       await getPool().query(
         'ALTER TABLE "races" ADD COLUMN IF NOT EXISTS "replayTimeline" JSONB'
       );
+      await getPool().query(
+        'ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "credits" NUMERIC(12, 2)'
+      );
+      await getPool().query(`
+        CREATE TABLE IF NOT EXISTS "bets" (
+          "id" VARCHAR(64) PRIMARY KEY,
+          "userId" VARCHAR(64) NOT NULL,
+          "raceId" VARCHAR(64) NOT NULL,
+          "raceEntryId" VARCHAR(64) NOT NULL,
+          "amount" NUMERIC(12, 2) NOT NULL CHECK ("amount" > 0),
+          "status" VARCHAR(32) NOT NULL DEFAULT 'pending'
+            CHECK ("status" IN ('pending', 'won', 'lost', 'cancelled', 'refunded')),
+          "payout" NUMERIC(12, 2) NOT NULL DEFAULT 0,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          "settledAt" TIMESTAMPTZ,
+          CONSTRAINT "uq_bet_user_entry" UNIQUE ("userId", "raceEntryId"),
+          CONSTRAINT "fk_bets_user"
+            FOREIGN KEY ("userId") REFERENCES "users" ("id")
+            ON DELETE CASCADE,
+          CONSTRAINT "fk_bets_race"
+            FOREIGN KEY ("raceId") REFERENCES "races" ("id")
+            ON DELETE CASCADE,
+          CONSTRAINT "fk_bets_race_entry"
+            FOREIGN KEY ("raceEntryId") REFERENCES "raceEntries" ("id")
+            ON DELETE CASCADE
+        )
+      `);
+      await getPool().query(
+        'CREATE INDEX IF NOT EXISTS "idx_bets_user" ON "bets" ("userId", "status")'
+      );
+      await getPool().query(
+        'CREATE INDEX IF NOT EXISTS "idx_bets_race" ON "bets" ("raceId", "status")'
+      );
+      await getPool().query(
+        'ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "payout" NUMERIC(12, 2) NOT NULL DEFAULT 0'
+      );
+      await getPool().query(
+        'ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "settledAt" TIMESTAMPTZ'
+      );
+      await getPool().query(`
+        UPDATE "users"
+        SET "credits" = 100
+        WHERE "role" = 'spectator' AND "credits" IS NULL
+      `);
     })().catch((error) => {
       runtimeSchemaPromise = undefined;
       throw error;
@@ -167,6 +212,7 @@ export const readDb = async () => {
     refereeReports,
     notifications,
     sessions,
+    bets,
   ] = await Promise.all([
     selectAll('users', [{ column: 'id' }]),
     selectAll('tournaments', [{ column: 'id' }]),
@@ -215,6 +261,10 @@ export const readDb = async () => {
       { column: 'createdAt', direction: 'DESC' },
       { column: 'token' },
     ]),
+    selectAll('bets', [
+      { column: 'createdAt', direction: 'DESC' },
+      { column: 'id' },
+    ]),
   ]);
 
   const racesWithAssignments = races.map((race) => {
@@ -244,7 +294,10 @@ export const readDb = async () => {
   });
 
   const db = {
-    users,
+    users: users.map((user) => ({
+      ...user,
+      credits: user.credits != null ? Number(user.credits) : null,
+    })),
     tournaments: tournaments.map((tournament) => ({
       ...tournament,
       startDate: formatDateOnly(tournament.startDate),
@@ -272,6 +325,11 @@ export const readDb = async () => {
     raceActionLogs,
     refereeReports,
     sessions,
+    bets: bets.map((bet) => ({
+      ...bet,
+      amount: Number(bet.amount),
+      payout: Number(bet.payout ?? 0),
+    })),
   };
 
   dbBaselines.set(db, structuredClone(db));
@@ -348,6 +406,7 @@ const derivedRefereeAssignmentId = (raceId, refereeUserId) => {
 const tableDeleteOrder = [
   'notifications',
   'sessions',
+  'bets',
   'raceActionLogs',
   'refereeReports',
   'raceEntries',
@@ -389,11 +448,12 @@ export const writeDb = async (db) => {
 
     await writeRows(
       'users',
-      ['id', 'name', 'email', 'password', 'role', 'status', 'createdAt', 'updatedAt'],
+      ['id', 'name', 'email', 'password', 'role', 'status', 'credits', 'createdAt', 'updatedAt'],
       (db.users || []).map((user) => ({
         ...user,
         password:
           user.password ?? baselineUsersById.get(user.id)?.password ?? '',
+        credits: user.role === 'spectator' ? user.credits ?? 0 : null,
         ...rowTimestamps(user),
       }))
     );
@@ -722,6 +782,19 @@ export const writeDb = async (db) => {
     );
 
     await writeRows(
+      'bets',
+      ['id', 'userId', 'raceId', 'raceEntryId', 'amount', 'status', 'payout', 'createdAt', 'settledAt'],
+      (db.bets || []).map((bet) => ({
+        ...bet,
+        amount: Number(bet.amount),
+        status: bet.status || 'pending',
+        payout: Number(bet.payout ?? 0),
+        createdAt: bet.createdAt || nowIso(),
+        settledAt: bet.settledAt || null,
+      }))
+    );
+
+    await writeRows(
       'sessions',
       ['token', 'userId', 'createdAt', 'expiresAt'],
       (db.sessions || []).map((session) => ({
@@ -984,6 +1057,8 @@ export const persistAdminRaceAction = async ({
   raceEntries = [],
   horses = [],
   tournament = null,
+  bets = [],
+  users = [],
   notifications = [],
   actionLogs = [],
 }) => {
@@ -1081,6 +1156,36 @@ export const persistAdminRaceAction = async ({
       );
     }
 
+    for (const bet of bets) {
+      await client.query(
+        `UPDATE "bets"
+         SET "status" = $2,
+             "payout" = $3,
+             "settledAt" = $4
+         WHERE "id" = $1`,
+        [
+          bet.id,
+          bet.status || 'pending',
+          Number(bet.payout ?? 0),
+          bet.settledAt || null,
+        ]
+      );
+    }
+
+    for (const user of users) {
+      await client.query(
+        `UPDATE "users"
+         SET "credits" = $2,
+             "updatedAt" = $3
+         WHERE "id" = $1`,
+        [
+          user.id,
+          Number(user.credits ?? 0),
+          user.updatedAt || nowIso(),
+        ]
+      );
+    }
+
     for (const notification of notifications) {
       await client.query(
         `INSERT INTO "notifications" (
@@ -1170,9 +1275,9 @@ export const persistRegisteredUser = async (user, notifications = []) => {
     await client.query('BEGIN');
     await client.query(
       `INSERT INTO "users" (
-        "id", "name", "email", "password", "role", "status", "createdAt", "updatedAt"
+        "id", "name", "email", "password", "role", "status", "credits", "createdAt", "updatedAt"
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         user.id,
         user.name,
@@ -1180,6 +1285,7 @@ export const persistRegisteredUser = async (user, notifications = []) => {
         user.password,
         user.role,
         user.status,
+        user.role === 'spectator' ? user.credits ?? 100 : null,
         user.createdAt,
         user.updatedAt,
       ]
