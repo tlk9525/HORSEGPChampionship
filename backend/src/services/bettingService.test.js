@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { racePotTotal, settleRaceBets } from './bettingService.js';
+import {
+  racePotTotal,
+  raceStartMs,
+  refundRaceBets,
+  settleRaceBets,
+} from './bettingService.js';
 
 const buildSettlementDb = () => {
   const now = new Date().toISOString();
@@ -123,4 +128,22 @@ test('settleRaceBets marks all bets lost when nobody picked the winner', () => {
 
   assert.ok(db.bets.every((bet) => bet.status === 'lost'));
   assert.ok(db.bets.every((bet) => bet.payout === 0));
+});
+
+test('raceStartMs parses date and time as UTC', () => {
+  const ms = raceStartMs({ date: '2099-01-15', time: '14:30' });
+  assert.equal(ms, Date.UTC(2099, 0, 15, 14, 30, 0));
+});
+
+test('refundRaceBets returns credits when a race is cancelled', () => {
+  const db = buildSettlementDb();
+  const result = refundRaceBets(db, 'race-1', 'Feature Race was cancelled');
+
+  assert.equal(result.refunded, 3);
+  assert.equal(db.users.find((user) => user.id === 'spectator-a').credits, 70);
+  assert.equal(db.users.find((user) => user.id === 'spectator-b').credits, 50);
+  assert.equal(db.users.find((user) => user.id === 'spectator-c').credits, 80);
+  assert.ok(db.bets.every((bet) => bet.status === 'refunded'));
+  assert.equal(db.bets.find((bet) => bet.id === 'bet-a').payout, 20);
+  assert.equal(racePotTotal(db, 'race-1'), 0);
 });

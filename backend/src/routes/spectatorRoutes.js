@@ -6,15 +6,13 @@ import {
 } from '../config/constants.js';
 import { requireRole } from '../services/authService.js';
 import { publicRaceEntries } from '../services/domainService.js';
-import { racePotTotal } from '../services/bettingService.js';
+import {
+  isBettableEntry,
+  racePotTotal,
+  raceStartMs,
+} from '../services/bettingService.js';
 
 const BETTABLE_RACE_STATUSES = new Set(['published']);
-
-const raceStartMs = (race) => {
-  const date = race.date || race.raceDate || '';
-  const time = race.time || race.raceTime || '';
-  return new Date(`${date}T${time}`).getTime();
-};
 
 const isBettingOpen = (race) => {
   if (!BETTABLE_RACE_STATUSES.has(race.status)) return false;
@@ -22,6 +20,8 @@ const isBettingOpen = (race) => {
   if (!Number.isFinite(startMs)) return false;
   return Date.now() < startMs - BETTING_CLOSE_BEFORE_RACE_MS;
 };
+
+const bettableEntries = (db) => publicRaceEntries(db).filter(isBettableEntry);
 
 export const createSpectatorRoutes = (getDb, writeDb) => {
   const app = new Hono();
@@ -42,7 +42,8 @@ export const createSpectatorRoutes = (getDb, writeDb) => {
     const bets = (db.bets || [])
       .filter((bet) => bet.userId === user.id)
       .map((bet) => {
-        const entry = publicRaceEntries(db).find((item) => item.id === bet.raceEntryId);
+        const entry = publicRaceEntries(db).find((item) => item.id === bet.raceEntryId) ||
+          (db.raceEntries || []).find((item) => item.id === bet.raceEntryId);
         const race = db.races.find((item) => item.id === bet.raceId);
         return {
           ...bet,
@@ -88,7 +89,7 @@ export const createSpectatorRoutes = (getDb, writeDb) => {
       return c.json({ message: 'Bet amount must be a whole number of credits.' }, 400);
     }
 
-    const entry = publicRaceEntries(db).find((item) => item.id === raceEntryId);
+    const entry = bettableEntries(db).find((item) => item.id === raceEntryId);
     if (!entry) {
       return c.json({ message: 'Race entry not found or not available for betting.' }, 404);
     }
@@ -156,4 +157,4 @@ export const createSpectatorRoutes = (getDb, writeDb) => {
   return app;
 };
 
-export { isBettingOpen, raceStartMs };
+export { isBettingOpen, raceStartMs, bettableEntries };

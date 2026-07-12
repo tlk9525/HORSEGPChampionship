@@ -8,10 +8,73 @@ const winningEntry = (entries = []) =>
       entry.preRaceStatus !== 'absent'
   );
 
+/** Parse race wall-clock date/time as UTC so server and clients share one cutoff. */
+export const raceStartMs = (race) => {
+  const date = String(race?.date || race?.raceDate || '').slice(0, 10);
+  const rawTime = String(race?.time || race?.raceTime || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !rawTime) return Number.NaN;
+
+  const [hours = '00', minutes = '00', seconds = '00'] = rawTime.split(':');
+  const normalized = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}:${String(seconds)
+    .padStart(2, '0')
+    .slice(0, 2)}`;
+
+  return new Date(`${date}T${normalized}.000Z`).getTime();
+};
+
+export const isBettableEntry = (entry) =>
+  Boolean(
+    entry &&
+      entry.status === 'approved' &&
+      !entry.disqualified &&
+      entry.preRaceStatus !== 'absent'
+  );
+
 export const racePotTotal = (db, raceId) =>
   (db.bets || [])
     .filter((bet) => bet.raceId === raceId && bet.status === 'pending')
     .reduce((sum, bet) => sum + Number(bet.amount || 0), 0);
+
+export const refundRaceBets = (db, raceId, reason = 'Race cancelled') => {
+  const pendingBets = (db.bets || []).filter(
+    (bet) => bet.raceId === raceId && bet.status === 'pending'
+  );
+
+  if (pendingBets.length === 0) {
+    return { refunded: 0, affectedUsers: [] };
+  }
+
+  const settledAt = new Date().toISOString();
+  const affectedUserIds = new Set();
+
+  pendingBets.forEach((bet) => {
+    const amount = Number(bet.amount || 0);
+    bet.status = 'refunded';
+    bet.payout = amount;
+    bet.settledAt = settledAt;
+
+    const user = db.users.find((item) => item.id === bet.userId);
+    if (user) {
+      user.credits = Number(user.credits ?? 0) + amount;
+      user.updatedAt = settledAt;
+      affectedUserIds.add(user.id);
+    }
+
+    createNotification(
+      db,
+      bet.userId,
+      'Bet refunded',
+      `${reason}. Your ${amount}-credit bet has been returned to your wallet.`
+    );
+  });
+
+  return {
+    refunded: pendingBets.length,
+    affectedUsers: [...affectedUserIds]
+      .map((userId) => db.users.find((item) => item.id === userId))
+      .filter(Boolean),
+  };
+};
 
 export const settleRaceBets = (db, raceId, entries = []) => {
   const pendingBets = (db.bets || []).filter(

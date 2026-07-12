@@ -33,10 +33,22 @@ interface BettingPageProps {
 const BETTING_CLOSE_MS = 60 * 1000;
 
 const raceStartMs = (race: RaceRecord) => {
-  const date = race.date || race.raceDate || '';
-  const time = race.time || race.raceTime || '';
-  return new Date(`${date}T${time}`).getTime();
+  const date = String(race.date || race.raceDate || '').slice(0, 10);
+  const rawTime = String(race.time || race.raceTime || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !rawTime) return Number.NaN;
+
+  const [hours = '00', minutes = '00', seconds = '00'] = rawTime.split(':');
+  const normalized = `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}:${String(seconds)
+    .padStart(2, '0')
+    .slice(0, 2)}`;
+
+  return new Date(`${date}T${normalized}.000Z`).getTime();
 };
+
+const isBettableEntry = (entry: RaceEntryRecord) =>
+  entry.status === 'approved' &&
+  !entry.disqualified &&
+  entry.preRaceStatus !== 'absent';
 
 const isBettingOpen = (race: RaceRecord) => {
   if (race.status !== 'published') return false;
@@ -215,7 +227,7 @@ export default function BettingPage({
           <div className="space-y-8">
             {bettableRaces.map((race) => {
               const entries = raceEntries
-                .filter((entry) => entry.raceId === race.id)
+                .filter((entry) => entry.raceId === race.id && isBettableEntry(entry))
                 .sort((a, b) => (a.lane || 999) - (b.lane || 999));
               const open = isBettingOpen(race);
               const tournamentName = tournamentNameById.get(race.tournamentId || '') || 'Tournament';
@@ -355,6 +367,9 @@ export default function BettingPage({
                                       )}
                                       {existingBet.status === 'lost' && (
                                         <>Lost {existingBet.amount} credits</>
+                                      )}
+                                      {existingBet.status === 'refunded' && (
+                                        <>Refunded {existingBet.payout ?? existingBet.amount} credits</>
                                       )}
                                     </div>
                                   ) : open ? (

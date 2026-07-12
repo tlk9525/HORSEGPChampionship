@@ -37,7 +37,7 @@ import {
   buildOfficialReplayTimeline,
   buildProvisionalRaceTimeline,
 } from '../services/raceReplayTimeline.js';
-import { settleRaceBets } from '../services/bettingService.js';
+import { refundRaceBets, settleRaceBets } from '../services/bettingService.js';
 
 // Helpers nội bộ
 const nonRejectedEntry = (entry) => entry.status !== 'rejected';
@@ -703,6 +703,15 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
       if(readyEntries.length < MIN_READIED_PARTICIPANTS) {
         race.status = 'cancelled';
         race.updatedAt = new Date().toISOString();
+        const refund = refundRaceBets(
+          db,
+          race.id,
+          `${race.name} was cancelled due to insufficient participants`
+        );
+        settledBets = (db.bets || []).filter(
+          (bet) => bet.raceId === race.id && bet.settledAt
+        );
+        affectedSpectators = refund.affectedUsers || [];
         const recipientIds = new Set();
           entries.forEach((entry) => {
         const horse = db.horses.find((item) => item.id === entry.horseId);
@@ -754,6 +763,11 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
     }
     race.status = 'cancelled';
         race.updatedAt = new Date().toISOString();
+        const refund = refundRaceBets(db, race.id, `${race.name} was cancelled`);
+        settledBets = (db.bets || []).filter(
+          (bet) => bet.raceId === race.id && bet.settledAt
+        );
+        affectedSpectators = refund.affectedUsers || [];
         const recipientIds = new Set();
           entries.forEach((entry) => {
         const horse = db.horses.find((item) => item.id === entry.horseId);
