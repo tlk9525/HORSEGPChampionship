@@ -914,6 +914,48 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
     });
   });
 
+  // == User Management Routes for Admins ==
+   app.get('/users', (c) => {
+  const db = c.get('db');
+  const users = db.users.map(user => ({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    status: user.status || 'active',
+    createdAt: user.createdAt,
+  }));
+  return c.json({ users });
+});
+//Update user role or status
+app.patch('/users/:userId', async (c) => {
+  const db = c.get('db');
+  const userId = c.req.param('userId');
+  const { role, status } = await c.req.json();
+
+  const user = db.users.find(u => u.id === userId);
+  if (!user) return c.json({ message: 'User not found' }, 404);
+
+  if (role) user.role = role;
+  if (status) user.status = status;
+  user.updatedAt = new Date().toISOString();
+
+  await writeDb(db);
+  return c.json({ success: true, user });
+});
+//Delete Users
+app.delete('/users/:userId', async (c) => {
+  const db = c.get('db');
+  const userId = c.req.param('userId');
+
+  db.users = db.users.filter(u => u.id !== userId);
+  await writeDb(db);
+  return c.json({ success: true });
+});
+
+
+
+
   // Phê duyệt hoặc từ chối một mục cụ thể (ngựa, tài khoản, đăng ký race của jockey/horse, pairing)
   app.post('/approvals/:entityType/:id', async (c) => {
     const db = c.get('db');

@@ -651,6 +651,24 @@ export const markRaceEntryReadiness = async (
     { method: 'POST' }
   );
 
+
+
+
+  // Admin quản lý user: danh sách, cập nhật role/status, xóa user
+export const getUsers = () => request("/admin/users");
+export const updateUser = (userId, data) =>
+    request(`/admin/users/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+    });
+export const deleteUser = (userId) =>
+    request(`/admin/users/${userId}`, {
+        method: "DELETE",
+    });
+
+
+
+
 // Ghi kết quả cho một thí sinh: vị trí, thời gian vào đích, ghi chú và vi phạm
 export const recordRaceResult = async (
   entryId: string,

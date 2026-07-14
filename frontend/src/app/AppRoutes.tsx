@@ -2,6 +2,8 @@ import { lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AuthUser, HorseRecord } from './services/api';
 
+import UserManagement from './components/UserManagement';
+
 const LandingPage = lazy(() => import('./components/LandingPage'));
 const RaceDetails = lazy(() => import('./components/RaceDetails'));
 const TournamentPage = lazy(() => import('./components/TournamentPage'));
@@ -85,6 +87,11 @@ export default function AppRoutes({
             replace
           />
         }
+      />
+
+      <Route
+        path="/admin/users"
+        element={<UserManagement />}
       />
     </Routes>
   );

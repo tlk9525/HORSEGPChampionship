@@ -123,6 +123,9 @@ export const pathForPage = (
     'edit-race': context.selectedRaceId
       ? `/admin/races/${context.selectedRaceId}/edit`
       : '/admin',
+
+      'manage-users': '/admin/users',
+      'user-management': '/admin/users',
   };
 
   return (page in paths ? paths[page as AppPage] : undefined) || '/tournaments';
