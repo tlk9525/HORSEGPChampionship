@@ -168,7 +168,7 @@ export default function HorseDetails({
   const [raceHistoryExpanded, setRaceHistoryExpanded] = useState(false);
   const [message, setMessage] = useState('');
   const activeHorse = horse || loadedHorse;
-  const canOpenHorseList = ['admin', 'owner'].includes(currentUser?.role || '');
+  const canOpenHorseList = currentUser?.role === 'owner';
 
   useEffect(() => {
     const activeHorseId = horse?.id || horseId;

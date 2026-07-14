@@ -240,6 +240,7 @@ export interface ActivePairing extends HorseRaceRegistration {
   tournamentName: string;
 }
 
+<<<<<<< Updated upstream
 export interface BootstrapPayload {
   tournaments: TournamentRecord[];
   horses: HorseRecord[];
@@ -257,6 +258,10 @@ export interface BootstrapPayload {
 const API_URL = import.meta.env.PROD
   ? '/api'
   : import.meta.env.VITE_API_URL || 'http://127.0.0.1:4000/api';
+=======
+const configuredApiUrl = String(import.meta.env.VITE_API_URL || '').trim();
+const API_URL = (configuredApiUrl || '/api').replace(/\/$/, '');
+>>>>>>> Stashed changes
 
 const BOOTSTRAP_CACHE_TTL_MS = 10_000;
 let bootstrapCache: { data: BootstrapPayload; fetchedAt: number } | null = null;
@@ -273,6 +278,7 @@ export const getLiveRaceEventsUrl = (raceId: string) =>
 
 // Hàm gửi HTTP request chung, dùng HttpOnly session cookie và báo lỗi khi response thất bại.
 const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
+<<<<<<< Updated upstream
   const method = String(options.method || 'GET').toUpperCase();
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
@@ -282,6 +288,31 @@ const request = async <T>(path: string, options: RequestInit = {}): Promise<T> =
       ...options.headers,
     },
   });
+=======
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...options,
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  } catch (error) {
+    const isNetworkError =
+      error instanceof TypeError ||
+      (error instanceof Error &&
+        /Failed to fetch|NetworkError|Load failed/i.test(error.message));
+    if (isNetworkError) {
+      throw new Error(
+        'Unable to reach the API server. Make sure backend is running and API URL is correct.'
+      );
+    }
+    throw error;
+  }
+>>>>>>> Stashed changes
 
   const data = await response.json().catch(() => ({}));
 

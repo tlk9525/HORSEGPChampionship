@@ -15,6 +15,7 @@ import {
   getNotifications,
   markNotificationRead,
 } from '../services/api';
+import { canAccessPage, NAV_ITEMS } from '../config/accessControl';
 import { messageTone } from '../utils/messageTone';
 
 interface NavbarProps {
@@ -79,22 +80,10 @@ export default function Navbar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const navItems = [
-    { name: 'Tournaments', page: 'tournaments', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
-    { name: 'Horses', page: 'horses', roles: ['admin', 'owner'] },
-    { name: 'Horse Profiles', page: 'horse-profiles', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
-    { name: 'Jockey Profiles', page: 'jockey-profiles', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
-    { name: 'Jockey Portal', page: 'jockeys', roles: ['jockey'] },
-    { name: 'Race Operations', page: 'live-race', roles: ['admin', 'referee', 'spectator'] },
-    { name: 'Race Replay', page: 'simulation-demo', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
-    { name: 'Results', page: 'results', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'], public: true },
-    { name: 'Admin', page: 'admin', roles: ['admin'] },
-  ];
-
-  const visibleNavItems = navItems.filter(
+  const visibleNavItems = NAV_ITEMS.filter(
     (item) =>
       item.public ||
-      (currentUser && item.roles.includes(currentUser.role))
+      canAccessPage(item.page, currentUser?.role)
   );
   const unreadCount = notifications.filter((item) => !item.read).length;
   const visibleNotifications = notifications.slice(0, 6);
