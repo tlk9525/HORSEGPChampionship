@@ -123,10 +123,13 @@ export const createSpectatorRoutes = (getDb, writeDb) => {
     }
 
     const existingBet = (db.bets || []).find(
-      (bet) => bet.userId === user.id && bet.raceEntryId === raceEntryId
+      (bet) =>
+        bet.userId === user.id &&
+        bet.raceEntryId === raceEntryId &&
+        bet.status === 'pending'
     );
     if (existingBet) {
-      return c.json({ message: 'You already placed a bet on this horse for this race.' }, 409);
+      return c.json({ message: 'You already have an active bet on this horse for this race.' }, 409);
     }
 
     const createdAt = new Date().toISOString();
@@ -154,6 +157,50 @@ export const createSpectatorRoutes = (getDb, writeDb) => {
         raceName: race.name || '',
       },
       credits: dbUser.credits,
+    });
+  });
+
+  app.post('/bets/:betId/cancel', async (c) => {
+    const user = c.get('user');
+    const db = c.get('db');
+    const { betId } = c.req.param();
+
+    const bet = (db.bets || []).find(
+      (b) => b.id === betId && b.userId === user.id
+    );
+    if (!bet) {
+      return c.json({ message: 'Bet not found.' }, 404);
+    }
+
+    if (bet.status !== 'pending') {
+      return c.json({ message: 'Only pending bets can be cancelled.' }, 400);
+    }
+
+    const race = db.races.find((r) => r.id === bet.raceId);
+    if (race && !isBettingOpen(race)) {
+      return c.json(
+        { message: 'Cannot cancel — betting window for this race has closed.' },
+        400
+      );
+    }
+
+    const amount = Number(bet.amount || 0);
+    const now = new Date().toISOString();
+
+    bet.status = 'cancelled';
+    bet.settledAt = now;
+
+    const dbUser = db.users.find((u) => u.id === user.id);
+    if (dbUser) {
+      dbUser.credits = Number(dbUser.credits ?? 0) + amount;
+      dbUser.updatedAt = now;
+    }
+
+    await writeDb(db);
+
+    return c.json({
+      ok: true,
+      credits: Number(dbUser?.credits ?? 0),
     });
   });
 

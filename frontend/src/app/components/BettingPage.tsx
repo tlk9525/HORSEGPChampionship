@@ -16,6 +16,7 @@ import {
   RaceEntryRecord,
   RaceRecord,
   TournamentRecord,
+  cancelBet,
   getBootstrap,
   getRacePots,
   getSpectatorWallet,
@@ -93,6 +94,7 @@ export default function BettingPage({
   const [entryTotals, setEntryTotals] = useState<Record<string, number>>({});
   const [betAmounts, setBetAmounts] = useState<Record<string, string>>({});
   const [submittingEntryId, setSubmittingEntryId] = useState('');
+  const [cancellingBetId, setCancellingBetId] = useState('');
   const [message, setMessage] = useState('');
   const [now, setNow] = useState(Date.now());
 
@@ -128,7 +130,9 @@ export default function BettingPage({
 
   const betsByEntryId = useMemo(() => {
     const map = new Map<string, BetRecord>();
-    bets.forEach((bet) => map.set(bet.raceEntryId, bet));
+    bets
+      .filter((bet) => bet.status !== 'cancelled')
+      .forEach((bet) => map.set(bet.raceEntryId, bet));
     return map;
   }, [bets]);
 
@@ -204,6 +208,36 @@ export default function BettingPage({
         setMessage(error instanceof Error ? error.message : 'Unable to place bet')
       )
       .finally(() => setSubmittingEntryId(''));
+  };
+
+  const handleCancelBet = (bet: BetRecord) => {
+    setCancellingBetId(bet.id);
+    setMessage('');
+
+    cancelBet(bet.id)
+      .then(({ credits: nextCredits }) => {
+        setCredits(nextCredits);
+        setBets((current) =>
+          current.map((b) => (b.id === bet.id ? { ...b, status: 'cancelled' as const } : b))
+        );
+        const amount = Number(bet.amount || 0);
+        setPotsByRaceId((current) => ({
+          ...current,
+          [bet.raceId]: Math.max(0, (current[bet.raceId] || 0) - amount),
+        }));
+        setEntryTotals((current) => ({
+          ...current,
+          [bet.raceEntryId]: Math.max(0, (current[bet.raceEntryId] || 0) - amount),
+        }));
+        setMessage(`Bet cancelled. ${amount} credits returned to your wallet.`);
+        if (currentUser && onUserUpdate) {
+          onUserUpdate({ ...currentUser, credits: nextCredits });
+        }
+      })
+      .catch((error) =>
+        setMessage(error instanceof Error ? error.message : 'Unable to cancel bet')
+      )
+      .finally(() => setCancellingBetId(''));
   };
 
   return (
@@ -406,7 +440,18 @@ export default function BettingPage({
                                   {existingBet ? (
                                     <div className="rounded-lg border border-[#d4af37]/30 bg-[#d4af37]/10 px-4 py-3 text-sm text-[#f6d77a]">
                                       {existingBet.status === 'pending' && (
-                                        <>Bet placed: {existingBet.amount} credits</>
+                                        <div className="flex items-center justify-between gap-3">
+                                          <span>Bet placed: {existingBet.amount} credits</span>
+                                          {open && (
+                                            <button
+                                              onClick={() => handleCancelBet(existingBet)}
+                                              disabled={cancellingBetId === existingBet.id}
+                                              className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                                            >
+                                              {cancellingBetId === existingBet.id ? '...' : 'Cancel'}
+                                            </button>
+                                          )}
+                                        </div>
                                       )}
                                       {existingBet.status === 'won' && (
                                         <>Won {existingBet.payout ?? 0} credits from the pot</>
@@ -416,6 +461,9 @@ export default function BettingPage({
                                       )}
                                       {existingBet.status === 'refunded' && (
                                         <>Refunded {existingBet.payout ?? existingBet.amount} credits</>
+                                      )}
+                                      {existingBet.status === 'cancelled' && (
+                                        <>Cancelled — {existingBet.amount} credits returned</>
                                       )}
                                     </div>
                                   ) : open ? (
@@ -525,24 +573,40 @@ export default function BettingPage({
                     <th className="px-3 py-3 font-semibold">Payout</th>
                     <th className="px-3 py-3 font-semibold">Status</th>
                     <th className="px-3 py-3 font-semibold">Placed</th>
+                    <th className="px-3 py-3 font-semibold"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {bets.map((bet) => (
-                    <tr key={bet.id} className="border-b border-white/5 text-gray-200">
-                      <td className="px-3 py-4">{bet.raceName || bet.raceId}</td>
-                      <td className="px-3 py-4">{bet.horseName || '-'}</td>
-                      <td className="px-3 py-4">{bet.jockeyName || '-'}</td>
-                      <td className="px-3 py-4 font-semibold text-[#d4af37]">{bet.amount}</td>
-                      <td className="px-3 py-4 font-semibold text-emerald-300">
-                        {bet.status === 'won' ? bet.payout ?? 0 : '-'}
-                      </td>
-                      <td className="px-3 py-4">{statusLabel(bet.status)}</td>
-                      <td className="px-3 py-4">
-                        {new Date(bet.createdAt).toLocaleString()}
-                      </td>
-                    </tr>
-                  ))}
+                  {bets.map((bet) => {
+                    const betRace = races.find((r) => r.id === bet.raceId);
+                    const canCancel = bet.status === 'pending' && betRace && isBettingOpen(betRace);
+                    return (
+                      <tr key={bet.id} className="border-b border-white/5 text-gray-200">
+                        <td className="px-3 py-4">{bet.raceName || bet.raceId}</td>
+                        <td className="px-3 py-4">{bet.horseName || '-'}</td>
+                        <td className="px-3 py-4">{bet.jockeyName || '-'}</td>
+                        <td className="px-3 py-4 font-semibold text-[#d4af37]">{bet.amount}</td>
+                        <td className="px-3 py-4 font-semibold text-emerald-300">
+                          {bet.status === 'won' ? bet.payout ?? 0 : '-'}
+                        </td>
+                        <td className="px-3 py-4">{statusLabel(bet.status)}</td>
+                        <td className="px-3 py-4">
+                          {new Date(bet.createdAt).toLocaleString()}
+                        </td>
+                        <td className="px-3 py-4">
+                          {canCancel && (
+                            <button
+                              onClick={() => handleCancelBet(bet)}
+                              disabled={cancellingBetId === bet.id}
+                              className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50"
+                            >
+                              {cancellingBetId === bet.id ? '...' : 'Cancel'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

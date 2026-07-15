@@ -707,6 +707,11 @@ export const placeBet = (raceEntryId: string, amount: number) =>
     body: JSON.stringify({ raceEntryId, amount }),
   });
 
+export const cancelBet = (betId: string) =>
+  request<{ ok: boolean; credits: number }>(`/spectator/bets/${betId}/cancel`, {
+    method: 'POST',
+  });
+
 export interface AdminBettingRaceSummary {
   raceId: string;
   raceName: string;
