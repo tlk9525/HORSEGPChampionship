@@ -37,7 +37,7 @@ import {
   buildOfficialReplayTimeline,
   buildProvisionalRaceTimeline,
 } from '../services/raceReplayTimeline.js';
-import { refundRaceBets, settleRaceBets } from '../services/bettingService.js';
+import { racePotTotal, refundRaceBets, settleRaceBets } from '../services/bettingService.js';
 
 // Helpers nội bộ
 const nonRejectedEntry = (entry) => entry.status !== 'rejected';
@@ -146,7 +146,59 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
     return c.json({ approvals: formatApprovals(db) });
   });
 
-  // Lấy dữ liệu trang tạo cuộc đua: giải, các cuộc đua hiện có, danh sách trọng tài
+  app.get('/betting', (c) => {
+    const db = c.get('db');
+    const bets = db.bets || [];
+    const raceIds = [...new Set(bets.map((bet) => bet.raceId))];
+
+    const raceSummaries = raceIds.map((raceId) => {
+      const race = db.races.find((item) => item.id === raceId);
+      const raceBets = bets.filter((bet) => bet.raceId === raceId);
+      const bettorIds = new Set(raceBets.map((bet) => bet.userId));
+      const pending = raceBets.filter((bet) => bet.status === 'pending');
+      const won = raceBets.filter((bet) => bet.status === 'won');
+      const lost = raceBets.filter((bet) => bet.status === 'lost');
+      const refunded = raceBets.filter((bet) => bet.status === 'refunded');
+
+      return {
+        raceId,
+        raceName: race?.name || raceId,
+        raceStatus: race?.status || 'unknown',
+        totalBets: raceBets.length,
+        uniqueBettors: bettorIds.size,
+        poolTotal: racePotTotal(db, raceId),
+        totalWagered: raceBets.reduce((sum, bet) => sum + Number(bet.amount || 0), 0),
+        totalPaidOut: won.reduce((sum, bet) => sum + Number(bet.payout || 0), 0),
+        totalRefunded: refunded.reduce((sum, bet) => sum + Number(bet.payout || 0), 0),
+        counts: {
+          pending: pending.length,
+          won: won.length,
+          lost: lost.length,
+          refunded: refunded.length,
+        },
+      };
+    });
+
+    const spectators = db.users
+      .filter((user) => user.role === 'spectator')
+      .map((user) => {
+        const userBets = bets.filter((bet) => bet.userId === user.id);
+        return {
+          id: user.id,
+          name: user.name,
+          credits: Number(user.credits ?? 0),
+          totalBets: userBets.length,
+          totalWagered: userBets.reduce((sum, bet) => sum + Number(bet.amount || 0), 0),
+          totalWon: userBets
+            .filter((bet) => bet.status === 'won')
+            .reduce((sum, bet) => sum + Number(bet.payout || 0), 0),
+        };
+      })
+      .sort((a, b) => b.credits - a.credits);
+
+    return c.json({ raceSummaries, spectators });
+  });
+
   app.get('/race-builder', (c) => {
     const db = c.get('db');
     const referees = db.users

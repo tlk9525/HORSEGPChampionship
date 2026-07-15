@@ -706,3 +706,31 @@ export const placeBet = (raceEntryId: string, amount: number) =>
     method: 'POST',
     body: JSON.stringify({ raceEntryId, amount }),
   });
+
+export interface AdminBettingRaceSummary {
+  raceId: string;
+  raceName: string;
+  raceStatus: string;
+  totalBets: number;
+  uniqueBettors: number;
+  poolTotal: number;
+  totalWagered: number;
+  totalPaidOut: number;
+  totalRefunded: number;
+  counts: { pending: number; won: number; lost: number; refunded: number };
+}
+
+export interface AdminBettingSpectator {
+  id: string;
+  name: string;
+  credits: number;
+  totalBets: number;
+  totalWagered: number;
+  totalWon: number;
+}
+
+export const getAdminBetting = () =>
+  request<{
+    raceSummaries: AdminBettingRaceSummary[];
+    spectators: AdminBettingSpectator[];
+  }>('/admin/betting');
