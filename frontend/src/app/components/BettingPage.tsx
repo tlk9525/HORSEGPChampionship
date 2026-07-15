@@ -6,6 +6,7 @@ import {
   Flag,
   Gauge,
   MapPin,
+  TrendingUp,
   Trophy,
   Users,
 } from 'lucide-react';
@@ -89,6 +90,7 @@ export default function BettingPage({
   const [credits, setCredits] = useState(currentUser?.credits ?? 0);
   const [bets, setBets] = useState<BetRecord[]>([]);
   const [potsByRaceId, setPotsByRaceId] = useState<Record<string, number>>({});
+  const [entryTotals, setEntryTotals] = useState<Record<string, number>>({});
   const [betAmounts, setBetAmounts] = useState<Record<string, string>>({});
   const [submittingEntryId, setSubmittingEntryId] = useState('');
   const [message, setMessage] = useState('');
@@ -96,7 +98,7 @@ export default function BettingPage({
 
   const loadData = () => {
     Promise.all([getBootstrap(), getSpectatorWallet(), getRacePots()])
-      .then(([bootstrap, wallet, { pots }]) => {
+      .then(([bootstrap, wallet, { pots, entryTotals: apiEntryTotals }]) => {
         setTournaments(bootstrap.tournaments);
         setRaces(bootstrap.races);
         setRaceEntries(bootstrap.raceEntries || []);
@@ -105,6 +107,7 @@ export default function BettingPage({
         setPotsByRaceId(
           Object.fromEntries(pots.map((pot: RacePot) => [pot.raceId, pot.total]))
         );
+        setEntryTotals(apiEntryTotals || {});
         if (currentUser && onUserUpdate) {
           onUserUpdate({ ...currentUser, credits: wallet.credits });
         }
@@ -127,6 +130,22 @@ export default function BettingPage({
     const map = new Map<string, BetRecord>();
     bets.forEach((bet) => map.set(bet.raceEntryId, bet));
     return map;
+  }, [bets]);
+
+  const betStats = useMemo(() => {
+    const total = bets.length;
+    const won = bets.filter((b) => b.status === 'won').length;
+    const lost = bets.filter((b) => b.status === 'lost').length;
+    const pending = bets.filter((b) => b.status === 'pending').length;
+    const totalWagered = bets.reduce((s, b) => s + Number(b.amount || 0), 0);
+    const totalWon = bets
+      .filter((b) => b.status === 'won')
+      .reduce((s, b) => s + Number(b.payout || 0), 0);
+    const totalRefunded = bets
+      .filter((b) => b.status === 'refunded')
+      .reduce((s, b) => s + Number(b.payout || b.amount || 0), 0);
+    const netProfit = totalWon + totalRefunded - totalWagered;
+    return { total, won, lost, pending, totalWagered, totalWon, netProfit };
   }, [bets]);
 
   const bettableRaces = useMemo(
@@ -172,6 +191,10 @@ export default function BettingPage({
           ...current,
           [race.id]: (current[race.id] || 0) + amount,
         }));
+        setEntryTotals((current) => ({
+          ...current,
+          [entry.id]: (current[entry.id] || 0) + amount,
+        }));
         setMessage(`Bet placed: ${amount} credits on ${entry.horseName || 'horse'}.`);
         if (currentUser && onUserUpdate) {
           onUserUpdate({ ...currentUser, credits: nextCredits });
@@ -202,6 +225,24 @@ export default function BettingPage({
             </div>
           </div>
         </div>
+
+        {/* Betting Summary Stats */}
+        {bets.length > 0 && (
+          <div className="mb-8 grid grid-cols-2 md:grid-cols-5 gap-4">
+            {[
+              { label: 'Total Bets', value: String(betStats.total), color: 'text-white' },
+              { label: 'Won / Lost', value: `${betStats.won}W – ${betStats.lost}L`, color: betStats.won >= betStats.lost ? 'text-emerald-400' : 'text-red-400' },
+              { label: 'Pending', value: String(betStats.pending), color: 'text-yellow-400' },
+              { label: 'Total Wagered', value: `${betStats.totalWagered.toFixed(0)}`, color: 'text-[#d4af37]' },
+              { label: 'Net Profit / Loss', value: `${betStats.netProfit >= 0 ? '+' : ''}${betStats.netProfit.toFixed(0)}`, color: betStats.netProfit >= 0 ? 'text-emerald-400' : 'text-red-400' },
+            ].map((stat) => (
+              <div key={stat.label} className="rounded-2xl border border-white/10 bg-[#12304f] p-4 text-center">
+                <p className={`text-2xl font-black ${stat.color}`}>{stat.value}</p>
+                <p className="text-xs uppercase tracking-widest text-gray-400 mt-1">{stat.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
 
         {message && (
           <div className={`mb-8 rounded-2xl border p-4 font-semibold ${messageToneClasses(message)}`}>
@@ -313,7 +354,12 @@ export default function BettingPage({
                   </div>
 
                   <div className="p-6 lg:p-8">
-                    <h3 className="mb-4 text-lg font-bold text-white">Place Your Bets</h3>
+                    <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <h3 className="text-lg font-bold text-white">Place Your Bets</h3>
+                      <p className="text-xs text-gray-500 italic">
+                        You can split bets across multiple horses in the same race.
+                      </p>
+                    </div>
 
                     {entries.length === 0 ? (
                       <p className="text-gray-400">No published entries for this race yet.</p>
@@ -356,7 +402,7 @@ export default function BettingPage({
                                   </div>
                                 </div>
 
-                                <div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[260px]">
+                                <div className="flex w-full flex-col gap-3 lg:w-auto lg:min-w-[300px]">
                                   {existingBet ? (
                                     <div className="rounded-lg border border-[#d4af37]/30 bg-[#d4af37]/10 px-4 py-3 text-sm text-[#f6d77a]">
                                       {existingBet.status === 'pending' && (
@@ -401,6 +447,50 @@ export default function BettingPage({
                                           {isSubmitting ? '...' : 'Bet'}
                                         </button>
                                       </div>
+                                      <div className="flex gap-2">
+                                        {[10, 25, 50].map((preset) => (
+                                          <button
+                                            key={preset}
+                                            onClick={() =>
+                                              setBetAmounts((current) => ({
+                                                ...current,
+                                                [entry.id]: String(Math.min(preset, credits)),
+                                              }))
+                                            }
+                                            disabled={credits < 1}
+                                            className="flex-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-semibold text-gray-300 hover:bg-[#d4af37]/20 hover:text-[#d4af37] hover:border-[#d4af37]/30 transition-all disabled:opacity-40"
+                                          >
+                                            {preset}
+                                          </button>
+                                        ))}
+                                        <button
+                                          onClick={() =>
+                                            setBetAmounts((current) => ({
+                                              ...current,
+                                              [entry.id]: String(credits),
+                                            }))
+                                          }
+                                          disabled={credits < 1}
+                                          className="flex-1 rounded-lg border border-[#d4af37]/30 bg-[#d4af37]/10 px-2 py-1.5 text-xs font-bold text-[#d4af37] hover:bg-[#d4af37]/30 transition-all disabled:opacity-40"
+                                        >
+                                          All In
+                                        </button>
+                                      </div>
+                                      {(() => {
+                                        const inputAmount = Number(betAmounts[entry.id] || 0);
+                                        if (inputAmount <= 0) return null;
+                                        const newPot = potTotal + inputAmount;
+                                        const currentOnHorse = entryTotals[entry.id] || 0;
+                                        const totalOnHorse = currentOnHorse + inputAmount;
+                                        const estimatedPayout = (inputAmount / totalOnHorse) * newPot;
+                                        return (
+                                          <div className="flex items-center gap-1.5 text-xs text-emerald-400/80">
+                                            <TrendingUp className="h-3.5 w-3.5" />
+                                            You bet {inputAmount} of {newPot} total credits on this horse —
+                                            if it wins, est. payout: <span className="font-bold ml-1">{estimatedPayout.toFixed(0)} credits</span>
+                                          </div>
+                                        );
+                                      })()}
                                     </>
                                   ) : (
                                     <div className="rounded-lg border border-white/10 px-4 py-3 text-sm text-gray-400">

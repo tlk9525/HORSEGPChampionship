@@ -699,7 +699,7 @@ export const getSpectatorWallet = () =>
   request<SpectatorWallet>('/spectator/wallet');
 
 export const getRacePots = () =>
-  request<{ pots: RacePot[] }>('/spectator/pots');
+  request<{ pots: RacePot[]; entryTotals: Record<string, number> }>('/spectator/pots');
 
 export const placeBet = (raceEntryId: string, amount: number) =>
   request<{ bet: BetRecord; credits: number }>('/spectator/bets', {

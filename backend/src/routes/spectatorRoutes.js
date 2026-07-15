@@ -61,17 +61,20 @@ export const createSpectatorRoutes = (getDb, writeDb) => {
 
   app.get('/pots', (c) => {
     const db = c.get('db');
-    const raceIds = new Set(
-      (db.bets || [])
-        .filter((bet) => bet.status === 'pending')
-        .map((bet) => bet.raceId)
-    );
+    const pendingBets = (db.bets || []).filter((bet) => bet.status === 'pending');
+    const raceIds = new Set(pendingBets.map((bet) => bet.raceId));
+
+    const entryTotals = {};
+    for (const bet of pendingBets) {
+      entryTotals[bet.raceEntryId] = (entryTotals[bet.raceEntryId] || 0) + Number(bet.amount || 0);
+    }
 
     return c.json({
       pots: [...raceIds].map((raceId) => ({
         raceId,
         total: racePotTotal(db, raceId),
       })),
+      entryTotals,
     });
   });
 
