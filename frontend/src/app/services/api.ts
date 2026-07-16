@@ -6,6 +6,7 @@ export interface AuthUser {
   email: string;
   role: UserRole;
   status: 'pending' | 'active' | 'rejected';
+  emailVerifiedAt?: string | null;
 }
 
 export interface ApprovalItem {
@@ -240,7 +241,6 @@ export interface ActivePairing extends HorseRaceRegistration {
   tournamentName: string;
 }
 
-<<<<<<< Updated upstream
 export interface BootstrapPayload {
   tournaments: TournamentRecord[];
   horses: HorseRecord[];
@@ -258,10 +258,6 @@ export interface BootstrapPayload {
 const API_URL = import.meta.env.PROD
   ? '/api'
   : import.meta.env.VITE_API_URL || 'http://127.0.0.1:4000/api';
-=======
-const configuredApiUrl = String(import.meta.env.VITE_API_URL || '').trim();
-const API_URL = (configuredApiUrl || '/api').replace(/\/$/, '');
->>>>>>> Stashed changes
 
 const BOOTSTRAP_CACHE_TTL_MS = 10_000;
 let bootstrapCache: { data: BootstrapPayload; fetchedAt: number } | null = null;
@@ -278,17 +274,7 @@ export const getLiveRaceEventsUrl = (raceId: string) =>
 
 // Hàm gửi HTTP request chung, dùng HttpOnly session cookie và báo lỗi khi response thất bại.
 const request = async <T>(path: string, options: RequestInit = {}): Promise<T> => {
-<<<<<<< Updated upstream
   const method = String(options.method || 'GET').toUpperCase();
-  const response = await fetch(`${API_URL}${path}`, {
-    ...options,
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-=======
   let response: Response;
 
   try {
@@ -312,7 +298,6 @@ const request = async <T>(path: string, options: RequestInit = {}): Promise<T> =
     }
     throw error;
   }
->>>>>>> Stashed changes
 
   const data = await response.json().catch(() => ({}));
 
@@ -345,10 +330,28 @@ export const register = async (
   return request<{
     user: AuthUser;
     requiresApproval?: boolean;
+    requiresEmailVerification?: boolean;
     message?: string;
   }>('/register', {
     method: 'POST',
     body: JSON.stringify({ name, email, password, role }),
+  });
+};
+
+// Confirm a spectator email using the single-use token from the verification link.
+export const verifyEmail = async (token: string) => {
+  return request<{ message: string; user?: AuthUser }>('/verify-email', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  });
+};
+
+// Request a replacement verification email. The backend should always return a
+// generic response so this endpoint cannot be used to discover registered emails.
+export const resendVerificationEmail = async (email: string) => {
+  return request<{ message: string }>('/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
   });
 };
 

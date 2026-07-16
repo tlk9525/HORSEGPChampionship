@@ -83,6 +83,13 @@ const ensureRuntimeSchema = async () => {
       await getPool().query(
         'ALTER TABLE "races" ADD COLUMN IF NOT EXISTS "replayTimeline" JSONB'
       );
+      await getPool().query(`
+        ALTER TABLE "users"
+          ADD COLUMN IF NOT EXISTS "emailVerifiedAt" TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS "emailVerificationTokenHash" VARCHAR(64),
+          ADD COLUMN IF NOT EXISTS "emailVerificationExpiresAt" TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS "emailVerificationSentAt" TIMESTAMPTZ
+      `);
     })().catch((error) => {
       runtimeSchemaPromise = undefined;
       throw error;
@@ -389,7 +396,20 @@ export const writeDb = async (db) => {
 
     await writeRows(
       'users',
-      ['id', 'name', 'email', 'password', 'role', 'status', 'createdAt', 'updatedAt'],
+      [
+        'id',
+        'name',
+        'email',
+        'password',
+        'role',
+        'status',
+        'emailVerifiedAt',
+        'emailVerificationTokenHash',
+        'emailVerificationExpiresAt',
+        'emailVerificationSentAt',
+        'createdAt',
+        'updatedAt',
+      ],
       (db.users || []).map((user) => ({
         ...user,
         password:
@@ -1170,9 +1190,12 @@ export const persistRegisteredUser = async (user, notifications = []) => {
     await client.query('BEGIN');
     await client.query(
       `INSERT INTO "users" (
-        "id", "name", "email", "password", "role", "status", "createdAt", "updatedAt"
+        "id", "name", "email", "password", "role", "status",
+        "emailVerifiedAt", "emailVerificationTokenHash",
+        "emailVerificationExpiresAt", "emailVerificationSentAt",
+        "createdAt", "updatedAt"
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         user.id,
         user.name,
@@ -1180,6 +1203,10 @@ export const persistRegisteredUser = async (user, notifications = []) => {
         user.password,
         user.role,
         user.status,
+        user.emailVerifiedAt || null,
+        user.emailVerificationTokenHash || null,
+        user.emailVerificationExpiresAt || null,
+        user.emailVerificationSentAt || null,
         user.createdAt,
         user.updatedAt,
       ]

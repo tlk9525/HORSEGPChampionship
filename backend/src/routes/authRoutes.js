@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import {
@@ -15,13 +15,29 @@ import {
   createNotification,
   notifyAdmins,
 } from '../services/notificationService.js';
+import { sendVerificationEmail } from '../services/emailService.js';
+
+const hashToken = (token) => createHash('sha256').update(token).digest('hex');
+const createEmailVerificationToken = () => {
+  const token = randomBytes(32).toString('hex');
+  return {
+    token,
+    tokenHash: hashToken(token),
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+  };
+};
+
+const VERIFICATION_EMAIL_COOLDOWN_MS = 60 * 1000;
+const GENERIC_EMAIL_RESPONSE =
+  'If that account exists and still needs verification, a new email has been sent.';
 
 export const createAuthRoutes = (
   getDb,
   writeDb,
   persistLoginSession,
   persistRegisteredUser,
-  deleteSession
+  deleteSession,
+  sendVerification = sendVerificationEmail
 ) => {
   const app = new Hono();
 
@@ -131,6 +147,10 @@ export const createAuthRoutes = (
     if (exists) return c.json({ message: 'Email already exists' }, 409);
 
     const needsApproval = ACCOUNT_APPROVAL_ROLES.includes(role);
+    const needsEmailVerification = role === 'spectator';
+    const verification = needsEmailVerification
+      ? createEmailVerificationToken()
+      : null;
     const createdAt = new Date().toISOString();
     const user = {
       id: randomUUID(),
@@ -139,6 +159,10 @@ export const createAuthRoutes = (
       password: await bcrypt.hash(String(password), 12),
       role,
       status: needsApproval ? 'pending' : 'active',
+      emailVerifiedAt: null,
+      emailVerificationTokenHash: verification?.tokenHash ?? null,
+      emailVerificationExpiresAt: verification?.expiresAt ?? null,
+      emailVerificationSentAt: verification ? createdAt : null,
       createdAt,
       updatedAt: createdAt,
     };
@@ -169,16 +193,119 @@ export const createAuthRoutes = (
     } else {
       await writeDb(db);
     }
+
+    let verificationEmailSent = false;
+    if (verification) {
+      try {
+        await sendVerification({
+          email: user.email,
+          name: user.name,
+          token: verification.token,
+        });
+        verificationEmailSent = true;
+      } catch (error) {
+        console.error('Unable to send verification email:', error);
+      }
+    }
+
     return c.json(
       {
         user: publicUser(user),
         requiresApproval: needsApproval,
+        requiresEmailVerification: needsEmailVerification,
+        verificationEmailSent,
         message: needsApproval
           ? 'Account request submitted. Please wait for Admin approval before logging in.'
-          : 'Account created. You can log in now.',
+          : needsEmailVerification
+            ? verificationEmailSent
+              ? 'Account created. Check your email to verify your address before betting.'
+              : 'Account created, but the verification email could not be sent. Please request a new one.'
+            : 'Account created. You can log in now.',
       },
       201
     );
+  });
+
+  app.post('/verify-email', async (c) => {
+    const { token } = await c.req.json();
+    const normalizedToken = String(token || '').trim();
+
+    if (!normalizedToken) {
+      return c.json({ message: 'Verification token is required' }, 400);
+    }
+
+    const db = await getDb();
+    const tokenHash = hashToken(normalizedToken);
+    const user = db.users.find(
+      (item) =>
+        item.role === 'spectator' &&
+        item.emailVerificationTokenHash === tokenHash
+    );
+
+    const expiresAt = user?.emailVerificationExpiresAt
+      ? new Date(user.emailVerificationExpiresAt).getTime()
+      : 0;
+    if (!user || !expiresAt || expiresAt <= Date.now()) {
+      return c.json(
+        { message: 'This verification link is invalid or has expired.' },
+        400
+      );
+    }
+
+    const verifiedAt = new Date().toISOString();
+    user.emailVerifiedAt = verifiedAt;
+    user.emailVerificationTokenHash = null;
+    user.emailVerificationExpiresAt = null;
+    user.emailVerificationSentAt = null;
+    user.updatedAt = verifiedAt;
+    await writeDb(db);
+
+    return c.json({
+      message: 'Your email has been verified successfully.',
+      user: publicUser(user),
+    });
+  });
+
+  app.post('/resend-verification', async (c) => {
+    const { email } = await c.req.json();
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const db = await getDb();
+    const user = db.users.find(
+      (item) =>
+        item.role === 'spectator' &&
+        item.email.toLowerCase() === normalizedEmail
+    );
+
+    if (!user || user.emailVerifiedAt) {
+      return c.json({ message: GENERIC_EMAIL_RESPONSE });
+    }
+
+    const lastSentAt = user.emailVerificationSentAt
+      ? new Date(user.emailVerificationSentAt).getTime()
+      : 0;
+    if (lastSentAt && Date.now() - lastSentAt < VERIFICATION_EMAIL_COOLDOWN_MS) {
+      return c.json({ message: GENERIC_EMAIL_RESPONSE });
+    }
+
+    const verification = createEmailVerificationToken();
+    const sentAt = new Date().toISOString();
+    user.emailVerificationTokenHash = verification.tokenHash;
+    user.emailVerificationExpiresAt = verification.expiresAt;
+    user.emailVerificationSentAt = sentAt;
+    user.updatedAt = sentAt;
+    await writeDb(db);
+
+    try {
+      await sendVerification({
+        email: user.email,
+        name: user.name,
+        token: verification.token,
+      });
+    } catch (error) {
+      console.error('Unable to resend verification email:', error);
+    }
+
+    return c.json({ message: GENERIC_EMAIL_RESPONSE });
   });
 
   // Đăng xuất, xóa phiên làm việc khỏi database

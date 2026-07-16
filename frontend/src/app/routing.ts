@@ -4,6 +4,7 @@ export type AppPage =
   | 'home'
   | 'login'
   | 'register'
+  | 'verify-email'
   | 'tournaments'
   | 'tournament-details'
   | 'race-details'
@@ -34,6 +35,7 @@ export const protectedPages: Record<AppPage, UserRole[] | undefined> = {
   home: undefined,
   login: undefined,
   register: undefined,
+  'verify-email': undefined,
   tournaments: ['admin', 'owner', 'jockey', 'referee', 'spectator'],
   'tournament-details': ['admin', 'owner', 'jockey', 'referee', 'spectator'],
   'race-details': ['admin', 'owner', 'jockey', 'referee', 'spectator'],
@@ -65,6 +67,7 @@ export const pageFromPath = (pathname: string): AppPage => {
   if (path === '/') return 'home';
   if (path === '/login') return 'login';
   if (path === '/register') return 'register';
+  if (path === '/verify-email') return 'verify-email';
   if (path === '/tournaments') return 'tournaments';
   if (/^\/races\/[^/]+\/register$/.test(path)) return 'race-registration';
   if (path.startsWith('/tournaments/')) return 'tournament-details';
@@ -98,6 +101,7 @@ export const pathForPage = (
     home: '/',
     login: '/login',
     register: '/register',
+    'verify-email': '/verify-email',
     tournaments: '/tournaments',
     'tournament-details': context.selectedTournamentId
       ? `/tournaments/${context.selectedTournamentId}`

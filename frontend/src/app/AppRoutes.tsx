@@ -20,6 +20,7 @@ const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const CreateRacePage = lazy(() => import('./components/CreateRacePage'));
 const EditRacePage = lazy(() => import('./components/EditRacePage'));
 const LoginPage = lazy(() => import('./components/LoginPage'));
+const VerifyEmailPage = lazy(() => import('./components/VerifyEmailPage'));
 
 interface AppRoutesProps {
   currentUser: AuthUser | null;
@@ -77,6 +78,7 @@ export default function AppRoutes({
       <Route path="/admin/races/:raceId/edit" element={<EditRacePage onNavigate={onNavigate} />} />
       <Route path="/login" element={<LoginPage onLogin={onLogin} />} />
       <Route path="/register" element={<LoginPage initialMode="register" onLogin={onLogin} />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route
         path="*"
         element={
