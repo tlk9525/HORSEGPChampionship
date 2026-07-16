@@ -10,6 +10,7 @@ import {
   isBettableEntry,
   racePotTotal,
   raceStartMs,
+  syncWalletCredits,
 } from '../services/bettingService.js';
 
 const BETTABLE_RACE_STATUSES = new Set(['published']);
@@ -145,6 +146,7 @@ export const createSpectatorRoutes = (getDb, writeDb) => {
 
     dbUser.credits = currentCredits - parsedAmount;
     dbUser.updatedAt = createdAt;
+    syncWalletCredits(db, dbUser.id, dbUser.credits, createdAt);
     db.bets = [...(db.bets || []), bet];
 
     await writeDb(db);
@@ -194,6 +196,7 @@ export const createSpectatorRoutes = (getDb, writeDb) => {
     if (dbUser) {
       dbUser.credits = Number(dbUser.credits ?? 0) + amount;
       dbUser.updatedAt = now;
+      syncWalletCredits(db, dbUser.id, dbUser.credits, now);
     }
 
     await writeDb(db);

@@ -8,6 +8,31 @@ const winningEntry = (entries = []) =>
       entry.preRaceStatus !== 'absent'
   );
 
+/** Keep the betting wallets table in sync with spectator credit balance. */
+export const syncWalletCredits = (db, userId, credits, updatedAt = new Date().toISOString()) => {
+  const nextCredits = Number(credits ?? 0);
+  db.wallets = db.wallets || [];
+  const wallet = db.wallets.find((item) => item.userId === userId);
+  if (wallet) {
+    wallet.credits = nextCredits;
+    wallet.updatedAt = updatedAt;
+    return wallet;
+  }
+
+  const created = { userId, credits: nextCredits, updatedAt };
+  db.wallets.push(created);
+  return created;
+};
+
+export const adjustUserCredits = (db, userId, delta, updatedAt = new Date().toISOString()) => {
+  const user = db.users.find((item) => item.id === userId);
+  if (!user) return null;
+  user.credits = Number(user.credits ?? 0) + Number(delta || 0);
+  user.updatedAt = updatedAt;
+  syncWalletCredits(db, userId, user.credits, updatedAt);
+  return user;
+};
+
 /** Parse race wall-clock date/time as UTC so server and clients share one cutoff. */
 export const raceStartMs = (race) => {
   const date = String(race?.date || race?.raceDate || '').slice(0, 10);
@@ -53,10 +78,8 @@ export const refundRaceBets = (db, raceId, reason = 'Race cancelled') => {
     bet.payout = amount;
     bet.settledAt = settledAt;
 
-    const user = db.users.find((item) => item.id === bet.userId);
+    const user = adjustUserCredits(db, bet.userId, amount, settledAt);
     if (user) {
-      user.credits = Number(user.credits ?? 0) + amount;
-      user.updatedAt = settledAt;
       affectedUserIds.add(user.id);
     }
 
@@ -134,10 +157,8 @@ export const settleRaceBets = (db, raceId, entries = []) => {
     bet.payout = payout;
     bet.settledAt = settledAt;
 
-    const user = db.users.find((item) => item.id === bet.userId);
+    const user = adjustUserCredits(db, bet.userId, payout, settledAt);
     if (user) {
-      user.credits = Number(user.credits ?? 0) + payout;
-      user.updatedAt = settledAt;
       affectedUserIds.add(user.id);
 
       createNotification(

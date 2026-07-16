@@ -58,8 +58,92 @@ const requiredRuntimeTables = [
   'refereeReports',
   'notifications',
   'sessions',
-  'bets',
 ];
+
+// Betting schema is applied before the required-table check so existing DBs
+// without wallets/bets do not fail /api/spectator/* with "Request failed".
+const ensureBettingSchema = async () => {
+  await getPool().query(`
+    CREATE TABLE IF NOT EXISTS "wallets" (
+      "userId" VARCHAR(64) PRIMARY KEY,
+      "credits" NUMERIC(12, 2) NOT NULL DEFAULT 100 CHECK ("credits" >= 0),
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT "fk_wallets_user"
+        FOREIGN KEY ("userId") REFERENCES "users" ("id")
+        ON DELETE CASCADE
+    )
+  `);
+  await getPool().query(`
+    CREATE TABLE IF NOT EXISTS "bets" (
+      "id" VARCHAR(64) PRIMARY KEY,
+      "userId" VARCHAR(64) NOT NULL,
+      "raceId" VARCHAR(64) NOT NULL,
+      "raceEntryId" VARCHAR(64) NOT NULL,
+      "amount" NUMERIC(12, 2) NOT NULL CHECK ("amount" > 0),
+      "status" VARCHAR(32) NOT NULL DEFAULT 'pending'
+        CHECK ("status" IN ('pending', 'won', 'lost', 'cancelled', 'refunded')),
+      "payout" NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "settledAt" TIMESTAMPTZ,
+      CONSTRAINT "fk_bets_user"
+        FOREIGN KEY ("userId") REFERENCES "users" ("id")
+        ON DELETE CASCADE,
+      CONSTRAINT "fk_bets_race"
+        FOREIGN KEY ("raceId") REFERENCES "races" ("id")
+        ON DELETE CASCADE,
+      CONSTRAINT "fk_bets_race_entry"
+        FOREIGN KEY ("raceEntryId") REFERENCES "raceEntries" ("id")
+        ON DELETE CASCADE
+    )
+  `);
+  await getPool().query(
+    'CREATE INDEX IF NOT EXISTS "idx_bets_user" ON "bets" ("userId", "status")'
+  );
+  await getPool().query(
+    'CREATE INDEX IF NOT EXISTS "idx_bets_race" ON "bets" ("raceId", "status")'
+  );
+  await getPool().query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "uq_bet_user_entry_pending"
+      ON "bets" ("userId", "raceEntryId")
+      WHERE "status" = 'pending'
+  `);
+  await getPool().query(
+    'ALTER TABLE "bets" DROP CONSTRAINT IF EXISTS "uq_bet_user_entry"'
+  );
+  await getPool().query(
+    'ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "payout" NUMERIC(12, 2) NOT NULL DEFAULT 0'
+  );
+  await getPool().query(
+    'ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "settledAt" TIMESTAMPTZ'
+  );
+  await getPool().query(`
+    INSERT INTO "wallets" ("userId", "credits", "updatedAt")
+    SELECT u."id", 100, NOW()
+    FROM "users" u
+    WHERE u."role" = 'spectator'
+    ON CONFLICT ("userId") DO NOTHING
+  `);
+
+  const { rows: creditColumn } = await getPool().query(`
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'users'
+      AND column_name = 'credits'
+  `);
+  if (creditColumn.length) {
+    await getPool().query(`
+      UPDATE "wallets" AS w
+      SET
+        "credits" = COALESCE(u."credits", w."credits"),
+        "updatedAt" = NOW()
+      FROM "users" AS u
+      WHERE u."id" = w."userId"
+        AND u."role" = 'spectator'
+        AND u."credits" IS NOT NULL
+    `);
+  }
+};
 
 // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến ensure runtime schema.
 const ensureRuntimeSchema = async () => {
@@ -82,53 +166,12 @@ const ensureRuntimeSchema = async () => {
         );
       }
 
+      // Soft-create betting tables after core schema is present.
+      await ensureBettingSchema();
+
       await getPool().query(
         'ALTER TABLE "races" ADD COLUMN IF NOT EXISTS "replayTimeline" JSONB'
       );
-      await getPool().query(
-        'ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "credits" NUMERIC(12, 2)'
-      );
-      await getPool().query(`
-        CREATE TABLE IF NOT EXISTS "bets" (
-          "id" VARCHAR(64) PRIMARY KEY,
-          "userId" VARCHAR(64) NOT NULL,
-          "raceId" VARCHAR(64) NOT NULL,
-          "raceEntryId" VARCHAR(64) NOT NULL,
-          "amount" NUMERIC(12, 2) NOT NULL CHECK ("amount" > 0),
-          "status" VARCHAR(32) NOT NULL DEFAULT 'pending'
-            CHECK ("status" IN ('pending', 'won', 'lost', 'cancelled', 'refunded')),
-          "payout" NUMERIC(12, 2) NOT NULL DEFAULT 0,
-          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          "settledAt" TIMESTAMPTZ,
-          CONSTRAINT "uq_bet_user_entry" UNIQUE ("userId", "raceEntryId"),
-          CONSTRAINT "fk_bets_user"
-            FOREIGN KEY ("userId") REFERENCES "users" ("id")
-            ON DELETE CASCADE,
-          CONSTRAINT "fk_bets_race"
-            FOREIGN KEY ("raceId") REFERENCES "races" ("id")
-            ON DELETE CASCADE,
-          CONSTRAINT "fk_bets_race_entry"
-            FOREIGN KEY ("raceEntryId") REFERENCES "raceEntries" ("id")
-            ON DELETE CASCADE
-        )
-      `);
-      await getPool().query(
-        'CREATE INDEX IF NOT EXISTS "idx_bets_user" ON "bets" ("userId", "status")'
-      );
-      await getPool().query(
-        'CREATE INDEX IF NOT EXISTS "idx_bets_race" ON "bets" ("raceId", "status")'
-      );
-      await getPool().query(
-        'ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "payout" NUMERIC(12, 2) NOT NULL DEFAULT 0'
-      );
-      await getPool().query(
-        'ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "settledAt" TIMESTAMPTZ'
-      );
-      await getPool().query(`
-        UPDATE "users"
-        SET "credits" = 100
-        WHERE "role" = 'spectator' AND "credits" IS NULL
-      `);
       await getPool().query(
         'ALTER TABLE "raceEntries" ADD COLUMN IF NOT EXISTS "resultOutcome" VARCHAR(32) NOT NULL DEFAULT \'finished\''
       );
@@ -147,7 +190,7 @@ const ensureRuntimeSchema = async () => {
         )`
       );
     })().catch((error) => {
-      runtimeSchemaPromise = undefined;
+      runtimeSchemaPromise = null;
       throw error;
     });
   }
@@ -231,6 +274,7 @@ export const readDb = async () => {
     notifications,
     sessions,
     bets,
+    wallets,
     systemSettings,
   ] = await Promise.all([
     selectAll('users', [{ column: 'id' }]),
@@ -284,8 +328,13 @@ export const readDb = async () => {
       { column: 'createdAt', direction: 'DESC' },
       { column: 'id' },
     ]),
+    selectAll('wallets', [{ column: 'userId' }]),
     selectAll('systemSettings', [{ column: 'key' }]),
   ]);
+
+  const walletCreditsByUserId = new Map(
+    wallets.map((wallet) => [wallet.userId, Number(wallet.credits ?? 0)])
+  );
 
   const racesWithAssignments = races.map((race) => {
     const assignedReferees = raceRefereeAssignments.filter(
@@ -316,7 +365,17 @@ export const readDb = async () => {
   const db = {
     users: users.map((user) => ({
       ...user,
-      credits: user.credits != null ? Number(user.credits) : null,
+      credits:
+        user.role === 'spectator'
+          ? walletCreditsByUserId.has(user.id)
+            ? walletCreditsByUserId.get(user.id)
+            : 100
+          : null,
+    })),
+    wallets: wallets.map((wallet) => ({
+      userId: wallet.userId,
+      credits: Number(wallet.credits ?? 0),
+      updatedAt: wallet.updatedAt || nowIso(),
     })),
     tournaments: tournaments.map((tournament) => ({
       ...tournament,
@@ -431,6 +490,7 @@ const tableDeleteOrder = [
   'notifications',
   'sessions',
   'bets',
+  'wallets',
   'raceActionLogs',
   'refereeReports',
   'raceEntries',
@@ -473,12 +533,11 @@ export const writeDb = async (db) => {
 
     await writeRows(
       'users',
-      ['id', 'name', 'email', 'password', 'role', 'status', 'credits', 'createdAt', 'updatedAt'],
+      ['id', 'name', 'email', 'password', 'role', 'status', 'createdAt', 'updatedAt'],
       (db.users || []).map((user) => ({
         ...user,
         password:
           user.password ?? baselineUsersById.get(user.id)?.password ?? '',
-        credits: user.role === 'spectator' ? user.credits ?? 0 : null,
         ...rowTimestamps(user),
       }))
     );
@@ -823,6 +882,34 @@ export const writeDb = async (db) => {
       }))
     );
 
+    const walletsFromUsers = (db.users || [])
+      .filter((user) => user.role === 'spectator')
+      .map((user) => ({
+        userId: user.id,
+        credits: Number(user.credits ?? 100),
+        updatedAt: user.updatedAt || nowIso(),
+      }));
+    const walletByUserId = new Map(
+      (db.wallets || []).map((wallet) => [wallet.userId, wallet])
+    );
+    for (const wallet of walletsFromUsers) {
+      walletByUserId.set(wallet.userId, {
+        ...(walletByUserId.get(wallet.userId) || {}),
+        ...wallet,
+      });
+    }
+
+    await writeRows(
+      'wallets',
+      ['userId', 'credits', 'updatedAt'],
+      [...walletByUserId.values()].map((wallet) => ({
+        userId: wallet.userId,
+        credits: Number(wallet.credits ?? 0),
+        updatedAt: wallet.updatedAt || nowIso(),
+      })),
+      'userId'
+    );
+
     await writeRows(
       'sessions',
       ['token', 'userId', 'createdAt', 'expiresAt'],
@@ -841,7 +928,12 @@ export const writeDb = async (db) => {
     );
 
     for (const tableName of tableDeleteOrder) {
-      const keyColumn = tableName === 'sessions' ? 'token' : 'id';
+      const keyColumn =
+        tableName === 'sessions'
+          ? 'token'
+          : tableName === 'wallets'
+            ? 'userId'
+            : 'id';
       const currentKeys = new Set(
         (persistedRows.get(tableName) || []).map((row) => rowKey(row, keyColumn))
       );
@@ -1224,10 +1316,11 @@ export const persistAdminRaceAction = async ({
 
     for (const user of users) {
       await client.query(
-        `UPDATE "users"
-         SET "credits" = $2,
-             "updatedAt" = $3
-         WHERE "id" = $1`,
+        `INSERT INTO "wallets" ("userId", "credits", "updatedAt")
+         VALUES ($1, $2, $3)
+         ON CONFLICT ("userId") DO UPDATE SET
+           "credits" = EXCLUDED."credits",
+           "updatedAt" = EXCLUDED."updatedAt"`,
         [
           user.id,
           Number(user.credits ?? 0),
@@ -1325,9 +1418,9 @@ export const persistRegisteredUser = async (user, notifications = []) => {
     await client.query('BEGIN');
     await client.query(
       `INSERT INTO "users" (
-        "id", "name", "email", "password", "role", "status", "credits", "createdAt", "updatedAt"
+        "id", "name", "email", "password", "role", "status", "createdAt", "updatedAt"
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
         user.id,
         user.name,
@@ -1335,11 +1428,25 @@ export const persistRegisteredUser = async (user, notifications = []) => {
         user.password,
         user.role,
         user.status,
-        user.role === 'spectator' ? user.credits ?? 100 : null,
         user.createdAt,
         user.updatedAt,
       ]
     );
+
+    if (user.role === 'spectator') {
+      await client.query(
+        `INSERT INTO "wallets" ("userId", "credits", "updatedAt")
+         VALUES ($1, $2, $3)
+         ON CONFLICT ("userId") DO UPDATE SET
+           "credits" = EXCLUDED."credits",
+           "updatedAt" = EXCLUDED."updatedAt"`,
+        [
+          user.id,
+          Number(user.credits ?? 100),
+          user.updatedAt || nowIso(),
+        ]
+      );
+    }
 
     for (const notification of notifications) {
       await client.query(

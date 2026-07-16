@@ -147,6 +147,16 @@ export const createAuthRoutes = (
       updatedAt: createdAt,
     };
     db.users.push(user);
+    if (role === USER_ROLES.SPECTATOR) {
+      db.wallets = [
+        ...(db.wallets || []),
+        {
+          userId: user.id,
+          credits: SPECTATOR_STARTING_CREDITS,
+          updatedAt: createdAt,
+        },
+      ];
+    }
     const existingNotificationIds = new Set(
       (db.notifications || []).map((notification) => notification.id)
     );
