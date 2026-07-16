@@ -55,7 +55,7 @@ export default function TournamentPage({
   const [races, setRaces] = useState<RaceRecord[]>([]);
   const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
   const [registrations, setRegistrations] = useState<JockeyRaceRegistration[]>([]);
-  const [maxRaceFieldSize, setMaxRaceFieldSize] = useState(10);
+  const [maxRaceFieldSize, setMaxRaceFieldSize] = useState(0);
   const [selectedTournamentId, setSelectedTournamentId] = useState(
     sessionStorage.getItem('selectedTournamentId') || ''
   );
@@ -71,7 +71,7 @@ export default function TournamentPage({
         setRaces(data.races);
         setRaceEntries(data.raceEntries || []);
         setRegistrations(data.jockeyRaceRegistrations || []);
-        setMaxRaceFieldSize(data.limits?.maxRaceFieldSize || 10);
+        setMaxRaceFieldSize(data.limits?.maxRaceFieldSize ?? 0);
         setSelectedTournamentId((current) => {
           const stored = sessionStorage.getItem('selectedTournamentId');
           const next = current || stored || data.tournaments?.[0]?.id || '';

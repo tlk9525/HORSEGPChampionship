@@ -357,3 +357,13 @@ CREATE TABLE "sessions" (
     FOREIGN KEY ("userId") REFERENCES "users" ("id")
     ON DELETE CASCADE
 );
+
+CREATE TABLE "systemSettings" (
+  "key" VARCHAR(128) PRIMARY KEY,
+  "value" TEXT NOT NULL,
+  "updatedBy" VARCHAR(64),
+  "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT "fk_system_settings_updated_by"
+    FOREIGN KEY ("updatedBy") REFERENCES "users" ("id")
+    ON DELETE SET NULL
+);

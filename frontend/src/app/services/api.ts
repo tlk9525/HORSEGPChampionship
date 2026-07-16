@@ -141,7 +141,34 @@ export interface TournamentRecord {
 export interface SystemLimits {
   maxOwnerHorses: number;
   maxRaceFieldSize: number;
+  minReadiedParticipants: number;
   maxRacesPerTournament: number;
+  defaultDistanceMeters: number;
+  closeRegistrationHours: number;
+}
+
+export interface SystemSettings {
+  maxOwnerHorses: number;
+  defaultDistanceMeters: number;
+  maxHorsesPerRace: number;
+  minReadiedParticipants: number;
+  maxRacesPerTournament: number;
+  closeRegistrationHours: number;
+  autoPublishResults: boolean;
+  requireOwnerApproval: boolean;
+  requireJockeyApproval: boolean;
+  requireRefereeApproval: boolean;
+  allowSelfRegistration: boolean;
+  notifyHorseRegistration: boolean;
+  notifyJockeyRegistration: boolean;
+  notifyRaceResults: boolean;
+  notifyAdmins: boolean;
+  notifyReferees: boolean;
+  notifyOwners: boolean;
+  notifyJockeys: boolean;
+  maintenanceMode: boolean;
+  auditSettingsChanges: boolean;
+  archiveCompletedAfterDays: number;
 }
 
 export interface RaceEntryRecord {
@@ -254,6 +281,7 @@ export interface BootstrapPayload {
   users: AuthUser[];
   notifications: NotificationItem[];
   limits: SystemLimits;
+  systemSettings: SystemSettings;
 }
 
 const API_URL = import.meta.env.PROD
@@ -362,6 +390,15 @@ export const getApprovals = async () =>
 
 export const getUsers = async () =>
   request<{ users: AuthUser[] }>('/admin/users');
+
+export const getSystemSettings = async () =>
+  request<{ settings: SystemSettings }>('/admin/settings');
+
+export const updateSystemSettings = async (settings: Partial<SystemSettings>) =>
+  request<{ settings: SystemSettings }>('/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(settings),
+  });
 
 export const updateUser = async (
   userId: string,
@@ -584,6 +621,8 @@ export const getRaceBuilder = async () =>
     races: RaceRecord[];
     referees: RaceBuilderReferee[];
     maxRacesPerTournament: number;
+    defaultDistanceMeters: number;
+    closeRegistrationHours: number;
   }>('/admin/race-builder');
 
 // Tạo một cuộc đua mới trong giải đấu (admin)
