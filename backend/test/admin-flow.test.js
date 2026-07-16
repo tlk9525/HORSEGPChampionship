@@ -283,6 +283,105 @@ test('admin cannot edit a race outside the tournament schedule', async () => {
   assert.equal(db.races[0].date, '2099-01-05');
 });
 
+test('admin cannot reset a race that is not cancelled', async () => {
+  const db = baseDb();
+  db.races = [{
+    id: 'race-1',
+    tournamentId: 'tournament-1',
+    name: 'Race',
+    date: '2099-01-05',
+    time: '10:00',
+    status: 'registration-open',
+  }];
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/races/race-1/reset-race', {
+    date: '2099-01-06',
+    time: '11:00',
+    registrationOpensAt: '2099-01-05T08:00:00.000Z',
+    registrationClosesAt: '2099-01-05T12:00:00.000Z',
+  });
+
+  assert.equal(result.status, 400);
+  assert.match(result.body.message, /cancelled race/i);
+  assert.equal(db.races[0].status, 'registration-open');
+});
+
+test('admin can reset a cancelled race with a new schedule and clear old registrations', async () => {
+  const db = baseDb();
+  db.tournaments[0] = {
+    ...db.tournaments[0],
+    startDate: '2099-01-01',
+    finalDate: '2099-01-10',
+  };
+  db.races = [{
+    id: 'race-1',
+    tournamentId: 'tournament-1',
+    name: 'Race',
+    date: '2099-01-05',
+    time: '10:00',
+    status: 'cancelled',
+    participants: 1,
+    ownerConfirmed: 1,
+    jockeyConfirmed: 1,
+    resultStatus: 'draft',
+    awardsPublished: false,
+    replayTimeline: { runners: [] },
+    registrationOpensAt: '2099-01-01T08:00:00.000Z',
+    registrationClosesAt: '2099-01-01T12:00:00.000Z',
+  }];
+  db.raceEntries = [
+    { id: 'entry-1', raceId: 'race-1', horseId: 'horse-1', jockeyUserId: 'jockey-1', status: 'approved' },
+  ];
+  db.horseRaceRegistrations.push({
+    id: 'registration-1',
+    tournamentId: 'tournament-1',
+    raceId: 'race-1',
+    horseId: 'horse-1',
+    ownerUserId: 'owner-1',
+    jockeyUserId: 'jockey-1',
+    status: 'approved',
+  });
+  db.jockeyRaceRegistrations = [
+    { id: 'jockey-registration-1', raceId: 'race-1', jockeyUserId: 'jockey-1', status: 'approved' },
+  ];
+  db.jockeyInvitations = [
+    { id: 'invitation-1', raceId: 'race-1', ownerUserId: 'owner-1', jockeyUserId: 'jockey-1' },
+  ];
+  db.refereeReports = [
+    { id: 'report-1', raceId: 'race-1', raceEntryId: 'entry-1' },
+  ];
+  let writes = 0;
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => {
+    writes += 1;
+  }));
+
+  const result = await requestJson(app, '/races/race-1/reset-race', {
+    date: '2099-01-06',
+    time: '11:00',
+    registrationOpensAt: '2099-01-05T08:00:00.000Z',
+    registrationClosesAt: '2099-01-05T12:00:00.000Z',
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.race.status, 'registration-open');
+  assert.equal(db.races[0].date, '2099-01-06');
+  assert.equal(db.races[0].time, '11:00');
+  assert.equal(db.races[0].participants, 0);
+  assert.equal(db.races[0].ownerConfirmed, 0);
+  assert.equal(db.races[0].jockeyConfirmed, 0);
+  assert.equal(db.races[0].replayTimeline, null);
+  assert.equal(db.raceEntries.some((entry) => entry.raceId === 'race-1'), false);
+  assert.equal(db.horseRaceRegistrations.some((item) => item.raceId === 'race-1'), false);
+  assert.equal(db.jockeyRaceRegistrations.some((item) => item.raceId === 'race-1'), false);
+  assert.equal(db.jockeyInvitations.some((item) => item.raceId === 'race-1'), false);
+  assert.equal(db.refereeReports.some((item) => item.raceId === 'race-1'), false);
+  assert.equal(db.raceActionLogs.some((item) => item.action === 'reset-race'), true);
+  assert.equal(writes, 1);
+});
+
 test('admin cannot close registration before 10 horse-jockey pairs are approved', async () => {
   const db = baseDb();
   db.races = [{
