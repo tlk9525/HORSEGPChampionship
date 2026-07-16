@@ -62,6 +62,26 @@ const resultOutcomeOptions: Array<{ value: ResultOutcome; label: string }> = [
 const resultOutcomeLabel = (value?: string) =>
   resultOutcomeOptions.find((option) => option.value === value)?.label || 'Finished normally';
 
+const leaderboardLaneColors = [
+  '#22c55e',
+  '#38bdf8',
+  '#6366f1',
+  '#ef4444',
+  '#f4c542',
+  '#cbd5e1',
+  '#a855f7',
+  '#14b8a6',
+];
+
+const silkPaletteByLane = (lane?: number | null) =>
+  leaderboardLaneColors[Math.max(0, Number(lane || 1) - 1) % leaderboardLaneColors.length];
+
+const finishTimeSortValue = (value?: string) => {
+  const parsed = parseFinishTimeSeconds(value);
+
+  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+};
+
 // Ghi chú: Hàm này phân tích nghiệp vụ liên quan đến parse finish time seconds.
 const parseFinishTimeSeconds = (value?: string) => {
   const raw = String(value || '').trim();
@@ -348,6 +368,43 @@ export default function LiveRace() {
     officialReplayMode && selectedRace?.status !== 'in-progress'
       ? displayElapsed
       : formatRaceSimulationTime(simulationPlan.durationSeconds);
+  const officialLeaderboardRows = useMemo(() => {
+    const rows = selectedEntries
+      .filter((entry) => entry.status === 'approved')
+      .map((entry) => {
+        const draft = resultDrafts[entry.id];
+        const outcome = draft?.resultOutcome ?? entry.resultOutcome ?? 'finished';
+        const positionValue = draft?.position ?? (entry.position ? String(entry.position) : '');
+        const finishTime = draft?.finishTime ?? entry.finishTime ?? '';
+        const incidentReason = draft?.incidentReason ?? entry.incidentReason ?? '';
+        const numericPosition = Number(positionValue);
+
+        return {
+          id: entry.id,
+          horseName: entry.horseName || 'Unknown horse',
+          lane: entry.lane,
+          outcome,
+          position: Number.isInteger(numericPosition) && numericPosition > 0 ? numericPosition : null,
+          finishTime,
+          incidentReason,
+          silkColor: silkPaletteByLane(entry.lane),
+        };
+      });
+
+    return rows.sort((a, b) => {
+      const aFinished = a.outcome === 'finished' && a.position;
+      const bFinished = b.outcome === 'finished' && b.position;
+
+      if (aFinished && bFinished) {
+        if (a.position !== b.position) return Number(a.position) - Number(b.position);
+        return finishTimeSortValue(a.finishTime) - finishTimeSortValue(b.finishTime);
+      }
+
+      if (aFinished) return -1;
+      if (bFinished) return 1;
+      return Number(a.lane || 999) - Number(b.lane || 999);
+    });
+  }, [resultDrafts, selectedEntries]);
 
   const positionOptions = Array.from(
     { length: competingEntries.length },
@@ -1186,6 +1243,67 @@ export default function LiveRace() {
                   <div className="mt-5 rounded-xl bg-[#071a2f] border border-white/10 p-4 text-gray-400">
                     <Timer className="inline-block w-4 h-4 mr-2 text-[#d4af37]" />
                     Submitting sends recorded results to Admin. They become official only after Admin approval.
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-[#12304f] p-6">
+                  <div className="mb-5 flex items-center gap-3">
+                    <Trophy className="h-6 w-6 text-[#d4af37]" />
+                    <div>
+                      <h2 className="text-2xl font-black text-white">
+                        Official leaderboard
+                      </h2>
+                      <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
+                        Recorded draft order
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    {officialLeaderboardRows.length === 0 && (
+                      <div className="rounded-xl border border-dashed border-white/15 bg-[#071a2f] p-4 text-sm text-gray-500">
+                        No recorded runners yet.
+                      </div>
+                    )}
+
+                    {officialLeaderboardRows.map((row, index) => {
+                      const isFinished = row.outcome === 'finished';
+                      const resultLabel = isFinished && row.position
+                        ? `Official P${row.position}`
+                        : resultOutcomeLabel(row.outcome);
+                      const detail = isFinished
+                        ? row.finishTime || 'Time pending'
+                        : row.incidentReason || 'Incident reason pending';
+
+                      return (
+                        <div
+                          key={row.id}
+                          className={`grid grid-cols-[32px,18px,minmax(0,1fr)] items-center gap-3 rounded-xl border p-3 ${
+                            index === 0 && isFinished
+                              ? 'border-[#d4af37]/45 bg-[#d4af37]/10'
+                              : 'border-white/[0.07] bg-[#071a2f]'
+                          }`}
+                        >
+                          <div className="text-lg font-black text-white">
+                            {isFinished && row.position ? row.position : '-'}
+                          </div>
+                          <div
+                            className="h-3.5 w-3.5 rounded-full"
+                            style={{ backgroundColor: row.silkColor }}
+                          />
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-black text-white">
+                              {row.horseName}
+                            </div>
+                            <div className={`truncate text-xs font-semibold ${
+                              isFinished ? 'text-gray-300' : 'text-orange-300'
+                            }`}>
+                              {resultLabel} • {detail}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
