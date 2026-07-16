@@ -628,12 +628,6 @@ export const resetRace = async (
     }
   );
 
-// Ghi chú: Hàm này gọi API xóa race.
-export const deleteRace = async (raceId: string) =>
-  request<{ ok: boolean; raceId: string }>(`/admin/races/${raceId}`, {
-    method: 'DELETE',
-  });
-
 // Admin đóng đăng ký, publish race và duyệt kết quả cuối cùng
 export const adminRaceAction = async (
   raceId: string,
