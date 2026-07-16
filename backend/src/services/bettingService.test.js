@@ -130,9 +130,9 @@ test('settleRaceBets marks all bets lost when nobody picked the winner', () => {
   assert.ok(db.bets.every((bet) => bet.payout === 0));
 });
 
-test('raceStartMs parses date and time as UTC', () => {
+test('raceStartMs parses date and time as Vietnam time (+07:00)', () => {
   const ms = raceStartMs({ date: '2099-01-15', time: '14:30' });
-  assert.equal(ms, Date.UTC(2099, 0, 15, 14, 30, 0));
+  assert.equal(ms, Date.parse('2099-01-15T14:30:00+07:00'));
 });
 
 test('refundRaceBets returns credits when a race is cancelled', () => {

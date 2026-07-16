@@ -1,4 +1,5 @@
 import { createNotification } from './notificationService.js';
+import { RACE_TIMEZONE_OFFSET } from '../config/constants.js';
 
 const winningEntry = (entries = []) =>
   entries.find(
@@ -33,7 +34,10 @@ export const adjustUserCredits = (db, userId, delta, updatedAt = new Date().toIS
   return user;
 };
 
-/** Parse race wall-clock date/time as UTC so server and clients share one cutoff. */
+/**
+ * Parse race wall-clock date/time as Vietnam time (+07:00) so betting cutoff
+ * matches how admins enter race schedules (not UTC).
+ */
 export const raceStartMs = (race) => {
   const date = String(race?.date || race?.raceDate || '').slice(0, 10);
   const rawTime = String(race?.time || race?.raceTime || '');
@@ -44,7 +48,7 @@ export const raceStartMs = (race) => {
     .padStart(2, '0')
     .slice(0, 2)}`;
 
-  return new Date(`${date}T${normalized}.000Z`).getTime();
+  return new Date(`${date}T${normalized}${RACE_TIMEZONE_OFFSET}`).getTime();
 };
 
 export const isBettableEntry = (entry) =>

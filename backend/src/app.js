@@ -23,6 +23,8 @@ export const createApp = ({
   persistLoginSession,
   persistRegisteredUser,
   persistSystemSettings,
+  persistPlaceBet,
+  persistCancelBet,
   deleteSession,
 }) => {
   const app = new Hono();
@@ -79,7 +81,10 @@ export const createApp = ({
     )
   );
   app.route('/api/notifications', createNotificationRoutes(getDb, writeDb));
-  app.route('/api/spectator', createSpectatorRoutes(getDb, writeDb));
+  app.route(
+    '/api/spectator',
+    createSpectatorRoutes(getDb, writeDb, persistPlaceBet, persistCancelBet)
+  );
 
   return app;
 };

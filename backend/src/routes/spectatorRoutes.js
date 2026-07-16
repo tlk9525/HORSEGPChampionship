@@ -24,7 +24,12 @@ const isBettingOpen = (race) => {
 
 const bettableEntries = (db) => publicRaceEntries(db).filter(isBettableEntry);
 
-export const createSpectatorRoutes = (getDb, writeDb) => {
+export const createSpectatorRoutes = (
+  getDb,
+  writeDb,
+  persistPlaceBet = null,
+  persistCancelBet = null
+) => {
   const app = new Hono();
 
   app.use('*', async (c, next) => {
@@ -144,12 +149,43 @@ export const createSpectatorRoutes = (getDb, writeDb) => {
       createdAt,
     };
 
-    dbUser.credits = currentCredits - parsedAmount;
-    dbUser.updatedAt = createdAt;
-    syncWalletCredits(db, dbUser.id, dbUser.credits, createdAt);
-    db.bets = [...(db.bets || []), bet];
+    let nextCredits = currentCredits - parsedAmount;
 
-    await writeDb(db);
+    if (persistPlaceBet) {
+      const result = await persistPlaceBet({
+        userId: user.id,
+        bet,
+        amount: parsedAmount,
+      });
+      if (!result.ok) {
+        if (result.reason === 'insufficient') {
+          return c.json({ message: 'Insufficient credits for this bet.' }, 400);
+        }
+        if (result.reason === 'duplicate') {
+          return c.json(
+            { message: 'You already have an active bet on this horse for this race.' },
+            409
+          );
+        }
+        return c.json({ message: 'Unable to place bet.' }, 500);
+      }
+      nextCredits = result.credits;
+    } else {
+      dbUser.credits = nextCredits;
+      dbUser.updatedAt = createdAt;
+      syncWalletCredits(db, dbUser.id, dbUser.credits, createdAt);
+      db.bets = [...(db.bets || []), bet];
+      await writeDb(db);
+    }
+
+    if (dbUser) {
+      dbUser.credits = nextCredits;
+      dbUser.updatedAt = createdAt;
+      syncWalletCredits(db, dbUser.id, nextCredits, createdAt);
+    }
+    if (!(db.bets || []).some((item) => item.id === bet.id)) {
+      db.bets = [...(db.bets || []), bet];
+    }
 
     return c.json({
       bet: {
@@ -158,7 +194,7 @@ export const createSpectatorRoutes = (getDb, writeDb) => {
         jockeyName: entry.jockeyName || '',
         raceName: race.name || '',
       },
-      credits: dbUser.credits,
+      credits: nextCredits,
     });
   });
 
@@ -188,22 +224,48 @@ export const createSpectatorRoutes = (getDb, writeDb) => {
 
     const amount = Number(bet.amount || 0);
     const now = new Date().toISOString();
+    const dbUser = db.users.find((u) => u.id === user.id);
+    let nextCredits = Number(dbUser?.credits ?? 0) + amount;
+
+    if (persistCancelBet) {
+      const result = await persistCancelBet({
+        userId: user.id,
+        betId: bet.id,
+        amount,
+        settledAt: now,
+      });
+      if (!result.ok) {
+        if (result.reason === 'not_found') {
+          return c.json({ message: 'Bet not found.' }, 404);
+        }
+        if (result.reason === 'not_pending') {
+          return c.json({ message: 'Only pending bets can be cancelled.' }, 400);
+        }
+        return c.json({ message: 'Unable to cancel bet.' }, 500);
+      }
+      nextCredits = result.credits;
+    } else {
+      bet.status = 'cancelled';
+      bet.settledAt = now;
+      if (dbUser) {
+        dbUser.credits = nextCredits;
+        dbUser.updatedAt = now;
+        syncWalletCredits(db, dbUser.id, dbUser.credits, now);
+      }
+      await writeDb(db);
+    }
 
     bet.status = 'cancelled';
     bet.settledAt = now;
-
-    const dbUser = db.users.find((u) => u.id === user.id);
     if (dbUser) {
-      dbUser.credits = Number(dbUser.credits ?? 0) + amount;
+      dbUser.credits = nextCredits;
       dbUser.updatedAt = now;
-      syncWalletCredits(db, dbUser.id, dbUser.credits, now);
+      syncWalletCredits(db, dbUser.id, nextCredits, now);
     }
-
-    await writeDb(db);
 
     return c.json({
       ok: true,
-      credits: Number(dbUser?.credits ?? 0),
+      credits: nextCredits,
     });
   });
 

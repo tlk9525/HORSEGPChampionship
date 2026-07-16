@@ -3,10 +3,34 @@ import assert from 'node:assert/strict';
 import { Hono } from 'hono';
 import { createSpectatorRoutes } from '../src/routes/spectatorRoutes.js';
 
+/** Format an absolute instant as Vietnam wall-clock fields used by raceStartMs. */
+const vietnamWallClock = (date) => {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Ho_Chi_Minh',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    })
+      .formatToParts(date)
+      .filter((part) => part.type !== 'literal')
+      .map((part) => [part.type, part.value])
+  );
+
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    time: `${parts.hour}:${parts.minute}`,
+    timeWithSeconds: `${parts.hour}:${parts.minute}:${parts.second}`,
+  };
+};
+
 const buildDb = () => {
   const now = new Date().toISOString();
-  const raceStart = new Date(Date.now() + 60 * 60 * 1000);
-  const raceStartIso = raceStart.toISOString();
+  const raceStart = vietnamWallClock(new Date(Date.now() + 60 * 60 * 1000));
 
   return {
     users: [
@@ -44,10 +68,10 @@ const buildDb = () => {
         tournamentId: 'tournament-1',
         name: 'Feature Race',
         status: 'published',
-        date: raceStartIso.slice(0, 10),
-        time: raceStartIso.slice(11, 16),
-        raceDate: raceStartIso.slice(0, 10),
-        raceTime: raceStartIso.slice(11, 19),
+        date: raceStart.date,
+        time: raceStart.time,
+        raceDate: raceStart.date,
+        raceTime: raceStart.timeWithSeconds,
         venue: 'Main Track',
       },
     ],
@@ -132,12 +156,11 @@ test('spectator can place a bet before the race starts', async () => {
 
 test('spectator cannot bet within one minute of race start', async () => {
   const db = buildDb();
-  const start = new Date(Date.now() + 30 * 1000);
-  const startIso = start.toISOString();
-  db.races[0].date = startIso.slice(0, 10);
-  db.races[0].raceDate = db.races[0].date;
-  db.races[0].time = startIso.slice(11, 16);
-  db.races[0].raceTime = startIso.slice(11, 19);
+  const start = vietnamWallClock(new Date(Date.now() + 30 * 1000));
+  db.races[0].date = start.date;
+  db.races[0].raceDate = start.date;
+  db.races[0].time = start.time;
+  db.races[0].raceTime = start.timeWithSeconds;
 
   const app = new Hono();
   app.route('/api/spectator', createSpectatorRoutes(async () => db, async () => undefined));
@@ -209,12 +232,11 @@ test('spectator can cancel a pending bet and get credits back', async () => {
 
 test('spectator cannot cancel a bet after betting window closes', async () => {
   const db = buildDb();
-  const start = new Date(Date.now() + 30 * 1000);
-  const startIso = start.toISOString();
-  db.races[0].date = startIso.slice(0, 10);
-  db.races[0].raceDate = db.races[0].date;
-  db.races[0].time = startIso.slice(11, 16);
-  db.races[0].raceTime = startIso.slice(11, 19);
+  const start = vietnamWallClock(new Date(Date.now() + 30 * 1000));
+  db.races[0].date = start.date;
+  db.races[0].raceDate = start.date;
+  db.races[0].time = start.time;
+  db.races[0].raceTime = start.timeWithSeconds;
 
   db.bets.push({
     id: 'bet-existing',

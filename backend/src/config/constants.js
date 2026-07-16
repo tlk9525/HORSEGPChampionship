@@ -10,6 +10,8 @@ export const MAX_TOURNAMENT_RACES = Number(process.env.MAX_TOURNAMENT_RACES || 1
 export const MAX_OWNER_HORSES = Number(process.env.MAX_OWNER_HORSES || 10);
 export const SPECTATOR_STARTING_CREDITS = Number(process.env.SPECTATOR_STARTING_CREDITS || 100);
 export const BETTING_CLOSE_BEFORE_RACE_MS = 60 * 1000;
+/** Race date/time fields are entered as Vietnam wall-clock time. */
+export const RACE_TIMEZONE_OFFSET = process.env.RACE_TIMEZONE_OFFSET || '+07:00';
 export const SESSION_DAYS = Number(process.env.SESSION_DAYS || 7);
 export const SESSION_COOKIE_NAME =
   process.env.SESSION_COOKIE_NAME || 'horse-racing-session';

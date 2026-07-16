@@ -33,6 +33,8 @@ interface BettingPageProps {
 }
 
 const BETTING_CLOSE_MS = 60 * 1000;
+/** Match backend: race schedules are Vietnam wall-clock (+07:00). */
+const RACE_TIMEZONE_OFFSET = '+07:00';
 
 const raceStartMs = (race: RaceRecord) => {
   const date = String(race.date || race.raceDate || '').slice(0, 10);
@@ -44,7 +46,7 @@ const raceStartMs = (race: RaceRecord) => {
     .padStart(2, '0')
     .slice(0, 2)}`;
 
-  return new Date(`${date}T${normalized}.000Z`).getTime();
+  return new Date(`${date}T${normalized}${RACE_TIMEZONE_OFFSET}`).getTime();
 };
 
 const isBettableEntry = (entry: RaceEntryRecord) =>
@@ -247,7 +249,7 @@ export default function BettingPage({
           <div>
             <h1 className="text-4xl md:text-5xl font-bold text-white mb-3">Betting</h1>
             <p className="text-gray-400 text-lg max-w-3xl">
-              All bets go into a shared pot. After official results are published, everyone who bet on the 1st-place horse splits the pot in proportion to their wager.
+              All bets go into a shared pot. After official results are published, winners who bet on the 1st-place horse split the pot <span className="text-white font-semibold">proportionally</span> to how many credits each person wagered — not an equal split.
             </p>
           </div>
 
