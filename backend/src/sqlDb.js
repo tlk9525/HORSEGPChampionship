@@ -1,6 +1,10 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { SESSION_DAYS } from './config/constants.js';
+import {
+  CREDIT_TRANSACTION_TYPES,
+  calculateDailyLoginReward,
+} from './services/creditService.js';
 
 const { Pool } = pg;
 
@@ -58,7 +62,93 @@ const requiredRuntimeTables = [
   'refereeReports',
   'notifications',
   'sessions',
+  'creditTransactions',
 ];
+
+// Betting schema is soft-created after core tables exist so existing DBs
+// without wallets/bets do not fail /api/spectator/* with "Request failed".
+const ensureBettingSchema = async () => {
+  await getPool().query(`
+    CREATE TABLE IF NOT EXISTS "wallets" (
+      "userId" VARCHAR(64) PRIMARY KEY,
+      "credits" NUMERIC(12, 2) NOT NULL DEFAULT 100 CHECK ("credits" >= 0),
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT "fk_wallets_user"
+        FOREIGN KEY ("userId") REFERENCES "users" ("id")
+        ON DELETE CASCADE
+    )
+  `);
+  await getPool().query(`
+    CREATE TABLE IF NOT EXISTS "bets" (
+      "id" VARCHAR(64) PRIMARY KEY,
+      "userId" VARCHAR(64) NOT NULL,
+      "raceId" VARCHAR(64) NOT NULL,
+      "raceEntryId" VARCHAR(64) NOT NULL,
+      "amount" NUMERIC(12, 2) NOT NULL CHECK ("amount" > 0),
+      "status" VARCHAR(32) NOT NULL DEFAULT 'pending'
+        CHECK ("status" IN ('pending', 'won', 'lost', 'cancelled', 'refunded')),
+      "payout" NUMERIC(12, 2) NOT NULL DEFAULT 0,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "settledAt" TIMESTAMPTZ,
+      CONSTRAINT "fk_bets_user"
+        FOREIGN KEY ("userId") REFERENCES "users" ("id")
+        ON DELETE CASCADE,
+      CONSTRAINT "fk_bets_race"
+        FOREIGN KEY ("raceId") REFERENCES "races" ("id")
+        ON DELETE CASCADE,
+      CONSTRAINT "fk_bets_race_entry"
+        FOREIGN KEY ("raceEntryId") REFERENCES "raceEntries" ("id")
+        ON DELETE CASCADE
+    )
+  `);
+  await getPool().query(
+    'CREATE INDEX IF NOT EXISTS "idx_bets_user" ON "bets" ("userId", "status")'
+  );
+  await getPool().query(
+    'CREATE INDEX IF NOT EXISTS "idx_bets_race" ON "bets" ("raceId", "status")'
+  );
+  await getPool().query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "uq_bet_user_entry_pending"
+      ON "bets" ("userId", "raceEntryId")
+      WHERE "status" = 'pending'
+  `);
+  await getPool().query(
+    'ALTER TABLE "bets" DROP CONSTRAINT IF EXISTS "uq_bet_user_entry"'
+  );
+  await getPool().query(
+    'ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "payout" NUMERIC(12, 2) NOT NULL DEFAULT 0'
+  );
+  await getPool().query(
+    'ALTER TABLE "bets" ADD COLUMN IF NOT EXISTS "settledAt" TIMESTAMPTZ'
+  );
+  await getPool().query(`
+    INSERT INTO "wallets" ("userId", "credits", "updatedAt")
+    SELECT u."id", 100, NOW()
+    FROM "users" u
+    WHERE u."role" = 'spectator'
+    ON CONFLICT ("userId") DO NOTHING
+  `);
+
+  const { rows: creditColumn } = await getPool().query(`
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'users'
+      AND column_name = 'credits'
+  `);
+  if (creditColumn.length) {
+    await getPool().query(`
+      UPDATE "wallets" AS w
+      SET
+        "credits" = COALESCE(u."credits", w."credits"),
+        "updatedAt" = NOW()
+      FROM "users" AS u
+      WHERE u."id" = w."userId"
+        AND u."role" = 'spectator'
+        AND u."credits" IS NOT NULL
+    `);
+  }
+};
 
 // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến ensure runtime schema.
 const ensureRuntimeSchema = async () => {
@@ -81,16 +171,12 @@ const ensureRuntimeSchema = async () => {
         );
       }
 
+      // Soft-create betting tables after core schema is present.
+      await ensureBettingSchema();
+
       await getPool().query(
         'ALTER TABLE "races" ADD COLUMN IF NOT EXISTS "replayTimeline" JSONB'
       );
-      await getPool().query(`
-        ALTER TABLE "users"
-          ADD COLUMN IF NOT EXISTS "emailVerifiedAt" TIMESTAMPTZ,
-          ADD COLUMN IF NOT EXISTS "emailVerificationTokenHash" VARCHAR(64),
-          ADD COLUMN IF NOT EXISTS "emailVerificationExpiresAt" TIMESTAMPTZ,
-          ADD COLUMN IF NOT EXISTS "emailVerificationSentAt" TIMESTAMPTZ
-      `);
       await getPool().query(
         'ALTER TABLE "raceEntries" ADD COLUMN IF NOT EXISTS "resultOutcome" VARCHAR(32) NOT NULL DEFAULT \'finished\''
       );
@@ -109,7 +195,7 @@ const ensureRuntimeSchema = async () => {
         )`
       );
     })().catch((error) => {
-      runtimeSchemaPromise = undefined;
+      runtimeSchemaPromise = null;
       throw error;
     });
   }
@@ -192,6 +278,9 @@ export const readDb = async () => {
     refereeReports,
     notifications,
     sessions,
+    bets,
+    wallets,
+    creditTransactions,
     systemSettings,
   ] = await Promise.all([
     selectAll('users', [{ column: 'id' }]),
@@ -241,8 +330,21 @@ export const readDb = async () => {
       { column: 'createdAt', direction: 'DESC' },
       { column: 'token' },
     ]),
+    selectAll('bets', [
+      { column: 'createdAt', direction: 'DESC' },
+      { column: 'id' },
+    ]),
+    selectAll('wallets', [{ column: 'userId' }]),
+    selectAll('creditTransactions', [
+      { column: 'createdAt', direction: 'DESC' },
+      { column: 'id' },
+    ]),
     selectAll('systemSettings', [{ column: 'key' }]),
   ]);
+
+  const walletCreditsByUserId = new Map(
+    wallets.map((wallet) => [wallet.userId, Number(wallet.credits ?? 0)])
+  );
 
   const racesWithAssignments = races.map((race) => {
     const assignedReferees = raceRefereeAssignments.filter(
@@ -271,7 +373,22 @@ export const readDb = async () => {
   });
 
   const db = {
-    users,
+    users: users.map((user) => ({
+      ...user,
+      loginStreak: Number(user.loginStreak || 0),
+      lastLoginRewardDate: formatDateOnly(user.lastLoginRewardDate) || null,
+      credits:
+        user.role === 'spectator'
+          ? walletCreditsByUserId.has(user.id)
+            ? walletCreditsByUserId.get(user.id)
+            : 100
+          : null,
+    })),
+    wallets: wallets.map((wallet) => ({
+      userId: wallet.userId,
+      credits: Number(wallet.credits ?? 0),
+      updatedAt: wallet.updatedAt || nowIso(),
+    })),
     tournaments: tournaments.map((tournament) => ({
       ...tournament,
       startDate: formatDateOnly(tournament.startDate),
@@ -299,6 +416,16 @@ export const readDb = async () => {
     raceActionLogs,
     refereeReports,
     sessions,
+    bets: bets.map((bet) => ({
+      ...bet,
+      amount: Number(bet.amount),
+      payout: Number(bet.payout ?? 0),
+    })),
+    creditTransactions: creditTransactions.map((transaction) => ({
+      ...transaction,
+      amount: Number(transaction.amount),
+      balanceAfter: Number(transaction.balanceAfter),
+    })),
     systemSettings,
   };
 
@@ -379,6 +506,9 @@ const derivedRefereeAssignmentId = (raceId, refereeUserId) => {
 const tableDeleteOrder = [
   'notifications',
   'sessions',
+  'creditTransactions',
+  'bets',
+  'wallets',
   'raceActionLogs',
   'refereeReports',
   'raceEntries',
@@ -428,10 +558,8 @@ export const writeDb = async (db) => {
         'password',
         'role',
         'status',
-        'emailVerifiedAt',
-        'emailVerificationTokenHash',
-        'emailVerificationExpiresAt',
-        'emailVerificationSentAt',
+        'loginStreak',
+        'lastLoginRewardDate',
         'createdAt',
         'updatedAt',
       ],
@@ -439,6 +567,8 @@ export const writeDb = async (db) => {
         ...user,
         password:
           user.password ?? baselineUsersById.get(user.id)?.password ?? '',
+        loginStreak: Number(user.loginStreak || 0),
+        lastLoginRewardDate: user.lastLoginRewardDate || null,
         ...rowTimestamps(user),
       }))
     );
@@ -771,6 +901,59 @@ export const writeDb = async (db) => {
     );
 
     await writeRows(
+      'bets',
+      ['id', 'userId', 'raceId', 'raceEntryId', 'amount', 'status', 'payout', 'createdAt', 'settledAt'],
+      (db.bets || []).map((bet) => ({
+        ...bet,
+        amount: Number(bet.amount),
+        status: bet.status || 'pending',
+        payout: Number(bet.payout ?? 0),
+        createdAt: bet.createdAt || nowIso(),
+        settledAt: bet.settledAt || null,
+      }))
+    );
+
+    await writeRows(
+      'creditTransactions',
+      ['id', 'userId', 'type', 'amount', 'balanceAfter', 'metadata', 'createdAt'],
+      (db.creditTransactions || []).map((transaction) => ({
+        ...transaction,
+        amount: Number(transaction.amount),
+        balanceAfter: Number(transaction.balanceAfter),
+        metadata: transaction.metadata || null,
+        createdAt: transaction.createdAt || nowIso(),
+      }))
+    );
+
+    const walletsFromUsers = (db.users || [])
+      .filter((user) => user.role === 'spectator')
+      .map((user) => ({
+        userId: user.id,
+        credits: Number(user.credits ?? 100),
+        updatedAt: user.updatedAt || nowIso(),
+      }));
+    const walletByUserId = new Map(
+      (db.wallets || []).map((wallet) => [wallet.userId, wallet])
+    );
+    for (const wallet of walletsFromUsers) {
+      walletByUserId.set(wallet.userId, {
+        ...(walletByUserId.get(wallet.userId) || {}),
+        ...wallet,
+      });
+    }
+
+    await writeRows(
+      'wallets',
+      ['userId', 'credits', 'updatedAt'],
+      [...walletByUserId.values()].map((wallet) => ({
+        userId: wallet.userId,
+        credits: Number(wallet.credits ?? 0),
+        updatedAt: wallet.updatedAt || nowIso(),
+      })),
+      'userId'
+    );
+
+    await writeRows(
       'sessions',
       ['token', 'userId', 'createdAt', 'expiresAt'],
       (db.sessions || []).map((session) => ({
@@ -788,7 +971,12 @@ export const writeDb = async (db) => {
     );
 
     for (const tableName of tableDeleteOrder) {
-      const keyColumn = tableName === 'sessions' ? 'token' : 'id';
+      const keyColumn =
+        tableName === 'sessions'
+          ? 'token'
+          : tableName === 'wallets'
+            ? 'userId'
+            : 'id';
       const currentKeys = new Set(
         (persistedRows.get(tableName) || []).map((row) => rowKey(row, keyColumn))
       );
@@ -1050,6 +1238,9 @@ export const persistAdminRaceAction = async ({
   raceEntries = [],
   horses = [],
   tournament = null,
+  bets = [],
+  users = [],
+  creditTransactions = [],
   notifications = [],
   actionLogs = [],
 }) => {
@@ -1151,6 +1342,56 @@ export const persistAdminRaceAction = async ({
       );
     }
 
+    for (const bet of bets) {
+      await client.query(
+        `UPDATE "bets"
+         SET "status" = $2,
+             "payout" = $3,
+             "settledAt" = $4
+         WHERE "id" = $1`,
+        [
+          bet.id,
+          bet.status || 'pending',
+          Number(bet.payout ?? 0),
+          bet.settledAt || null,
+        ]
+      );
+    }
+
+    for (const user of users) {
+      await client.query(
+        `INSERT INTO "wallets" ("userId", "credits", "updatedAt")
+         VALUES ($1, $2, $3)
+         ON CONFLICT ("userId") DO UPDATE SET
+           "credits" = EXCLUDED."credits",
+           "updatedAt" = EXCLUDED."updatedAt"`,
+        [
+          user.id,
+          Number(user.credits ?? 0),
+          user.updatedAt || nowIso(),
+        ]
+      );
+    }
+
+    for (const transaction of creditTransactions) {
+      await client.query(
+        `INSERT INTO "creditTransactions" (
+          "id", "userId", "type", "amount", "balanceAfter", "metadata", "createdAt"
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT ("id") DO NOTHING`,
+        [
+          transaction.id,
+          transaction.userId,
+          transaction.type,
+          Number(transaction.amount),
+          Number(transaction.balanceAfter),
+          transaction.metadata || null,
+          transaction.createdAt || nowIso(),
+        ]
+      );
+    }
+
     for (const notification of notifications) {
       await client.query(
         `INSERT INTO "notifications" (
@@ -1200,19 +1441,98 @@ export const persistAdminRaceAction = async ({
 };
 
 // Lưu thay đổi đăng nhập mà không rewrite toàn bộ database.
-export const persistLoginSession = async (user, session, expiredBefore) => {
+export const persistLoginSession = async (
+  user,
+  session,
+  expiredBefore,
+  loginAt = nowIso()
+) => {
   await ensureRuntimeSchema();
 
   const client = await getPool().connect();
   try {
     await client.query('BEGIN');
-    await client.query(
-      `UPDATE "users"
-       SET "password" = $2,
-           "updatedAt" = $3
-       WHERE "id" = $1`,
-      [user.id, user.password, user.updatedAt || nowIso()]
+    const { rows: userRows } = await client.query(
+      `SELECT "id", "role", "loginStreak", "lastLoginRewardDate"
+       FROM "users"
+       WHERE "id" = $1
+       FOR UPDATE`,
+      [user.id]
     );
+    const persistedUser = userRows[0];
+    let dailyReward = null;
+    let credits = Number(user.credits ?? 0);
+
+    if (persistedUser?.role === 'spectator') {
+      await client.query(
+        `INSERT INTO "wallets" ("userId", "credits", "updatedAt")
+         VALUES ($1, 100, $2)
+         ON CONFLICT ("userId") DO NOTHING`,
+        [user.id, loginAt]
+      );
+      const { rows: walletRows } = await client.query(
+        `SELECT "credits"
+         FROM "wallets"
+         WHERE "userId" = $1
+         FOR UPDATE`,
+        [user.id]
+      );
+      credits = Number(walletRows[0]?.credits ?? 0);
+      dailyReward = calculateDailyLoginReward(persistedUser, new Date(loginAt));
+
+      if (dailyReward.claimed) {
+        credits += dailyReward.amount;
+        await client.query(
+          `UPDATE "wallets"
+           SET "credits" = $2, "updatedAt" = $3
+           WHERE "userId" = $1`,
+          [user.id, credits, loginAt]
+        );
+        await client.query(
+          `INSERT INTO "creditTransactions" (
+            "id", "userId", "type", "amount", "balanceAfter", "metadata", "createdAt"
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            randomUUID(),
+            user.id,
+            CREDIT_TRANSACTION_TYPES.DAILY_LOGIN_BONUS,
+            dailyReward.amount,
+            credits,
+            {
+              streak: dailyReward.streak,
+              rewardDate: dailyReward.rewardDate,
+            },
+            loginAt,
+          ]
+        );
+      }
+
+      await client.query(
+        `UPDATE "users"
+         SET "password" = $2,
+             "loginStreak" = $3,
+             "lastLoginRewardDate" = $4,
+             "updatedAt" = $5
+         WHERE "id" = $1`,
+        [
+          user.id,
+          user.password,
+          dailyReward.streak,
+          dailyReward.rewardDate,
+          loginAt,
+        ]
+      );
+    } else {
+      await client.query(
+        `UPDATE "users"
+         SET "password" = $2,
+             "updatedAt" = $3
+         WHERE "id" = $1`,
+        [user.id, user.password, loginAt]
+      );
+    }
+
     await client.query(
       `DELETE FROM "sessions" WHERE "expiresAt" <= $1`,
       [expiredBefore || nowIso()]
@@ -1223,6 +1543,15 @@ export const persistLoginSession = async (user, session, expiredBefore) => {
       [session.token, session.userId, session.createdAt, session.expiresAt]
     );
     await client.query('COMMIT');
+    return {
+      user: {
+        credits,
+        loginStreak: dailyReward?.streak ?? Number(persistedUser?.loginStreak || 0),
+        lastLoginRewardDate:
+          dailyReward?.rewardDate || persistedUser?.lastLoginRewardDate || null,
+      },
+      dailyReward,
+    };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -1232,7 +1561,11 @@ export const persistLoginSession = async (user, session, expiredBefore) => {
 };
 
 // Lưu tài khoản mới và thông báo liên quan trong một transaction nhỏ.
-export const persistRegisteredUser = async (user, notifications = []) => {
+export const persistRegisteredUser = async (
+  user,
+  notifications = [],
+  creditTransactions = []
+) => {
   await ensureRuntimeSchema();
 
   const client = await getPool().connect();
@@ -1241,11 +1574,9 @@ export const persistRegisteredUser = async (user, notifications = []) => {
     await client.query(
       `INSERT INTO "users" (
         "id", "name", "email", "password", "role", "status",
-        "emailVerifiedAt", "emailVerificationTokenHash",
-        "emailVerificationExpiresAt", "emailVerificationSentAt",
-        "createdAt", "updatedAt"
+        "loginStreak", "lastLoginRewardDate", "createdAt", "updatedAt"
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         user.id,
         user.name,
@@ -1253,14 +1584,52 @@ export const persistRegisteredUser = async (user, notifications = []) => {
         user.password,
         user.role,
         user.status,
-        user.emailVerifiedAt || null,
-        user.emailVerificationTokenHash || null,
-        user.emailVerificationExpiresAt || null,
-        user.emailVerificationSentAt || null,
+        Number(user.loginStreak || 0),
+        user.lastLoginRewardDate || null,
         user.createdAt,
         user.updatedAt,
       ]
     );
+
+    if (user.role === 'spectator') {
+      await client.query(
+        `INSERT INTO "wallets" ("userId", "credits", "updatedAt")
+         VALUES ($1, $2, $3)
+         ON CONFLICT ("userId") DO UPDATE SET
+           "credits" = EXCLUDED."credits",
+           "updatedAt" = EXCLUDED."updatedAt"`,
+        [
+          user.id,
+          Number(user.credits ?? 100),
+          user.updatedAt || nowIso(),
+        ]
+      );
+
+      const starterTransaction = creditTransactions[0] || {
+        id: randomUUID(),
+        userId: user.id,
+        type: CREDIT_TRANSACTION_TYPES.STARTER_BONUS,
+        amount: Number(user.credits ?? 100),
+        balanceAfter: Number(user.credits ?? 100),
+        metadata: { source: 'spectator_registration' },
+        createdAt: user.createdAt || nowIso(),
+      };
+      await client.query(
+        `INSERT INTO "creditTransactions" (
+          "id", "userId", "type", "amount", "balanceAfter", "metadata", "createdAt"
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          starterTransaction.id,
+          starterTransaction.userId,
+          starterTransaction.type,
+          Number(starterTransaction.amount),
+          Number(starterTransaction.balanceAfter),
+          starterTransaction.metadata || null,
+          starterTransaction.createdAt || nowIso(),
+        ]
+      );
+    }
 
     for (const notification of notifications) {
       await client.query(
@@ -1327,4 +1696,160 @@ export const deleteSession = async (token) => {
   if (!token) return;
   await ensureRuntimeSchema();
   await getPool().query(`DELETE FROM "sessions" WHERE "token" = $1`, [token]);
+};
+
+/**
+ * Atomically debit wallet credits and insert a pending bet.
+ * Uses SELECT ... FOR UPDATE to prevent double-spend under concurrent requests.
+ */
+export const persistPlaceBet = async ({ userId, bet, amount }) => {
+  await ensureRuntimeSchema();
+  const client = await getPool().connect();
+  const createdAt = bet.createdAt || nowIso();
+
+  try {
+    await client.query('BEGIN');
+
+    await client.query(
+      `INSERT INTO "wallets" ("userId", "credits", "updatedAt")
+       VALUES ($1, 100, $2)
+       ON CONFLICT ("userId") DO NOTHING`,
+      [userId, createdAt]
+    );
+
+    const { rows: walletRows } = await client.query(
+      `SELECT "credits" FROM "wallets" WHERE "userId" = $1 FOR UPDATE`,
+      [userId]
+    );
+    const currentCredits = Number(walletRows[0]?.credits ?? 0);
+    if (currentCredits < amount) {
+      await client.query('ROLLBACK');
+      return { ok: false, reason: 'insufficient', credits: currentCredits };
+    }
+
+    const nextCredits = currentCredits - amount;
+    await client.query(
+      `UPDATE "wallets"
+       SET "credits" = $2, "updatedAt" = $3
+       WHERE "userId" = $1`,
+      [userId, nextCredits, createdAt]
+    );
+
+    await client.query(
+      `INSERT INTO "bets" (
+        "id", "userId", "raceId", "raceEntryId", "amount", "status", "payout", "createdAt", "settledAt"
+      ) VALUES ($1, $2, $3, $4, $5, 'pending', 0, $6, NULL)`,
+      [bet.id, bet.userId, bet.raceId, bet.raceEntryId, amount, createdAt]
+    );
+
+    await client.query(
+      `INSERT INTO "creditTransactions" (
+        "id", "userId", "type", "amount", "balanceAfter", "metadata", "createdAt"
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        randomUUID(),
+        userId,
+        CREDIT_TRANSACTION_TYPES.BET_PLACED,
+        -amount,
+        nextCredits,
+        { betId: bet.id, raceId: bet.raceId, raceEntryId: bet.raceEntryId },
+        createdAt,
+      ]
+    );
+
+    await client.query('COMMIT');
+    return { ok: true, credits: nextCredits };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    if (error?.code === '23505') {
+      return { ok: false, reason: 'duplicate' };
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Atomically cancel a pending bet and refund credits to the wallet.
+ */
+export const persistCancelBet = async ({ userId, betId, amount, settledAt }) => {
+  await ensureRuntimeSchema();
+  const client = await getPool().connect();
+  const now = settledAt || nowIso();
+
+  try {
+    await client.query('BEGIN');
+
+    const { rows: betRows } = await client.query(
+      `SELECT "id", "status", "amount", "raceId"
+       FROM "bets"
+       WHERE "id" = $1 AND "userId" = $2
+       FOR UPDATE`,
+      [betId, userId]
+    );
+    const bet = betRows[0];
+    if (!bet) {
+      await client.query('ROLLBACK');
+      return { ok: false, reason: 'not_found' };
+    }
+    if (bet.status !== 'pending') {
+      await client.query('ROLLBACK');
+      return { ok: false, reason: 'not_pending' };
+    }
+
+    const refundAmount = Number(bet.amount ?? amount ?? 0);
+
+    await client.query(
+      `INSERT INTO "wallets" ("userId", "credits", "updatedAt")
+       VALUES ($1, 100, $2)
+       ON CONFLICT ("userId") DO NOTHING`,
+      [userId, now]
+    );
+
+    const { rows: walletRows } = await client.query(
+      `SELECT "credits" FROM "wallets" WHERE "userId" = $1 FOR UPDATE`,
+      [userId]
+    );
+    const nextCredits = Number(walletRows[0]?.credits ?? 0) + refundAmount;
+
+    await client.query(
+      `UPDATE "wallets"
+       SET "credits" = $2, "updatedAt" = $3
+       WHERE "userId" = $1`,
+      [userId, nextCredits, now]
+    );
+
+    await client.query(
+      `UPDATE "bets"
+       SET "status" = 'cancelled', "settledAt" = $2
+       WHERE "id" = $1`,
+      [betId, now]
+    );
+
+    await client.query(
+      `INSERT INTO "creditTransactions" (
+        "id", "userId", "type", "amount", "balanceAfter", "metadata", "createdAt"
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        randomUUID(),
+        userId,
+        CREDIT_TRANSACTION_TYPES.BET_CANCELLED,
+        refundAmount,
+        nextCredits,
+        { betId, raceId: bet.raceId || null },
+        now,
+      ]
+    );
+
+    await client.query('COMMIT');
+    return { ok: true, credits: nextCredits };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };

@@ -39,6 +39,7 @@ import {
   buildOfficialReplayTimeline,
   buildProvisionalRaceTimeline,
 } from '../services/raceReplayTimeline.js';
+import { racePotTotal, refundRaceBets, settleRaceBets } from '../services/bettingService.js';
 
 // Helpers nội bộ
 const nonRejectedEntry = (entry) => entry.status !== 'rejected';
@@ -46,6 +47,7 @@ const nonRejectedEntry = (entry) => entry.status !== 'rejected';
 const USER_ROLES = ['admin', 'owner', 'jockey', 'referee', 'spectator'];
 const USER_STATUSES = ['pending', 'active', 'rejected', 'suspended', 'locked'];
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho sortedPublicUsers.
 const sortedPublicUsers = (db) =>
   [...(db.users || [])]
     .sort((first, second) => {
@@ -55,11 +57,15 @@ const sortedPublicUsers = (db) =>
     })
     .map(publicUser);
 
+// Ghi chú: Hàm này tính nhanh giá trị cấu hình activeAdminCount.
 const activeAdminCount = (db) =>
   (db.users || []).filter((user) => user.role === 'admin' && user.status === 'active').length;
 
+// Ghi chú: Hàm này tính nhanh giá trị cấu hình raceFieldSize.
 const raceFieldSize = (db) => systemSettingsFromDb(db).maxHorsesPerRace;
+// Ghi chú: Hàm này lấy và chuẩn hóa dữ liệu cho minReadiedParticipants.
 const minReadiedParticipants = (db) => systemSettingsFromDb(db).minReadiedParticipants;
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho maxTournamentRaces.
 const maxTournamentRaces = (db) => systemSettingsFromDb(db).maxRacesPerTournament;
 
 // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến tournament has ended.
@@ -183,6 +189,61 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
   app.get('/approvals', (c) => {
     const db = c.get('db');
     return c.json({ approvals: formatApprovals(db) });
+  });
+
+  app.get('/betting', (c) => {
+    const db = c.get('db');
+    const bets = db.bets || [];
+    const raceIds = [...new Set(bets.map((bet) => bet.raceId))];
+
+    const raceSummaries = raceIds.map((raceId) => {
+      const race = db.races.find((item) => item.id === raceId);
+      const raceBets = bets.filter((bet) => bet.raceId === raceId);
+      const bettorIds = new Set(raceBets.map((bet) => bet.userId));
+      const pending = raceBets.filter((bet) => bet.status === 'pending');
+      const won = raceBets.filter((bet) => bet.status === 'won');
+      const lost = raceBets.filter((bet) => bet.status === 'lost');
+      const refunded = raceBets.filter((bet) => bet.status === 'refunded');
+
+      return {
+        raceId,
+        raceName: race?.name || raceId,
+        raceStatus: race?.status || 'unknown',
+        totalBets: raceBets.length,
+        uniqueBettors: bettorIds.size,
+        poolTotal: racePotTotal(db, raceId),
+        totalWagered: raceBets.reduce((sum, bet) => sum + Number(bet.amount || 0), 0),
+        totalPaidOut: won.reduce((sum, bet) => sum + Number(bet.payout || 0), 0),
+        totalRefunded: refunded.reduce((sum, bet) => sum + Number(bet.payout || 0), 0),
+        counts: {
+          pending: pending.length,
+          won: won.length,
+          lost: lost.length,
+          refunded: refunded.length,
+        },
+      };
+    });
+
+    const spectators = db.users
+      .filter((user) => user.role === 'spectator')
+      .map((user) => {
+        const userBets = bets.filter((bet) => bet.userId === user.id);
+        return {
+          id: user.id,
+          name: user.name,
+          credits: Number(user.credits ?? 0),
+          loginStreak: Number(user.loginStreak ?? 0),
+          lastLoginRewardDate: user.lastLoginRewardDate || null,
+          totalBets: userBets.length,
+          totalWagered: userBets.reduce((sum, bet) => sum + Number(bet.amount || 0), 0),
+          totalWon: userBets
+            .filter((bet) => bet.status === 'won')
+            .reduce((sum, bet) => sum + Number(bet.payout || 0), 0),
+        };
+      })
+      .sort((a, b) => b.credits - a.credits);
+
+    return c.json({ raceSummaries, spectators });
   });
 
   app.get('/users', (c) => {
@@ -740,9 +801,14 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
     const existingActionLogIds = new Set(
       (db.raceActionLogs || []).map((log) => log.id)
     );
+    const existingCreditTransactionIds = new Set(
+      (db.creditTransactions || []).map((transaction) => transaction.id)
+    );
     const assignedRefereeIds = raceRefereeIds(db, race);
     let affectedTournament = null;
     let affectedHorses = [];
+    let settledBets = [];
+    let affectedSpectators = [];
 
     if (action === 'reset-race') {
       if (race.status !== 'cancelled') {
@@ -987,6 +1053,15 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
       if(readyEntries.length < requiredReadyCount) {
         race.status = 'cancelled';
         race.updatedAt = new Date().toISOString();
+        const refund = refundRaceBets(
+          db,
+          race.id,
+          `${race.name} was cancelled due to insufficient participants`
+        );
+        settledBets = (db.bets || []).filter(
+          (bet) => bet.raceId === race.id && bet.settledAt
+        );
+        affectedSpectators = refund.affectedUsers || [];
         const recipientIds = new Set();
           entries.forEach((entry) => {
         const horse = db.horses.find((item) => item.id === entry.horseId);
@@ -1038,6 +1113,11 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
     }
     race.status = 'cancelled';
         race.updatedAt = new Date().toISOString();
+        const refund = refundRaceBets(db, race.id, `${race.name} was cancelled`);
+        settledBets = (db.bets || []).filter(
+          (bet) => bet.raceId === race.id && bet.settledAt
+        );
+        affectedSpectators = refund.affectedUsers || [];
         const recipientIds = new Set();
           entries.forEach((entry) => {
         const horse = db.horses.find((item) => item.id === entry.horseId);
@@ -1142,6 +1222,12 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
         horses: db.horses,
       });
 
+      const settlement = settleRaceBets(db, race.id, entries);
+      settledBets = (db.bets || []).filter(
+        (bet) => bet.raceId === race.id && bet.settledAt
+      );
+      affectedSpectators = settlement.affectedUsers || [];
+
       const recipientIds = new Set();
       entries.forEach((entry) => {
         const horse = db.horses.find((item) => item.id === entry.horseId);
@@ -1183,6 +1269,11 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
         raceEntries: entries,
         horses: affectedHorses,
         tournament: affectedTournament,
+        bets: settledBets,
+        users: affectedSpectators,
+        creditTransactions: (db.creditTransactions || []).filter(
+          (transaction) => !existingCreditTransactionIds.has(transaction.id)
+        ),
         notifications: (db.notifications || []).filter(
           (notification) => !existingNotificationIds.has(notification.id)
         ),

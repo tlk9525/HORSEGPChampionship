@@ -1,5 +1,11 @@
 export type UserRole = 'admin' | 'owner' | 'jockey' | 'referee' | 'spectator';
 
+export interface DailyReward {
+  claimed: boolean;
+  amount: number;
+  streak: number;
+}
+
 export interface AuthUser {
   id: string;
   name: string;
@@ -8,6 +14,38 @@ export interface AuthUser {
   status: 'pending' | 'active' | 'rejected';
   emailVerifiedAt?: string | null;
   status: 'pending' | 'active' | 'approved' | 'rejected' | 'suspended' | 'locked';
+  credits?: number | null;
+  loginStreak?: number;
+  lastLoginRewardDate?: string | null;
+  dailyReward?: DailyReward;
+}
+
+export interface BetRecord {
+  id: string;
+  userId: string;
+  raceId: string;
+  raceEntryId: string;
+  amount: number;
+  status: 'pending' | 'won' | 'lost' | 'cancelled' | 'refunded';
+  payout?: number;
+  createdAt: string;
+  settledAt?: string | null;
+  horseName?: string;
+  jockeyName?: string;
+  raceName?: string;
+}
+
+export interface RacePot {
+  raceId: string;
+  total: number;
+}
+
+export interface SpectatorWallet {
+  credits: number;
+  loginStreak: number;
+  lastLoginRewardDate: string | null;
+  dailyReward: DailyReward;
+  bets: BetRecord[];
 }
 
 export interface ApprovalItem {
@@ -346,7 +384,7 @@ const request = async <T>(path: string, options: RequestInit = {}): Promise<T> =
 
 // Đăng nhập bằng email/password; session được backend lưu trong HttpOnly cookie.
 export const login = async (email: string, password: string) => {
-  return request<{ user: AuthUser }>('/login', {
+  return request<{ user: AuthUser; dailyReward?: DailyReward }>('/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
@@ -423,18 +461,22 @@ export const getBootstrap = async ({ force = false } = {}) => {
 export const getApprovals = async () =>
   request<{ approvals: ApprovalItem[] }>('/admin/approvals');
 
+// Ghi chú: Hàm này lấy và chuẩn hóa dữ liệu cho getUsers.
 export const getUsers = async () =>
   request<{ users: AuthUser[] }>('/admin/users');
 
+// Ghi chú: Hàm này lấy và chuẩn hóa dữ liệu cho getSystemSettings.
 export const getSystemSettings = async () =>
   request<{ settings: SystemSettings }>('/admin/settings');
 
+// Ghi chú: Hàm này xử lý thao tác updateSystemSettings trong luồng nghiệp vụ.
 export const updateSystemSettings = async (settings: Partial<SystemSettings>) =>
   request<{ settings: SystemSettings }>('/admin/settings', {
     method: 'PATCH',
     body: JSON.stringify(settings),
   });
 
+// Ghi chú: Hàm này xử lý thao tác updateUser trong luồng nghiệp vụ.
 export const updateUser = async (
   userId: string,
   user: {
@@ -447,6 +489,7 @@ export const updateUser = async (
     body: JSON.stringify(user),
   });
 
+// Ghi chú: Hàm này xử lý thao tác disableUser trong luồng nghiệp vụ.
 export const disableUser = async (userId: string) =>
   request<{ user: AuthUser; users: AuthUser[] }>(`/admin/users/${userId}`, {
     method: 'DELETE',
@@ -781,3 +824,50 @@ export const recordRaceResult = async (
       body: JSON.stringify(result),
     }
   );
+
+export const getSpectatorWallet = () =>
+  request<SpectatorWallet>('/spectator/wallet');
+
+export const getRacePots = () =>
+  request<{ pots: RacePot[]; entryTotals: Record<string, number> }>('/spectator/pots');
+
+export const placeBet = (raceEntryId: string, amount: number) =>
+  request<{ bet: BetRecord; credits: number }>('/spectator/bets', {
+    method: 'POST',
+    body: JSON.stringify({ raceEntryId, amount }),
+  });
+
+export const cancelBet = (betId: string) =>
+  request<{ ok: boolean; credits: number }>(`/spectator/bets/${betId}/cancel`, {
+    method: 'POST',
+  });
+
+export interface AdminBettingRaceSummary {
+  raceId: string;
+  raceName: string;
+  raceStatus: string;
+  totalBets: number;
+  uniqueBettors: number;
+  poolTotal: number;
+  totalWagered: number;
+  totalPaidOut: number;
+  totalRefunded: number;
+  counts: { pending: number; won: number; lost: number; refunded: number };
+}
+
+export interface AdminBettingSpectator {
+  id: string;
+  name: string;
+  credits: number;
+  loginStreak: number;
+  lastLoginRewardDate: string | null;
+  totalBets: number;
+  totalWagered: number;
+  totalWon: number;
+}
+
+export const getAdminBetting = () =>
+  request<{
+    raceSummaries: AdminBettingRaceSummary[];
+    spectators: AdminBettingSpectator[];
+  }>('/admin/betting');

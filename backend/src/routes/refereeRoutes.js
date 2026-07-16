@@ -22,6 +22,7 @@ const finishTimeMs = (value) => {
 const FINISHED_OUTCOME = 'finished';
 const NON_FINISH_OUTCOMES = new Set(['dnf', 'fell', 'injured', 'disqualified']);
 const RESULT_OUTCOMES = new Set([FINISHED_OUTCOME, ...NON_FINISH_OUTCOMES]);
+// Ghi chú: Hàm này xử lý logic requiresFinishResult.
 const requiresFinishResult = (entry) => (entry.resultOutcome || FINISHED_OUTCOME) === FINISHED_OUTCOME;
 
 // Ghi chú: Hàm này tạo nhóm route referee routes cho backend.

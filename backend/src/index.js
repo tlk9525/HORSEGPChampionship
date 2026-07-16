@@ -8,6 +8,8 @@ import {
   persistLoginSession,
   persistRegisteredUser,
   persistSystemSettings,
+  persistPlaceBet,
+  persistCancelBet,
   deleteSession,
   readDb,
   writeDb,
@@ -27,6 +29,8 @@ const app = createApp({
   persistLoginSession,
   persistRegisteredUser,
   persistSystemSettings,
+  persistPlaceBet,
+  persistCancelBet,
   deleteSession,
 });
 

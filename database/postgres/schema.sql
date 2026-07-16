@@ -305,6 +305,7 @@ CREATE TABLE "raceEntries" (
 
 CREATE INDEX "idx_race_entries_race" ON "raceEntries" ("raceId");
 
+
 CREATE TABLE "refereeReports" (
   "id" VARCHAR(64) PRIMARY KEY,
   "raceId" VARCHAR(64) NOT NULL,

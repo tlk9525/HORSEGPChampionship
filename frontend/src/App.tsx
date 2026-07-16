@@ -127,6 +127,7 @@ export default function App() {
                   replace: true,
                 });
               }}
+              onUserUpdate={setCurrentUser}
             />
           </Suspense>
         )}

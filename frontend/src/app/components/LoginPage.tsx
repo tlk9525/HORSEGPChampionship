@@ -86,10 +86,10 @@ export default function LoginPage({
         }
 
         const loginResult = await login(email, password);
-        onLogin(loginResult.user);
+        onLogin({ ...loginResult.user, dailyReward: loginResult.dailyReward });
       } else {
         const result = await login(email, password);
-        onLogin(result.user);
+        onLogin({ ...result.user, dailyReward: result.dailyReward });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');

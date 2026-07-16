@@ -62,19 +62,17 @@ test('auth uses an HttpOnly cookie and upgrades a legacy plaintext password', as
 test('registration hashes passwords before persistence', async () => {
   const db = { users: [], sessions: [], notifications: [] };
   let persistedUser;
-  let sentVerification;
+  let starterTransactions;
   const app = new Hono();
   app.route('/api', createAuthRoutes(
     async () => db,
     async () => undefined,
     async () => undefined,
-    async (user) => {
+    async (user, _notifications, creditTransactions) => {
       persistedUser = user;
+      starterTransactions = creditTransactions;
     },
-    async () => undefined,
-    async (message) => {
-      sentVerification = message;
-    }
+    async () => undefined
   ));
 
   const response = await app.request('/api/register', {
@@ -90,58 +88,62 @@ test('registration hashes passwords before persistence', async () => {
 
   assert.equal(response.status, 201);
   assert.equal(await bcrypt.compare('password123', persistedUser.password), true);
-  assert.ok(persistedUser.emailVerificationTokenHash);
-  assert.equal(sentVerification.email, 'new@example.com');
+  assert.equal(persistedUser.credits, 100);
+  assert.equal(persistedUser.loginStreak, 0);
+  assert.equal(persistedUser.lastLoginRewardDate, null);
+  assert.equal(starterTransactions.length, 1);
+  assert.equal(starterTransactions[0].type, 'starter_bonus');
+  assert.equal(starterTransactions[0].balanceAfter, 100);
   assert.equal(JSON.stringify(await response.json()).includes('password'), false);
 });
 
-test('spectator email verification is single-use and persisted', async () => {
-  const db = { users: [], sessions: [], notifications: [] };
-  let verificationToken = '';
-  let writeCount = 0;
+test('spectator login claims the daily bonus only once for the current day', async () => {
+  const password = await bcrypt.hash('password123', 4);
+  const now = new Date().toISOString();
+  const db = {
+    users: [{
+      id: 'spectator-daily',
+      name: 'Daily Spectator',
+      email: 'daily@example.com',
+      password,
+      role: 'spectator',
+      status: 'active',
+      credits: 100,
+      loginStreak: 0,
+      lastLoginRewardDate: null,
+      createdAt: now,
+      updatedAt: now,
+    }],
+    wallets: [{ userId: 'spectator-daily', credits: 100, updatedAt: now }],
+    creditTransactions: [],
+    sessions: [],
+    notifications: [],
+  };
+  let writes = 0;
   const app = new Hono();
   app.route('/api', createAuthRoutes(
     async () => db,
-    async () => {
-      writeCount += 1;
-    },
-    async () => undefined,
-    async () => undefined,
-    async () => undefined,
-    async ({ token }) => {
-      verificationToken = token;
-    }
+    async () => { writes += 1; }
   ));
 
-  const registerResponse = await app.request('/api/register', {
+  const loginRequest = () => app.request('/api/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: 'Verified Spectator',
-      email: 'verified@example.com',
-      password: 'password123',
-      role: 'spectator',
-    }),
+    body: JSON.stringify({ email: 'daily@example.com', password: 'password123' }),
   });
-  assert.equal(registerResponse.status, 201);
-  assert.ok(verificationToken);
 
-  const verifyResponse = await app.request('/api/verify-email', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: verificationToken }),
-  });
-  assert.equal(verifyResponse.status, 200);
-  const body = await verifyResponse.json();
-  assert.ok(body.user.emailVerifiedAt);
-  assert.equal('emailVerificationTokenHash' in body.user, false);
-  assert.equal(db.users[0].emailVerificationTokenHash, null);
-  assert.equal(writeCount, 1);
+  const first = await loginRequest();
+  const firstBody = await first.json();
+  const second = await loginRequest();
+  const secondBody = await second.json();
 
-  const reusedResponse = await app.request('/api/verify-email', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ token: verificationToken }),
-  });
-  assert.equal(reusedResponse.status, 400);
+  assert.equal(first.status, 200);
+  assert.deepEqual(firstBody.dailyReward, { claimed: true, amount: 10, streak: 1 });
+  assert.equal(firstBody.user.credits, 110);
+  assert.equal(second.status, 200);
+  assert.equal(secondBody.dailyReward.claimed, false);
+  assert.equal(secondBody.dailyReward.amount, 0);
+  assert.equal(secondBody.user.credits, 110);
+  assert.equal(db.creditTransactions.filter((transaction) => transaction.type === 'daily_login_bonus').length, 1);
+  assert.equal(writes, 2);
 });

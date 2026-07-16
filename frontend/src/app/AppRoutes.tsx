@@ -21,7 +21,7 @@ const CreateRacePage = lazy(() => import('./components/CreateRacePage'));
 const EditRacePage = lazy(() => import('./components/EditRacePage'));
 const UserManagement = lazy(() => import('./components/UserManagement'));
 const LoginPage = lazy(() => import('./components/LoginPage'));
-const VerifyEmailPage = lazy(() => import('./components/VerifyEmailPage'));
+const BettingPage = lazy(() => import('./components/BettingPage'));
 
 interface AppRoutesProps {
   currentUser: AuthUser | null;
@@ -29,6 +29,7 @@ interface AppRoutesProps {
   onNavigate: (page: string) => void;
   onSelectHorse: (horse: HorseRecord | null) => void;
   onLogin: (user: AuthUser) => void;
+  onUserUpdate?: (user: AuthUser) => void;
 }
 
 // Ghi chú: Hàm này chọn component màn hình cần render theo page hiện tại.
@@ -38,6 +39,7 @@ export default function AppRoutes({
   onNavigate,
   onSelectHorse,
   onLogin,
+  onUserUpdate,
 }: AppRoutesProps) {
   return (
     <Routes>
@@ -75,6 +77,16 @@ export default function AppRoutes({
       <Route path="/simulation-demo" element={<RaceSimulationDemo />} />
       <Route path="/simulation-demo/:raceId" element={<RaceSimulationDemo />} />
       <Route path="/results" element={<ResultsPage />} />
+      <Route
+        path="/betting"
+        element={
+          <BettingPage
+            currentUser={currentUser}
+            onNavigate={onNavigate}
+            onUserUpdate={onUserUpdate}
+          />
+        }
+      />
       <Route path="/admin" element={<AdminPanel onNavigate={onNavigate} />} />
       <Route
         path="/admin/users"
@@ -84,7 +96,6 @@ export default function AppRoutes({
       <Route path="/admin/races/:raceId/edit" element={<EditRacePage onNavigate={onNavigate} />} />
       <Route path="/login" element={<LoginPage onLogin={onLogin} />} />
       <Route path="/register" element={<LoginPage initialMode="register" onLogin={onLogin} />} />
-      <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route
         path="*"
         element={
