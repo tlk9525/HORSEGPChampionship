@@ -84,6 +84,12 @@ const ensureRuntimeSchema = async () => {
       await getPool().query(
         'ALTER TABLE "races" ADD COLUMN IF NOT EXISTS "replayTimeline" JSONB'
       );
+      await getPool().query(
+        'ALTER TABLE "raceEntries" ADD COLUMN IF NOT EXISTS "resultOutcome" VARCHAR(32) NOT NULL DEFAULT \'finished\''
+      );
+      await getPool().query(
+        'ALTER TABLE "raceEntries" ADD COLUMN IF NOT EXISTS "incidentReason" TEXT'
+      );
     })().catch((error) => {
       runtimeSchemaPromise = undefined;
       throw error;
@@ -652,9 +658,11 @@ export const writeDb = async (db) => {
         'preRaceStatus',
         'disqualified',
         'resultStatus',
+        'resultOutcome',
         'position',
         'finishTime',
         'notes',
+        'incidentReason',
         'violationNotes',
         'createdAt',
       ],
@@ -670,9 +678,11 @@ export const writeDb = async (db) => {
         preRaceStatus: entry.preRaceStatus || 'pending',
         disqualified: entry.disqualified ?? false,
         resultStatus: entry.resultStatus || 'draft',
+        resultOutcome: entry.resultOutcome || 'finished',
         position: entry.position ?? null,
         finishTime: entry.finishTime || '',
         notes: entry.notes || '',
+        incidentReason: entry.incidentReason || '',
         violationNotes: entry.violationNotes || '',
         invitationId: entry.invitationId || null,
         createdAt: entry.createdAt || null,
@@ -778,7 +788,10 @@ export const persistRaceEntryResult = async (entry, report = null) => {
            "finishTime" = $3,
            "notes" = $4,
            "violationNotes" = $5,
-           "resultStatus" = $6
+           "resultStatus" = $6,
+           "resultOutcome" = $7,
+           "incidentReason" = $8,
+           "disqualified" = $9
        WHERE "id" = $1`,
       [
         entry.id,
@@ -787,6 +800,9 @@ export const persistRaceEntryResult = async (entry, report = null) => {
         entry.notes || '',
         entry.violationNotes || '',
         entry.resultStatus || 'draft',
+        entry.resultOutcome || 'finished',
+        entry.incidentReason || '',
+        Boolean(entry.disqualified),
       ]
     );
 
@@ -917,19 +933,23 @@ export const persistRefereeRaceAction = async ({
          SET "preRaceStatus" = $2,
              "disqualified" = $3,
              "resultStatus" = $4,
-             "position" = $5,
-             "finishTime" = $6,
-             "notes" = $7,
-             "violationNotes" = $8
+             "resultOutcome" = $5,
+             "position" = $6,
+             "finishTime" = $7,
+             "notes" = $8,
+             "incidentReason" = $9,
+             "violationNotes" = $10
          WHERE "id" = $1`,
         [
           entry.id,
           entry.preRaceStatus || 'pending',
           Boolean(entry.disqualified),
           entry.resultStatus || 'draft',
+          entry.resultOutcome || 'finished',
           entry.position ?? null,
           entry.finishTime || '',
           entry.notes || '',
+          entry.incidentReason || '',
           entry.violationNotes || '',
         ]
       );
@@ -1048,10 +1068,12 @@ export const persistAdminRaceAction = async ({
              "disqualified" = $8,
              "status" = $9,
              "resultStatus" = $10,
-             "position" = $11,
-             "finishTime" = $12,
-             "notes" = $13,
-             "violationNotes" = $14
+             "resultOutcome" = $11,
+             "position" = $12,
+             "finishTime" = $13,
+             "notes" = $14,
+             "incidentReason" = $15,
+             "violationNotes" = $16
          WHERE "id" = $1`,
         [
           entry.id,
@@ -1064,9 +1086,11 @@ export const persistAdminRaceAction = async ({
           Boolean(entry.disqualified),
           entry.status || 'approved',
           entry.resultStatus || 'draft',
+          entry.resultOutcome || 'finished',
           entry.position ?? null,
           entry.finishTime || '',
           entry.notes || '',
+          entry.incidentReason || '',
           entry.violationNotes || '',
         ]
       );

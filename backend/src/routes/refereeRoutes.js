@@ -19,6 +19,11 @@ const finishTimeMs = (value) => {
   return Number(minutes) * 60000 + Number(seconds) * 1000 + Number(fraction.padEnd(3, '0'));
 };
 
+const FINISHED_OUTCOME = 'finished';
+const NON_FINISH_OUTCOMES = new Set(['dnf', 'fell', 'injured', 'disqualified']);
+const RESULT_OUTCOMES = new Set([FINISHED_OUTCOME, ...NON_FINISH_OUTCOMES]);
+const requiresFinishResult = (entry) => (entry.resultOutcome || FINISHED_OUTCOME) === FINISHED_OUTCOME;
+
 // Ghi chú: Hàm này tạo nhóm route referee routes cho backend.
 export const createRefereeRoutes = (
   getDb,
@@ -72,10 +77,19 @@ export const createRefereeRoutes = (
       );
       affectedEntries = raceEntries;
       const competingEntries = raceEntries.filter(
-        (entry) => entry.preRaceStatus !== 'absent' && !entry.disqualified
+        (entry) =>
+          entry.preRaceStatus !== 'absent' &&
+          !entry.disqualified &&
+          requiresFinishResult(entry)
       );
       const entriesMissingResult = competingEntries.filter(
         (entry) => !entry.position || !entry.finishTime
+      );
+      const unresolvedNonFinishEntries = raceEntries.filter(
+        (entry) =>
+          entry.preRaceStatus !== 'absent' &&
+          !requiresFinishResult(entry) &&
+          !String(entry.incidentReason || entry.notes || entry.violationNotes || '').trim()
       );
       const positions = competingEntries.map((entry) => Number(entry.position)).filter(Number.isInteger);
       const uniquePositions = new Set(positions);
@@ -86,6 +100,9 @@ export const createRefereeRoutes = (
 
       if (entriesMissingResult.length > 0) {
         return c.json({ message: 'Record a finishing position and finish time for every competing participant before submitting results' }, 400);
+      }
+      if (unresolvedNonFinishEntries.length > 0) {
+        return c.json({ message: 'Record an incident reason for every DNF, fall, injury or disqualification before submitting results' }, 400);
       }
       if (uniquePositions.size !== positions.length) {
         return c.json({ message: 'Each competing participant must have a unique finishing position' }, 400);
@@ -103,7 +120,7 @@ export const createRefereeRoutes = (
       race.awardsPublished = false;
       race.updatedAt = new Date().toISOString();
       raceEntries.forEach((entry) => {
-        entry.resultStatus = entry.preRaceStatus === 'absent' || entry.disqualified
+        entry.resultStatus = entry.preRaceStatus === 'absent' || !requiresFinishResult(entry) || entry.disqualified
           ? 'disqualified'
           : 'submitted';
       });
@@ -240,33 +257,48 @@ export const createRefereeRoutes = (
       return c.json({ message: 'Absent or scratched participants cannot compete' }, 400);
     }
 
-    const { position, finishTime, notes, violationNotes } = await c.req.json();
+    const { position, finishTime, notes, violationNotes, resultOutcome, incidentReason } = await c.req.json();
+    const normalizedOutcome = String(resultOutcome || FINISHED_OUTCOME).trim().toLowerCase();
+    if (!RESULT_OUTCOMES.has(normalizedOutcome)) {
+      return c.json({ message: 'Result outcome must be finished, DNF, fell, injured or disqualified' }, 400);
+    }
+
     const numericPosition = Number(position);
     const raceEntries = (db.raceEntries || []).filter(
       (item) => item.raceId === race.id && item.status === 'approved'
     );
     const competingEntries = raceEntries.filter(
-      (item) => item.preRaceStatus !== 'absent' && !item.disqualified
+      (item) =>
+        item.preRaceStatus !== 'absent' &&
+        !item.disqualified &&
+        (item.id === entry.id || requiresFinishResult(item))
     );
     const duplicatePosition = competingEntries.some(
       (item) => item.id !== entry.id && Number(item.position) === numericPosition
     );
 
-    if (!Number.isInteger(numericPosition) || numericPosition < 1 || numericPosition > competingEntries.length) {
-      return c.json({ message: `Position must be between 1 and ${competingEntries.length}` }, 400);
-    }
-    if (duplicatePosition) {
-      return c.json({ message: `Position ${numericPosition} is already recorded for another participant` }, 400);
-    }
-    if (!Number.isFinite(finishTimeMs(finishTime))) {
-      return c.json({ message: 'Finish time must use MM:SS or MM:SS.mmm format' }, 400);
+    if (normalizedOutcome === FINISHED_OUTCOME) {
+      if (!Number.isInteger(numericPosition) || numericPosition < 1 || numericPosition > competingEntries.length) {
+        return c.json({ message: `Position must be between 1 and ${competingEntries.length}` }, 400);
+      }
+      if (duplicatePosition) {
+        return c.json({ message: `Position ${numericPosition} is already recorded for another participant` }, 400);
+      }
+      if (!Number.isFinite(finishTimeMs(finishTime))) {
+        return c.json({ message: 'Finish time must use MM:SS or MM:SS.mmm format' }, 400);
+      }
+    } else if (!String(incidentReason || notes || violationNotes || '').trim()) {
+      return c.json({ message: 'Incident reason is required when a participant does not finish normally' }, 400);
     }
 
-    entry.position = numericPosition;
-    entry.finishTime = finishTime || '';
+    entry.resultOutcome = normalizedOutcome;
+    entry.position = normalizedOutcome === FINISHED_OUTCOME ? numericPosition : null;
+    entry.finishTime = normalizedOutcome === FINISHED_OUTCOME ? finishTime || '' : '';
     entry.notes = notes || '';
+    entry.incidentReason = incidentReason || '';
     entry.violationNotes = violationNotes || '';
-    entry.resultStatus = 'draft';
+    entry.disqualified = normalizedOutcome !== FINISHED_OUTCOME;
+    entry.resultStatus = normalizedOutcome === FINISHED_OUTCOME ? 'draft' : normalizedOutcome;
 
     let reportToPersist = null;
 

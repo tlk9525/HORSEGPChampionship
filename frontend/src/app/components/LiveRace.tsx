@@ -28,6 +28,7 @@ import {
   normalizeOfficialReplayRunners,
   parseRaceDistanceMeters,
   progressForRunner,
+  raceSimulationOutcomeLabel,
   sortRaceDisplayRunners,
 } from '../utils/raceSimulation';
 
@@ -43,7 +44,23 @@ interface DisplayRunnerRow {
   position?: number;
   finishTime?: string;
   liveRank?: number;
+  simulationOutcome?: ResultOutcome;
+  incidentReason?: string;
+  nonFinishRisk?: number;
 }
+
+type ResultOutcome = 'finished' | 'dnf' | 'fell' | 'injured' | 'disqualified';
+
+const resultOutcomeOptions: Array<{ value: ResultOutcome; label: string }> = [
+  { value: 'finished', label: 'Finished normally' },
+  { value: 'dnf', label: 'DNF' },
+  { value: 'fell', label: 'Fell / Nhao' },
+  { value: 'injured', label: 'Injured' },
+  { value: 'disqualified', label: 'Disqualified' },
+];
+
+const resultOutcomeLabel = (value?: string) =>
+  resultOutcomeOptions.find((option) => option.value === value)?.label || 'Finished normally';
 
 // Ghi chú: Hàm này phân tích nghiệp vụ liên quan đến parse finish time seconds.
 const parseFinishTimeSeconds = (value?: string) => {
@@ -102,7 +119,7 @@ export default function LiveRace() {
   );
   const [message, setMessage] = useState('');
   const [resultDrafts, setResultDrafts] = useState<
-    Record<string, { position: string; finishTime: string; notes: string; violationNotes: string }>
+    Record<string, { resultOutcome: ResultOutcome; position: string; finishTime: string; notes: string; incidentReason: string; violationNotes: string }>
   >({});
   const [recordingEntryId, setRecordingEntryId] = useState('');
   const [readinessEntryId, setReadinessEntryId] = useState('');
@@ -175,6 +192,7 @@ export default function LiveRace() {
           horseSpeedRating: horse?.speedRating,
           horseStaminaRating: horse?.staminaRating,
           horseFormRating: horse?.formRating,
+          horseHealthRating: horse?.healthRating,
           horseOverallRating: horse?.overallRating,
         };
       }),
@@ -307,6 +325,9 @@ export default function LiveRace() {
       rating: runner.rating,
       carriedWeight: runner.carriedWeight,
       progress: runner.progress,
+      simulationOutcome: runner.simulationOutcome,
+      incidentReason: runner.incidentReason,
+      nonFinishRisk: runner.nonFinishRisk,
     }));
   const displayRankByEntryId = officialReplayMode
     ? new Map(officialReplayEntries.map((entry) => [entry.keyId, entry.liveRank || 0]))
@@ -448,7 +469,7 @@ export default function LiveRace() {
   // Ghi chú: Hàm này cập nhật bản nháp kết quả trọng tài cho từng race entry.
   const updateDraft = (
     entry: RaceEntryRecord,
-    patch: Partial<{ position: string; finishTime: string; notes: string; violationNotes: string }>
+    patch: Partial<{ resultOutcome: ResultOutcome; position: string; finishTime: string; notes: string; incidentReason: string; violationNotes: string }>
   ) => {
     setResultDrafts((current) => {
       const existingDraft = current[entry.id];
@@ -456,9 +477,11 @@ export default function LiveRace() {
       return {
         ...current,
         [entry.id]: {
+          resultOutcome: existingDraft?.resultOutcome ?? entry.resultOutcome ?? 'finished',
           position: existingDraft?.position ?? (entry.position ? String(entry.position) : ''),
           finishTime: existingDraft?.finishTime ?? entry.finishTime ?? '',
           notes: existingDraft?.notes ?? entry.notes ?? '',
+          incidentReason: existingDraft?.incidentReason ?? entry.incidentReason ?? '',
           violationNotes: existingDraft?.violationNotes ?? entry.violationNotes ?? '',
           ...patch,
         },
@@ -470,9 +493,11 @@ export default function LiveRace() {
   const submitResult = (entry: RaceEntryRecord) => {
     const existingDraft = resultDrafts[entry.id];
     const rawDraft = {
+      resultOutcome: existingDraft?.resultOutcome ?? entry.resultOutcome ?? 'finished',
       position: existingDraft?.position ?? (entry.position ? String(entry.position) : ''),
       finishTime: existingDraft?.finishTime ?? entry.finishTime ?? '',
       notes: existingDraft?.notes ?? entry.notes ?? '',
+      incidentReason: existingDraft?.incidentReason ?? entry.incidentReason ?? '',
       violationNotes: existingDraft?.violationNotes ?? entry.violationNotes ?? '',
     };
     const draft = {
@@ -481,18 +506,23 @@ export default function LiveRace() {
       finishTime: rawDraft.finishTime,
     };
 
-    if (!draft.position) {
+    if (draft.resultOutcome === 'finished' && !draft.position) {
       setMessage(`Select a position for ${entry.horseName} before recording the result.`);
       return;
     }
 
-    if (!draft.finishTime) {
+    if (draft.resultOutcome === 'finished' && !draft.finishTime) {
       setMessage(`Enter a finish time for ${entry.horseName} before recording the result.`);
       return;
     }
 
+    if (draft.resultOutcome !== 'finished' && !String(draft.incidentReason || draft.notes || draft.violationNotes).trim()) {
+      setMessage(`Enter an incident reason for ${entry.horseName} before recording ${resultOutcomeLabel(draft.resultOutcome)}.`);
+      return;
+    }
+
     setRecordingEntryId(entry.id);
-    setMessage(`Recording result for ${entry.horseName}...`);
+    setMessage(`Recording ${resultOutcomeLabel(draft.resultOutcome)} for ${entry.horseName}...`);
 
     recordRaceResult(entry.id, draft)
       .then(() => {
@@ -621,26 +651,44 @@ export default function LiveRace() {
       return;
     }
 
-    const finalOrder = [...simulationPlan.runners].sort(
+    const finishedOrder = [...simulationPlan.runners].filter(
+      (runner) => runner.simulationOutcome === 'finished'
+    ).sort(
       (a, b) => a.finishTimeSeconds - b.finishTimeSeconds
     );
 
     setResultDrafts((current) => {
       const nextDrafts = { ...current };
 
-      finalOrder.forEach((runner, index) => {
+      finishedOrder.forEach((runner, index) => {
         const existingDraft = nextDrafts[runner.entryId];
         nextDrafts[runner.entryId] = {
+          resultOutcome: existingDraft?.resultOutcome ?? 'finished',
           position: String(index + 1),
           finishTime: formatRaceSimulationTime(runner.finishTimeSeconds),
           notes: existingDraft?.notes ?? '',
+          incidentReason: existingDraft?.incidentReason ?? '',
           violationNotes: existingDraft?.violationNotes ?? '',
         };
       });
 
+      simulationPlan.runners
+        .filter((runner) => runner.simulationOutcome !== 'finished')
+        .forEach((runner) => {
+          const existingDraft = nextDrafts[runner.entryId];
+          nextDrafts[runner.entryId] = {
+            resultOutcome: runner.simulationOutcome,
+            position: '',
+            finishTime: '',
+            notes: existingDraft?.notes ?? '',
+            incidentReason: existingDraft?.incidentReason ?? runner.incidentReason,
+            violationNotes: existingDraft?.violationNotes ?? '',
+          };
+        });
+
       return nextDrafts;
     });
-    setMessage('Provisional simulation values loaded. Referee can still edit before recording each result.');
+    setMessage('Simulation suggestions loaded. Referee can still edit outcomes before recording each result.');
   };
 
   return (
@@ -795,8 +843,13 @@ export default function LiveRace() {
                           <div className="truncate text-xs text-gray-400">
                             {officialReplayMode
                               ? `Jockey ${runner.jockeyName} • Official P${runner.position || '-'} • ${runner.finishTime || ''}`
-                              : `${runner.jockeyName} • R${runner.rating} • ${runner.carriedWeight}lb`}
+                              : `${runner.jockeyName} • R${runner.rating} • ${runner.carriedWeight}lb • ${raceSimulationOutcomeLabel(runner.simulationOutcome)}`}
                           </div>
+                          {!officialReplayMode && runner.simulationOutcome && runner.simulationOutcome !== 'finished' && (
+                            <div className="mt-1 truncate text-[11px] font-bold text-orange-300">
+                              {runner.incidentReason || raceSimulationOutcomeLabel(runner.simulationOutcome)}
+                            </div>
+                          )}
                         </div>
 
                         <div
@@ -844,7 +897,9 @@ export default function LiveRace() {
                             P{rank}
                           </div>
                           <div className="text-[10px] uppercase text-gray-500">
-                            {Math.round(runner.progress * 100)}%
+                            {runner.simulationOutcome && runner.simulationOutcome !== 'finished'
+                              ? raceSimulationOutcomeLabel(runner.simulationOutcome)
+                              : `${Math.round(runner.progress * 100)}%`}
                           </div>
                         </div>
                       </div>
@@ -865,7 +920,11 @@ export default function LiveRace() {
                     </div>
                   )}
 
-                  {selectedEntries.map((entry) => (
+                  {selectedEntries.map((entry) => {
+                    const currentOutcome = resultDrafts[entry.id]?.resultOutcome ?? entry.resultOutcome ?? 'finished';
+                    const needsFinishFields = currentOutcome === 'finished';
+
+                    return (
                     <div
                       key={entry.id}
                       className="bg-[#071a2f] border border-white/10 rounded-xl p-4"
@@ -885,8 +944,14 @@ export default function LiveRace() {
                           </div>
 
                           <div className="text-gray-400 text-sm mt-2">
-                            Readiness: {statusLabel(entry.preRaceStatus)} • Result: {statusLabel(entry.resultStatus || 'draft')}
+                            Readiness: {statusLabel(entry.preRaceStatus)} • Outcome: {resultOutcomeLabel(entry.resultOutcome)} • Result: {statusLabel(entry.resultStatus || 'draft')}
                           </div>
+
+                          {entry.incidentReason && (
+                            <div className="text-orange-300 text-sm mt-2">
+                              Incident: {entry.incidentReason}
+                            </div>
+                          )}
 
                           {entry.violationNotes && (
                             <div className="text-yellow-400 text-sm mt-2">
@@ -942,6 +1007,31 @@ export default function LiveRace() {
                           entry.preRaceStatus !== 'absent' && (
                             <div className="grid grid-cols-2 gap-3">
                               <select
+                                aria-label={`Outcome for ${entry.horseName}`}
+                                value={currentOutcome}
+                                onChange={(event) =>
+                                  updateDraft(entry, {
+                                    resultOutcome: event.target.value as ResultOutcome,
+                                    position: event.target.value === 'finished'
+                                      ? resultDrafts[entry.id]?.position ?? (entry.position ? String(entry.position) : '')
+                                      : '',
+                                    finishTime: event.target.value === 'finished'
+                                      ? resultDrafts[entry.id]?.finishTime ?? entry.finishTime ?? ''
+                                      : '',
+                                  })
+                                }
+                                className="col-span-2 bg-[#111] border border-white/10 rounded-xl px-3 py-2 text-white"
+                              >
+                                {resultOutcomeOptions.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+
+                              {needsFinishFields && (
+                                <>
+                              <select
                                 aria-label={`Position for ${entry.horseName}`}
                                 value={
                                   resultDrafts[entry.id]?.position ??
@@ -971,6 +1061,19 @@ export default function LiveRace() {
                                 }
                                 className="bg-[#111] border border-white/10 rounded-xl px-3 py-2 text-white"
                               />
+                                </>
+                              )}
+
+                              {!needsFinishFields && (
+                                <input
+                                  placeholder="Incident reason (required)"
+                                  value={resultDrafts[entry.id]?.incidentReason ?? entry.incidentReason ?? ''}
+                                  onChange={(event) =>
+                                    updateDraft(entry, { incidentReason: event.target.value })
+                                  }
+                                  className="col-span-2 bg-[#111] border border-orange-300/30 rounded-xl px-3 py-2 text-white"
+                                />
+                              )}
 
                               <input
                                 placeholder="Notes"
@@ -1001,7 +1104,8 @@ export default function LiveRace() {
                           )}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
