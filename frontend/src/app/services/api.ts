@@ -5,7 +5,7 @@ export interface AuthUser {
   name: string;
   email: string;
   role: UserRole;
-  status: 'pending' | 'active' | 'rejected';
+  status: 'pending' | 'active' | 'approved' | 'rejected' | 'suspended' | 'locked';
 }
 
 export interface ApprovalItem {
@@ -357,6 +357,26 @@ export const getBootstrap = async ({ force = false } = {}) => {
 // Lấy danh sách các mục đang chờ phê duyệt (admin)
 export const getApprovals = async () =>
   request<{ approvals: ApprovalItem[] }>('/admin/approvals');
+
+export const getUsers = async () =>
+  request<{ users: AuthUser[] }>('/admin/users');
+
+export const updateUser = async (
+  userId: string,
+  user: {
+    role: UserRole;
+    status: AuthUser['status'];
+  }
+) =>
+  request<{ user: AuthUser; users: AuthUser[] }>(`/admin/users/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(user),
+  });
+
+export const disableUser = async (userId: string) =>
+  request<{ user: AuthUser; users: AuthUser[] }>(`/admin/users/${userId}`, {
+    method: 'DELETE',
+  });
 
 // Phê duyệt hoặc từ chối một yêu cầu cụ thể (ngựa, tài khoản, đăng ký race, pairing)
 export const decideApproval = async (

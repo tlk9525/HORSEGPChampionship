@@ -7,7 +7,7 @@ import {
   MIN_READIED_PARTICIPANTS,
   RACE_CLASS_WEIGHT_RANGES,
 } from '../config/constants.js';
-import { requireRole } from '../services/authService.js';
+import { publicUser, requireRole } from '../services/authService.js';
 import {
   approvedRaceEntries,
   formatApprovals,
@@ -40,6 +40,21 @@ import {
 
 // Helpers nội bộ
 const nonRejectedEntry = (entry) => entry.status !== 'rejected';
+
+const USER_ROLES = ['admin', 'owner', 'jockey', 'referee', 'spectator'];
+const USER_STATUSES = ['pending', 'active', 'rejected', 'suspended', 'locked'];
+
+const sortedPublicUsers = (db) =>
+  [...(db.users || [])]
+    .sort((first, second) => {
+      const firstDate = new Date(first.createdAt || 0).getTime();
+      const secondDate = new Date(second.createdAt || 0).getTime();
+      return secondDate - firstDate || first.name.localeCompare(second.name);
+    })
+    .map(publicUser);
+
+const activeAdminCount = (db) =>
+  (db.users || []).filter((user) => user.role === 'admin' && user.status === 'active').length;
 
 // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến tournament has ended.
 const tournamentHasEnded = (tournament, at = new Date()) => {
@@ -161,6 +176,62 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
   app.get('/approvals', (c) => {
     const db = c.get('db');
     return c.json({ approvals: formatApprovals(db) });
+  });
+
+  app.get('/users', (c) => {
+    const db = c.get('db');
+    return c.json({ users: sortedPublicUsers(db) });
+  });
+
+  app.patch('/users/:id', async (c) => {
+    const currentUser = c.get('user');
+    const db = c.get('db');
+    const id = c.req.param('id');
+    const { role, status } = await c.req.json();
+    const target = (db.users || []).find((user) => user.id === id);
+
+    if (!target) return c.json({ message: 'User not found' }, 404);
+    if (!USER_ROLES.includes(role)) return c.json({ message: 'Invalid role' }, 400);
+    if (!USER_STATUSES.includes(status)) return c.json({ message: 'Invalid status' }, 400);
+    if (target.id === currentUser.id && (role !== 'admin' || status !== 'active')) {
+      return c.json({ message: 'You cannot remove your own active admin access' }, 400);
+    }
+    if (
+      target.role === 'admin' &&
+      target.status === 'active' &&
+      (role !== 'admin' || status !== 'active') &&
+      activeAdminCount(db) <= 1
+    ) {
+      return c.json({ message: 'At least one active admin is required' }, 400);
+    }
+
+    target.role = role;
+    target.status = status;
+    target.updatedAt = new Date().toISOString();
+
+    await writeDb(db);
+    return c.json({ user: publicUser(target), users: sortedPublicUsers(db) });
+  });
+
+  app.delete('/users/:id', async (c) => {
+    const currentUser = c.get('user');
+    const db = c.get('db');
+    const id = c.req.param('id');
+    const target = (db.users || []).find((user) => user.id === id);
+
+    if (!target) return c.json({ message: 'User not found' }, 404);
+    if (target.id === currentUser.id) {
+      return c.json({ message: 'You cannot disable your own account' }, 400);
+    }
+    if (target.role === 'admin' && target.status === 'active' && activeAdminCount(db) <= 1) {
+      return c.json({ message: 'At least one active admin is required' }, 400);
+    }
+
+    target.status = 'suspended';
+    target.updatedAt = new Date().toISOString();
+
+    await writeDb(db);
+    return c.json({ user: publicUser(target), users: sortedPublicUsers(db) });
   });
 
   // Lấy dữ liệu trang tạo cuộc đua: giải, các cuộc đua hiện có, danh sách trọng tài

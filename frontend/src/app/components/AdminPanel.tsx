@@ -1087,6 +1087,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                   {
                     icon: Users,
                     label: 'Manage Users',
+                    onClick: () => onNavigate('manage-users'),
                   },
 
                   {
