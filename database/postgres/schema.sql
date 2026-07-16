@@ -278,9 +278,11 @@ CREATE TABLE "raceEntries" (
   "preRaceStatus" VARCHAR(32) NOT NULL DEFAULT 'pending',
   "disqualified" BOOLEAN NOT NULL DEFAULT FALSE,
   "resultStatus" VARCHAR(32) NOT NULL DEFAULT 'draft',
+  "resultOutcome" VARCHAR(32) NOT NULL DEFAULT 'finished',
   "position" INTEGER,
   "finishTime" VARCHAR(64),
   "notes" TEXT,
+  "incidentReason" TEXT,
   "violationNotes" TEXT,
   "createdAt" TIMESTAMPTZ,
   CONSTRAINT "fk_race_entries_race"

@@ -161,10 +161,12 @@ export interface RaceEntryRecord {
   preRaceStatus: string;
   disqualified: boolean;
   resultStatus?: string;
+  resultOutcome?: 'finished' | 'dnf' | 'fell' | 'injured' | 'disqualified';
   position?: number | null;
   finishTime?: string;
   createdAt?: string;
   notes?: string;
+  incidentReason?: string;
   violationNotes?: string;
   horseName?: string;
   jockeyName?: string;
@@ -690,9 +692,11 @@ export const markRaceEntryReadiness = async (
 export const recordRaceResult = async (
   entryId: string,
   result: {
+    resultOutcome?: 'finished' | 'dnf' | 'fell' | 'injured' | 'disqualified';
     position: string | number;
     finishTime: string;
     notes?: string;
+    incidentReason?: string;
     violationNotes?: string;
   }
 ) =>
