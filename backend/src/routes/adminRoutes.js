@@ -166,7 +166,7 @@ const addPairToRace = (db, race, pair, createdAt) => {
   return true;
 };
 // Ghi chú: Hàm này tạo nhóm route admin routes cho backend.
-export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
+export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persistSystemSettings) => {
   const app = new Hono();
 
   // Middleware xác thực — chỉ admin mới truy cập được
@@ -203,8 +203,14 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
     const settings = sanitizeSystemSettings(input, current);
     const now = new Date().toISOString();
 
-    db.systemSettings = settingsToRows(settings, user.id, now);
-    await writeDb(db);
+    const settingsRows = settingsToRows(settings, user.id, now);
+
+    if (persistSystemSettings) {
+      await persistSystemSettings(settingsRows);
+    } else {
+      db.systemSettings = settingsRows;
+      await writeDb(db);
+    }
 
     return c.json({ settings });
   });
