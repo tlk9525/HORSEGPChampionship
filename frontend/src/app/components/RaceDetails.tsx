@@ -23,6 +23,7 @@ import {
 import { formatWeightLb, statusLabel } from '../utils/domain';
 import { officialHorseRating } from '../utils/rating';
 
+// Ghi chú: Hàm này tạo khóa sắp xếp race theo số race hoặc ngày giờ.
 const raceSortValue = (race: RaceRecord) => {
   const parsed = Number(String(race.raceNumber || '').replace(/\D/g, ''));
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 999;
@@ -30,17 +31,20 @@ const raceSortValue = (race: RaceRecord) => {
 
 const ratingForHorse = officialHorseRating;
 
+// Ghi chú: Hàm này định dạng rating thành chuỗi ngắn gọn để hiển thị.
 const formatRating = (value: number) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return '-';
   return String(Math.round(parsed));
 };
 
+// Ghi chú: Hàm này định dạng giá trị cân nặng lb trên race card.
 const lbValue = (value?: number | string | null) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? String(Math.round(parsed)) : '-';
 };
 
+// Ghi chú: Hàm này quyết định có được hiển thị dữ liệu race card theo trạng thái race hay không.
 const canShowRaceCardData = (race?: RaceRecord) =>
   Boolean(
     race &&
@@ -53,6 +57,7 @@ const canShowRaceCardData = (race?: RaceRecord) =>
       ].includes(race.status)
   );
 
+// Ghi chú: Hàm này render thông tin chi tiết race, field và dữ liệu race card.
 export default function RaceDetails() {
   const { raceId } = useParams();
   const routerNavigate = useNavigate();
@@ -68,6 +73,7 @@ export default function RaceDetails() {
   const [entriesExpanded, setEntriesExpanded] = useState(false);
   const [message, setMessage] = useState('');
 
+  // Ghi chú: Hàm này tải nghiệp vụ liên quan đến load race data.
   const loadRaceData = () => {
     getBootstrap()
       .then((data) => {
@@ -198,6 +204,7 @@ export default function RaceDetails() {
   });
   const visibleRows = entriesExpanded ? rows : rows.slice(0, 4);
 
+  // Ghi chú: Hàm này chọn nghiệp vụ liên quan đến select race.
   const selectRace = (raceId: string) => {
     sessionStorage.setItem('selectedRaceId', raceId);
     setSelectedRaceId(raceId);

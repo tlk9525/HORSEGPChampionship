@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { ArrowLeft, CalendarClock, Trash2 } from 'lucide-react';
+import { ArrowLeft, CalendarClock, XCircle } from 'lucide-react';
 import {
   RaceRecord,
-  deleteRace,
+  TournamentRecord,
+  adminRaceAction,
   getRaceBuilder,
+  resetRace,
   updateRace,
 } from '../services/api';
 import { messageToneClasses } from '../utils/messageTone';
@@ -14,17 +16,35 @@ interface EditRacePageProps {
 }
 
 const EDITABLE_RACE_STATUSES = ['registration-open', 'registration-closed'];
+const RESETTABLE_RACE_STATUSES = ['cancelled'];
 
+const raceDateWithinTournamentMessage = (
+  tournament: TournamentRecord | null,
+  raceDate: string
+) => {
+  if (!tournament) return '';
+  if (tournament.startDate && raceDate < tournament.startDate) {
+    return 'Race date must be on or after tournament start date.';
+  }
+  if (tournament.finalDate && raceDate > tournament.finalDate) {
+    return 'Race date must be on or before tournament end date.';
+  }
+  return '';
+};
+
+// Ghi chú: Hàm này đổi thời gian ISO sang định dạng input datetime-local.
 const toDatetimeLocal = (value?: string) => {
   if (!value) return '';
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return '';
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến pad.
   const pad = (part: number) => String(part).padStart(2, '0');
 
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
+// Ghi chú: Hàm này render form chỉnh sửa hoặc hủy race hiện có.
 export default function EditRacePage({
   onNavigate,
 }: EditRacePageProps) {
@@ -33,8 +53,9 @@ export default function EditRacePage({
     'min-h-[54px] w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 outline-none focus:border-[#d4af37]/70 focus:ring-2 focus:ring-[#d4af37]/20 disabled:cursor-not-allowed disabled:opacity-60';
 
   const [editingRace, setEditingRace] = useState<RaceRecord | null>(null);
+  const [editingTournament, setEditingTournament] = useState<TournamentRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -45,6 +66,7 @@ export default function EditRacePage({
     registrationOpensAt: '',
     registrationClosesAt: '',
   });
+  const isResetMode = editingRace?.status === 'cancelled';
 
   useEffect(() => {
     getRaceBuilder()
@@ -56,18 +78,28 @@ export default function EditRacePage({
           return;
         }
 
-        if (!EDITABLE_RACE_STATUSES.includes(race.status)) {
-          setMessage('Only unpublished races can be edited.');
+        if (
+          !EDITABLE_RACE_STATUSES.includes(race.status) &&
+          !RESETTABLE_RACE_STATUSES.includes(race.status)
+        ) {
+          setMessage('Only unpublished races can be edited. Cancelled races can be reset.');
           return;
         }
 
         setEditingRace(race);
+        setEditingTournament(
+          (data.tournaments || []).find((item) => item.id === race.tournamentId) || null
+        );
         setForm({
           raceName: race.name,
-          raceDate: race.date || '',
-          startTime: race.time || '',
-          registrationOpensAt: toDatetimeLocal(race.registrationOpensAt),
-          registrationClosesAt: toDatetimeLocal(race.registrationClosesAt),
+          raceDate: RESETTABLE_RACE_STATUSES.includes(race.status) ? '' : race.date || '',
+          startTime: RESETTABLE_RACE_STATUSES.includes(race.status) ? '' : race.time || '',
+          registrationOpensAt: RESETTABLE_RACE_STATUSES.includes(race.status)
+            ? ''
+            : toDatetimeLocal(race.registrationOpensAt),
+          registrationClosesAt: RESETTABLE_RACE_STATUSES.includes(race.status)
+            ? ''
+            : toDatetimeLocal(race.registrationClosesAt),
         });
       })
       .catch((error) =>
@@ -76,24 +108,96 @@ export default function EditRacePage({
       .finally(() => setIsLoading(false));
   }, [raceId]);
 
-  const handleDelete = () => {
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle cancel.
+  const handleCancelRace = () => {
     if (!raceId) return;
 
     setIsSubmitting(true);
-    deleteRace(raceId)
-      .then(() => {
-        setMessage('Race deleted.');
-        setTimeout(() => onNavigate('admin'), 900);
+    adminRaceAction(raceId, 'cancel-race')
+      .then((result) => {
+        setEditingRace(result.race);
+        setForm((current) => ({
+          ...current,
+          raceDate: '',
+          startTime: '',
+          registrationOpensAt: '',
+          registrationClosesAt: '',
+        }));
+        setMessage('Race cancelled. Enter a new registration window and start time to reset it.');
       })
       .catch((error) =>
-        setMessage(error instanceof Error ? error.message : 'Unable to delete race')
+        setMessage(error instanceof Error ? error.message : 'Unable to cancel race')
       )
       .finally(() => {
         setIsSubmitting(false);
-        setShowDeleteConfirm(false);
+        setShowCancelConfirm(false);
       });
   };
 
+  // Ghi chú: Hàm này reset race đã hủy về trạng thái mở đăng ký với lịch mới.
+  const handleResetRace = () => {
+    setMessage('');
+
+    if (
+      !raceId ||
+      !form.raceDate ||
+      !form.startTime ||
+      !form.registrationOpensAt ||
+      !form.registrationClosesAt
+    ) {
+      setMessage('Please enter the new race date, start time and registration window.');
+      return;
+    }
+
+    const regOpens = new Date(form.registrationOpensAt);
+    const regCloses = new Date(form.registrationClosesAt);
+    const raceStartsAt = new Date(`${form.raceDate}T${form.startTime}`);
+    if (
+      !Number.isFinite(regOpens.getTime()) ||
+      !Number.isFinite(regCloses.getTime()) ||
+      !Number.isFinite(raceStartsAt.getTime())
+    ) {
+      setMessage('Race and registration times must be valid.');
+      return;
+    }
+    if (regOpens >= regCloses) {
+      setMessage('Registration close time must be after open time.');
+      return;
+    }
+    if (regCloses > raceStartsAt) {
+      setMessage('Registration must close before the race starts.');
+      return;
+    }
+    const raceDateError = raceDateWithinTournamentMessage(editingTournament, form.raceDate);
+    if (raceDateError) {
+      setMessage(raceDateError);
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'Reset this cancelled race? Existing registrations and race entries for this race will be cleared.'
+    );
+    if (!confirmed) return;
+
+    setIsSubmitting(true);
+    resetRace(raceId, {
+      date: form.raceDate,
+      time: form.startTime,
+      registrationOpensAt: regOpens.toISOString(),
+      registrationClosesAt: regCloses.toISOString(),
+    })
+      .then((result) => {
+        setEditingRace(result.race);
+        setMessage('Race reset. Registration is open again.');
+        setTimeout(() => onNavigate('admin'), 900);
+      })
+      .catch((error) =>
+        setMessage(error instanceof Error ? error.message : 'Unable to reset race')
+      )
+      .finally(() => setIsSubmitting(false));
+  };
+
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle submit.
   const handleSubmit = () => {
     setMessage('');
 
@@ -126,6 +230,11 @@ export default function EditRacePage({
     }
     if (regCloses > raceStartsAt) {
       setMessage('Registration must close before the race starts.');
+      return;
+    }
+    const raceDateError = raceDateWithinTournamentMessage(editingTournament, form.raceDate);
+    if (raceDateError) {
+      setMessage(raceDateError);
       return;
     }
 
@@ -218,6 +327,7 @@ export default function EditRacePage({
                     placeholder="Race name"
                     className={fieldClass}
                     value={form.raceName}
+                    disabled={isResetMode}
                     onChange={(event) =>
                       setForm({
                         ...form,
@@ -361,6 +471,13 @@ export default function EditRacePage({
                     Race Status
                   </h2>
 
+                  {isResetMode && (
+                    <p className="text-sm text-amber-200/90 mb-5">
+                      Enter a new registration window and race start time to reset this cancelled
+                      race from the beginning.
+                    </p>
+                  )}
+
                   <div className="space-y-3 text-sm text-gray-300 mb-6">
                     <div className="flex justify-between gap-3">
                       <span>Current status</span>
@@ -371,23 +488,25 @@ export default function EditRacePage({
                   </div>
 
                   <button
-                    onClick={handleSubmit}
+                    onClick={isResetMode ? handleResetRace : handleSubmit}
                     disabled={isSubmitting || !editingRace}
                     className="w-full px-8 py-4 bg-[#d4af37] hover:bg-[#b8892d] disabled:opacity-60 rounded-2xl text-white font-bold transition-all"
                   >
                     <CalendarClock className="inline-block w-5 h-5 mr-2" />
-                    {isSubmitting ? 'Saving Changes...' : 'Save Changes'}
+                    {isSubmitting
+                      ? isResetMode ? 'Resetting Race...' : 'Saving Changes...'
+                      : isResetMode ? 'Reset Race' : 'Save Changes'}
                   </button>
 
-                  {editingRace && (
+                  {editingRace && !isResetMode && (
                     <button
                       type="button"
-                      onClick={() => setShowDeleteConfirm(true)}
+                      onClick={() => setShowCancelConfirm(true)}
                       disabled={isSubmitting}
                       className="w-full mt-4 flex items-center justify-center gap-2 px-8 py-4 bg-red-600/90 hover:bg-red-700 disabled:opacity-60 rounded-2xl text-white font-bold transition-all"
                     >
-                      <Trash2 className="w-5 h-5" />
-                      Delete Race
+                      <XCircle className="w-5 h-5" />
+                      Cancel Race
                     </button>
                   )}
                 </div>
@@ -397,35 +516,36 @@ export default function EditRacePage({
         </div>
       </div>
 
-      {showDeleteConfirm && editingRace && (
+      {showCancelConfirm && editingRace && (
         <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-50 p-4">
           <div className="bg-[#12304f] p-8 rounded-3xl w-full max-w-lg border border-red-500/30">
             <div className="flex items-center gap-3 text-red-300 mb-4">
-              <Trash2 className="w-6 h-6" />
-              <h2 className="text-2xl font-black text-white">Delete Race?</h2>
+              <XCircle className="w-6 h-6" />
+              <h2 className="text-2xl font-black text-white">Cancel Race?</h2>
             </div>
 
             <p className="text-gray-300 leading-relaxed">
-              Are you sure you want to delete{' '}
-              <span className="font-bold text-white">{editingRace.name}</span>? This action cannot
-              be undone.
+              Are you sure you want to cancel{' '}
+              <span className="font-bold text-white">{editingRace.name}</span>? The race will stay
+              in the system with a cancelled status. After cancelling, this page will switch to the
+              reset form so you can enter new registration and start times.
             </p>
 
             <div className="flex gap-4 mt-8">
               <button
-                onClick={() => setShowDeleteConfirm(false)}
+                onClick={() => setShowCancelConfirm(false)}
                 className="flex-1 py-4 bg-white/10 rounded-2xl text-white"
               >
-                Cancel
+                Keep Race
               </button>
 
               <button
-                onClick={handleDelete}
+                onClick={handleCancelRace}
                 disabled={isSubmitting}
                 className="flex-1 flex items-center justify-center gap-2 py-4 bg-red-600 hover:bg-red-700 disabled:opacity-60 rounded-2xl text-white font-bold"
               >
-                <Trash2 className="w-5 h-5" />
-                Delete
+                <XCircle className="w-5 h-5" />
+                Cancel Race
               </button>
             </div>
           </div>

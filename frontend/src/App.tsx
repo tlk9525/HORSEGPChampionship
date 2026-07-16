@@ -16,6 +16,7 @@ import {
   roleHome,
 } from './app/routing';
 
+// Ghi chú: Hàm này hiển thị trạng thái chờ khi route đang lazy load.
 const RouteFallback = () => (
   <div className="min-h-screen bg-[#071a2f] pt-24 px-4 text-gray-300">
     <div className="max-w-4xl mx-auto rounded-xl border border-white/10 bg-[#0b223d] p-8">
@@ -24,6 +25,7 @@ const RouteFallback = () => (
   </div>
 );
 
+// Ghi chú: Hàm này là component gốc, quản lý user, route hiện tại và layout chính.
 export default function App() {
   const location = useLocation();
   const routerNavigate = useNavigate();
@@ -33,6 +35,7 @@ export default function App() {
   const [selectedHorse, setSelectedHorse] = useState<HorseRecord | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
 
+  // Ghi chú: Hàm này lấy nghiệp vụ liên quan đến get route context.
   const getRouteContext = () => ({
     selectedTournamentId: sessionStorage.getItem('selectedTournamentId') || '',
     selectedRaceId: sessionStorage.getItem('selectedRaceId') || '',
@@ -68,6 +71,7 @@ export default function App() {
     }
   }, [authChecked, currentPage, currentUser, location.pathname, selectedHorse]);
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến navigate.
   const navigate = (page: string) => {
     const routePage = page as keyof typeof protectedPages;
     if (isProtectedPage(routePage) && !currentUser) {
@@ -83,6 +87,7 @@ export default function App() {
     routerNavigate(pathForPage(page, getRouteContext(), selectedHorse));
   };
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle logout.
   const handleLogout = async () => {
     await logout().catch(() => undefined);
     setCurrentUser(null);

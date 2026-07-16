@@ -20,9 +20,11 @@ interface TournamentDetailsProps {
   onNavigate: (page: string) => void;
 }
 
+// Ghi chú: Hàm này chuẩn hóa số thứ tự race để sắp xếp trong tournament.
 const raceNumberValue = (raceNumber?: string) =>
   Number(String(raceNumber || '').replace(/\D/g, '')) || 999;
 
+// Ghi chú: Hàm này kiểm tra race còn mở đăng ký theo status và hạn đăng ký hay không.
 const raceRegistrationOpen = (race: RaceRecord) => {
   if (race.status !== 'registration-open') return false;
 
@@ -37,6 +39,7 @@ const raceRegistrationOpen = (race: RaceRecord) => {
   return now >= opensAt && now < closesAt;
 };
 
+// Ghi chú: Hàm này render chi tiết tournament cùng danh sách race thuộc tournament.
 export default function TournamentDetails({ onNavigate }: TournamentDetailsProps) {
   const { tournamentId } = useParams();
   const [tournaments, setTournaments] = useState<TournamentRecord[]>([]);
@@ -95,11 +98,13 @@ export default function TournamentDetails({ onNavigate }: TournamentDetailsProps
   const visibleRaces = raceListExpanded ? tournamentRaces : tournamentRaces.slice(0, 4);
   const openRaceCount = tournamentRaces.filter(raceRegistrationOpen).length;
 
+  // Ghi chú: Hàm này mở nghiệp vụ liên quan đến open race.
   const openRace = (raceId: string) => {
     sessionStorage.setItem('selectedRaceId', raceId);
     onNavigate('race-details');
   };
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến horse name.
   const horseName = (horseId: string) =>
     horses.find((horse) => horse.id === horseId)?.name || horseId;
 

@@ -122,6 +122,7 @@ Trạng thái kiểm tra thuộc về từng entry trong cuộc đua.
 
 ```text
 Chờ kiểm tra
+Sẵn sàng cho trọng tài
 Sẵn sàng
 Vắng mặt
 Có sự cố

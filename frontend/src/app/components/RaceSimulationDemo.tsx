@@ -25,6 +25,7 @@ import {
 
 type ReplayStatus = 'ready' | 'running' | 'paused' | 'finished';
 
+// Ghi chú: Hàm này tạo khóa sắp xếp race theo số race hoặc ngày giờ.
 const raceSortValue = (race: RaceRecord) => {
   const scheduledAt = new Date(
     `${race.date || race.raceDate || ''}T${race.time || race.raceTime || '00:00'}`
@@ -33,6 +34,7 @@ const raceSortValue = (race: RaceRecord) => {
   return Number.isFinite(scheduledAt) ? scheduledAt : 0;
 };
 
+// Ghi chú: Hàm này phân tích nghiệp vụ liên quan đến parse finish time seconds.
 const parseFinishTimeSeconds = (value?: string) => {
   if (!value) return Number.NaN;
 
@@ -59,6 +61,7 @@ const parseFinishTimeSeconds = (value?: string) => {
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 };
 
+// Ghi chú: Hàm này kiểm tra trạng thái nghiệp vụ liên quan đến is official replay entry.
 const isOfficialReplayEntry = (entry: RaceEntryRecord) =>
   entry.status === 'approved' &&
   entry.preRaceStatus !== 'absent' &&
@@ -66,6 +69,7 @@ const isOfficialReplayEntry = (entry: RaceEntryRecord) =>
   Number.isFinite(Number(entry.position)) &&
   Boolean(entry.finishTime);
 
+// Ghi chú: Hàm này render màn hình replay/mô phỏng race để xem diễn biến trực quan.
 export default function RaceSimulationDemo() {
   const { raceId } = useParams();
   const routerNavigate = useNavigate();
@@ -141,6 +145,7 @@ export default function RaceSimulationDemo() {
 
   const officialRows = useMemo(
     () => {
+      // Ghi chú: Hàm này sắp xếp nghiệp vụ liên quan đến sort final order.
       const sortFinalOrder = <T extends { positionValue?: number; finishTimeSeconds?: number; liveRank?: number }>(rows: T[]) =>
         [...rows].sort((a, b) => {
           const positionA = Number(a.positionValue || 999);
@@ -256,6 +261,7 @@ export default function RaceSimulationDemo() {
 
     let activeFrameId = 0;
 
+    // Ghi chú: Hàm này tăng tiến nghiệp vụ liên quan đến advance.
     const advance = (timestamp: number) => {
       const previousTimestamp = previousFrameRef.current ?? timestamp;
       const deltaSeconds = Math.min((timestamp - previousTimestamp) / 1000, 0.25);
@@ -304,6 +310,7 @@ export default function RaceSimulationDemo() {
     },
   ];
 
+  // Ghi chú: Hàm này đặt lại nghiệp vụ liên quan đến reset replay.
   const resetReplay = () => {
     setStatus('ready');
     setElapsedSeconds(0);
@@ -323,6 +330,7 @@ export default function RaceSimulationDemo() {
           ? 'Replay complete'
           : 'Play replay';
 
+  // Ghi chú: Hàm này chọn nghiệp vụ liên quan đến select race.
   const selectRace = (nextRaceId: string) => {
     sessionStorage.setItem('selectedRaceId', nextRaceId);
     setSelectedRaceId(nextRaceId);

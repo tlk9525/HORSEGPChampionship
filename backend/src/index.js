@@ -13,6 +13,7 @@ import {
 } from './sqlDb.js';
 import { createApp } from './app.js';
 
+// Ghi chú: Hàm này đọc dữ liệu hiện tại để các route dùng chung một nguồn dữ liệu.
 const getDb = () => readDb();
 
 const app = createApp({

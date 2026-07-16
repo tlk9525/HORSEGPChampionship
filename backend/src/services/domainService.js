@@ -15,18 +15,20 @@ export const jockeyName = (db, userId) =>
     : 'Jockey pending';
 
 // Lấy tên ngựa từ horseId, trả về 'Unknown Horse' nếu không tìm thấy
-export const horseName = (db, horseId) =>
+const horseName = (db, horseId) =>
   db.horses.find((horse) => horse.id === horseId)?.name || 'Unknown Horse';
 
 // Lấy tên cuộc đua từ raceId, trả về 'Unassigned race' nếu không tìm thấy
 export const raceName = (db, raceId) =>
   db.races.find((race) => race.id === raceId)?.name || 'Unassigned race';
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến as lb.
 const asLb = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến horse weight lb.
 const horseWeightLb = (db, horseId) => {
   const horse = db.horses.find((item) => item.id === horseId);
   if (!horse) return null;
@@ -34,6 +36,7 @@ const horseWeightLb = (db, horseId) => {
   return asLb(horse.weightLb);
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến jockey weight lb.
 const jockeyWeightLb = (db, jockeyUserId) => {
   const profile = (db.jockeyProfiles || []).find(
     (item) => item.userId === jockeyUserId
@@ -57,6 +60,7 @@ export const activeTournament = (db) =>
 export const tournamentRaces = (db, tournamentId) =>
   (db.races || []).filter((race) => race.tournamentId === tournamentId);
 
+// Ghi chú: Hàm này kiểm tra trạng thái nghiệp vụ liên quan đến is race registration open.
 export const isRaceRegistrationOpen = (race, at = Date.now()) => {
   if (!race || race.status !== 'registration-open') return false;
 
@@ -78,6 +82,7 @@ export const isRaceRegistrationOpen = (race, at = Date.now()) => {
   );
 };
 
+// Ghi chú: Hàm này lọc dữ liệu đang hoạt động nghiệp vụ liên quan đến active race.
 export const activeRace = (race) =>
   race && !['finished', 'completed', 'cancelled'].includes(race.status);
 
@@ -180,11 +185,13 @@ export const canRefereeRace = (race, user, db) =>
   user?.role === USER_ROLES.ADMIN ||
   raceRefereeIds(db, race).includes(user?.id);
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến text value.
 const textValue = (value, fallback = 'Not provided') => {
   const normalized = String(value ?? '').trim();
   return normalized || fallback;
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến weight value.
 const weightValue = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0
@@ -192,11 +199,13 @@ const weightValue = (value) => {
     : 'Not provided';
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến approval field.
 const approvalField = (label, value) => ({
   label,
   value: textValue(value),
 });
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến race review section.
 const raceReviewSection = (db, raceId) => {
   const race = db.races.find((item) => item.id === raceId);
   if (!race) {
@@ -226,6 +235,7 @@ const raceReviewSection = (db, raceId) => {
   };
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến horse review section.
 const horseReviewSection = (db, horseId) => {
   const horse = db.horses.find((item) => item.id === horseId);
   if (!horse) {
@@ -260,6 +270,7 @@ const horseReviewSection = (db, horseId) => {
   };
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến jockey review section.
 const jockeyReviewSection = (db, jockeyUserId) => {
   const user = db.users.find((item) => item.id === jockeyUserId);
   const profile = (db.jockeyProfiles || []).find(
@@ -279,6 +290,7 @@ const jockeyReviewSection = (db, jockeyUserId) => {
   };
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến owner review section.
 const ownerReviewSection = (db, ownerUserId) => {
   const owner = db.users.find((item) => item.id === ownerUserId);
 
@@ -292,6 +304,7 @@ const ownerReviewSection = (db, ownerUserId) => {
   };
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến approval warnings.
 const approvalWarnings = (db, { horseId, jockeyUserId, raceId } = {}) => {
   const warnings = [];
   const horse = horseId

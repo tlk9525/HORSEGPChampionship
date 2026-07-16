@@ -4,6 +4,7 @@ interface LandingPageProps {
   onNavigate: (page: string) => void;
 }
 
+// Ghi chú: Hàm này render trang giới thiệu đầu tiên của website.
 export default function LandingPage({ onNavigate }: LandingPageProps) {
   return (
     <div className="min-h-screen bg-[#071a2f]">

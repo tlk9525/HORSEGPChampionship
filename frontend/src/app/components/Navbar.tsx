@@ -25,6 +25,7 @@ interface NavbarProps {
   onNavigate: (page: string) => void;
 }
 
+// Ghi chú: Hàm này render thanh điều hướng theo trạng thái đăng nhập và role.
 export default function Navbar({
   currentPage,
   currentUser,
@@ -38,6 +39,7 @@ export default function Navbar({
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
 
+  // Ghi chú: Hàm này tải nghiệp vụ liên quan đến load notifications.
   const loadNotifications = () => {
     if (!currentUser) {
       setNotifications([]);
@@ -66,6 +68,7 @@ export default function Navbar({
   }, [isNotificationsOpen]);
 
   useEffect(() => {
+    // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle click outside.
     const handleClickOutside = (event: MouseEvent) => {
       if (
         notificationsRef.current &&
@@ -82,7 +85,7 @@ export default function Navbar({
 
   const navItems = [
     { name: 'Tournaments', page: 'tournaments', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
-    { name: 'Horses', page: 'horses', roles: ['admin', 'owner'] },
+    { name: 'Horses', page: 'horses', roles: ['owner'] },
     { name: 'Horse Profiles', page: 'horse-profiles', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
     { name: 'Jockey Profiles', page: 'jockey-profiles', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
     { name: 'Jockey Portal', page: 'jockeys', roles: ['jockey'] },
@@ -101,6 +104,7 @@ export default function Navbar({
   const unreadCount = notifications.filter((item) => !item.read).length;
   const visibleNotifications = notifications.slice(0, 6);
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến read notification.
   const readNotification = (notificationId: string) => {
     markNotificationRead(notificationId).then(loadNotifications);
   };

@@ -38,6 +38,7 @@ interface HorseDetailsProps {
   onNavigate: (page: string) => void;
 }
 
+// Ghi chú: Hàm này định dạng giá trị rỗng thành ký hiệu mặc định khi hiển thị.
 const value = (input: string | number | null | undefined, suffix = '') =>
   input === null || input === undefined || input === '' || Number(input) === 0
     ? 'Not set'
@@ -62,6 +63,7 @@ interface RatingTooltipProps {
   payload?: Array<{ payload: RatingHistoryPoint }>;
 }
 
+// Ghi chú: Hàm này chuyển input về số hữu hạn để tránh lỗi biểu đồ và phép tính.
 const toFiniteNumber = (input: number | string | null | undefined) => {
   if (input === null || input === undefined || input === '') return null;
 
@@ -69,9 +71,11 @@ const toFiniteNumber = (input: number | string | null | undefined) => {
   return Number.isFinite(numeric) ? numeric : null;
 };
 
+// Ghi chú: Hàm này định dạng rating thành chuỗi ngắn gọn để hiển thị.
 const formatRating = (input: number) =>
   Number.isInteger(input) ? String(input) : input.toFixed(2);
 
+// Ghi chú: Hàm này định dạng mức tăng giảm rating với dấu cộng/trừ rõ ràng.
 const formatRatingChange = (input: number) => {
   const formatted = formatRating(Math.abs(input));
   if (input > 0) return `+${formatted}`;
@@ -79,6 +83,7 @@ const formatRatingChange = (input: number) => {
   return '0';
 };
 
+// Ghi chú: Hàm này tạo dữ liệu lịch sử rating từ các race entry của ngựa.
 const buildRatingHistory = (entries: RaceEntryRecord[]): RatingHistoryPoint[] =>
   entries
     .filter((entry) => entry.resultStatus === 'official')
@@ -110,6 +115,7 @@ const buildRatingHistory = (entries: RaceEntryRecord[]): RatingHistoryPoint[] =>
         first.entryId.localeCompare(second.entryId)
     );
 
+// Ghi chú: Hàm này render tooltip cho biểu đồ lịch sử rating của ngựa.
 function RatingTooltip({ active, payload }: RatingTooltipProps) {
   if (!active || !payload?.length) return null;
 
@@ -156,6 +162,7 @@ function RatingTooltip({ active, payload }: RatingTooltipProps) {
   );
 }
 
+// Ghi chú: Hàm này render trang chi tiết ngựa cùng lịch sử rating và race entry.
 export default function HorseDetails({
   currentUser,
   horse,

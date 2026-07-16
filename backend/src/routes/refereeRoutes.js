@@ -10,6 +10,7 @@ import { broadcastRaceUpdate } from '../services/liveRaceEvents.js';
 import { createNotification } from '../services/notificationService.js';
 import { recordRaceAction } from '../services/raceAuditService.js';
 
+// Ghi chú: Hàm này chuyển finish time thành mili-giây để so sánh kết quả.
 const finishTimeMs = (value) => {
   const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?$/);
   if (!match) return Number.NaN;
@@ -18,6 +19,7 @@ const finishTimeMs = (value) => {
   return Number(minutes) * 60000 + Number(seconds) * 1000 + Number(fraction.padEnd(3, '0'));
 };
 
+// Ghi chú: Hàm này tạo nhóm route referee routes cho backend.
 export const createRefereeRoutes = (
   getDb,
   writeDb,

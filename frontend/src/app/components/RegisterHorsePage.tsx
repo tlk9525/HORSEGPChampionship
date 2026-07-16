@@ -15,6 +15,7 @@ import {
 import { messageToneClasses } from '../utils/messageTone';
 import { initialHorseRating, officialHorseRating } from '../utils/rating';
 
+// Ghi chú: Hàm này định dạng rating thành chuỗi ngắn gọn để hiển thị.
 const formatRating = (value: number) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return '-';
@@ -27,6 +28,7 @@ interface RegisterHorsePageProps {
   mode?: 'create' | 'edit';
 }
 
+// Ghi chú: Hàm này render form tạo hoặc cập nhật hồ sơ ngựa.
 export default function RegisterHorsePage({
   onNavigate,
   horse,
@@ -57,6 +59,7 @@ export default function RegisterHorsePage({
   const isEdit = mode === 'edit' && Boolean(activeHorse);
   const fieldClass =
     'w-full h-12 px-4 bg-[#071a2f] border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#d4af37]';
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến rating value.
   const ratingValue = (value: string, fallback: number) => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
@@ -143,6 +146,7 @@ export default function RegisterHorsePage({
     setVeterinaryCertificateUrl(activeHorse.veterinaryCertificateUrl || '');
   }, [activeHorse]);
 
+  // Ghi chú: Hàm này gửi nghiệp vụ liên quan đến submit.
   const submit = () => {
     setMessage('');
 

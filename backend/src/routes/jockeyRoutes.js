@@ -15,6 +15,7 @@ import {
   notifyAdmins,
 } from '../services/notificationService.js';
 
+// Ghi chú: Hàm này tạo nhóm route jockey routes cho backend.
 export const createJockeyRoutes = (getDb, writeDb) => {
   const app = new Hono();
 

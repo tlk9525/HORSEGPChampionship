@@ -7,7 +7,7 @@ export const numeric = (value, fallback = 0) => {
 };
 
 // Giới hạn giá trị trong khoảng [min, max]; nếu max <= 0 thì chỉ áp dụng giới hạn dưới
-export const clamp = (value, min, max) => {
+const clamp = (value, min, max) => {
   if (max > 0) return Math.min(max, Math.max(min, value));
   return Math.max(min, value);
 };
@@ -25,6 +25,7 @@ const LEGACY_RACE_CLASS_RATING_RANGES = {
   Open: { min: 0, max: 140 },
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến rating component.
 const ratingComponent = (value, fallback = 75) =>
   clamp(numeric(value, fallback), 0, 100);
 
@@ -39,6 +40,7 @@ export const horseOverallRating = (horse = {}) => {
   return Math.round(speed * 0.35 + stamina * 0.25 + form * 0.3 + health * 0.1);
 };
 
+// Ghi chú: Hàm này lấy rating chính thức của ngựa, ưu tiên giá trị đã lưu từ backend.
 export const officialHorseRating = (horse = {}) => {
   const hasStoredRating =
     horse.overallRating !== null &&
@@ -52,6 +54,7 @@ export const officialHorseRating = (horse = {}) => {
   return Math.round(clamp(rating, 0, 140));
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến race eligibility range.
 export const raceEligibilityRange = (race = {}) => {
   const minFromRace = Number(race.ratingMin);
   const maxFromRace = Number(race.ratingMax);
@@ -73,6 +76,7 @@ export const raceEligibilityRange = (race = {}) => {
   return LEGACY_RACE_CLASS_RATING_RANGES.Open;
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến compute race handicap.
 export const computeRaceHandicap = (horse, race, highestFieldRating) => {
   const rating = officialHorseRating(horse);
   const min = clamp(
@@ -94,6 +98,7 @@ export const computeRaceHandicap = (horse, race, highestFieldRating) => {
   };
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến expected field score.
 const expectedFieldScore = (rating, fieldRatings) => {
   if (fieldRatings.length === 0) return 0.5;
 
@@ -103,6 +108,7 @@ const expectedFieldScore = (rating, fieldRatings) => {
   return scores.reduce((total, score) => total + score, 0) / scores.length;
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến rated field factor.
 const ratedFieldFactor = (fieldSize) => {
   if (fieldSize >= 8) return 1;
   if (fieldSize >= 6) return 0.75;
@@ -110,9 +116,11 @@ const ratedFieldFactor = (fieldSize) => {
   return 0;
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến round rating change.
 const roundRatingChange = (value) =>
   value < 0 ? -Math.round(Math.abs(value)) : Math.round(value);
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến rating snapshot value.
 const ratingSnapshotValue = (entry) => {
   if (
     entry?.ratingSnapshot === null ||
