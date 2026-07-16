@@ -66,7 +66,7 @@ export default function RaceDetails() {
   const [entries, setEntries] = useState<RaceEntryRecord[]>([]);
   const [horses, setHorses] = useState<HorseRecord[]>([]);
   const [jockeyProfiles, setJockeyProfiles] = useState<JockeyProfileRecord[]>([]);
-  const [maxRaceFieldSize, setMaxRaceFieldSize] = useState(10);
+  const [maxRaceFieldSize, setMaxRaceFieldSize] = useState(0);
   const [selectedRaceId, setSelectedRaceId] = useState(
     raceId || sessionStorage.getItem('selectedRaceId') || ''
   );
@@ -86,7 +86,7 @@ export default function RaceDetails() {
         setEntries(data.raceEntries || []);
         setHorses(data.horses || []);
         setJockeyProfiles(data.jockeyProfiles || []);
-        setMaxRaceFieldSize(data.limits?.maxRaceFieldSize || 10);
+        setMaxRaceFieldSize(data.limits?.maxRaceFieldSize ?? 0);
         setSelectedRaceId((current) => {
           const next = raceId || current;
 

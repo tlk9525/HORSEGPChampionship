@@ -90,6 +90,17 @@ const ensureRuntimeSchema = async () => {
       await getPool().query(
         'ALTER TABLE "raceEntries" ADD COLUMN IF NOT EXISTS "incidentReason" TEXT'
       );
+      await getPool().query(
+        `CREATE TABLE IF NOT EXISTS "systemSettings" (
+          "key" VARCHAR(128) PRIMARY KEY,
+          "value" TEXT NOT NULL,
+          "updatedBy" VARCHAR(64),
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT "fk_system_settings_updated_by"
+            FOREIGN KEY ("updatedBy") REFERENCES "users" ("id")
+            ON DELETE SET NULL
+        )`
+      );
     })().catch((error) => {
       runtimeSchemaPromise = undefined;
       throw error;
@@ -174,6 +185,7 @@ export const readDb = async () => {
     refereeReports,
     notifications,
     sessions,
+    systemSettings,
   ] = await Promise.all([
     selectAll('users', [{ column: 'id' }]),
     selectAll('tournaments', [{ column: 'id' }]),
@@ -222,6 +234,7 @@ export const readDb = async () => {
       { column: 'createdAt', direction: 'DESC' },
       { column: 'token' },
     ]),
+    selectAll('systemSettings', [{ column: 'key' }]),
   ]);
 
   const racesWithAssignments = races.map((race) => {
@@ -279,6 +292,7 @@ export const readDb = async () => {
     raceActionLogs,
     refereeReports,
     sessions,
+    systemSettings,
   };
 
   dbBaselines.set(db, structuredClone(db));
@@ -383,7 +397,7 @@ export const writeDb = async (db) => {
     (baseline.users || []).map((user) => [user.id, user])
   );
   // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến write rows.
-  const writeRows = async (tableName, columns, rows = []) => {
+  const writeRows = async (tableName, columns, rows = [], keyColumn) => {
     persistedRows.set(tableName, rows);
     await upsertChangedRows(
       client,
@@ -391,7 +405,7 @@ export const writeDb = async (db) => {
       columns,
       rows,
       baseline[tableName] || [],
-      tableName === 'sessions' ? 'token' : 'id'
+      keyColumn || (tableName === 'sessions' ? 'token' : 'id')
     );
   };
 
@@ -744,6 +758,13 @@ export const writeDb = async (db) => {
         createdAt: session.createdAt || nowIso(),
         expiresAt: session.expiresAt || addDaysIso(session.createdAt, SESSION_DAYS),
       }))
+    );
+
+    await writeRows(
+      'systemSettings',
+      ['key', 'value', 'updatedBy', 'updatedAt'],
+      db.systemSettings || [],
+      'key'
     );
 
     for (const tableName of tableDeleteOrder) {

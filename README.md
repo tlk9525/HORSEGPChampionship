@@ -353,6 +353,7 @@ npm run check
 | `VITE_API_URL` | `http://127.0.0.1:4000/api` | API URL cho frontend |
 | `MAX_OWNER_HORSES` | `10` | Số ngựa tối đa của owner |
 | `MAX_RACE_FIELD_SIZE` | `10` | Số entry tối đa của race |
+| `MIN_READIED_PARTICIPANTS` | `5` | Số ngựa tối thiểu phải được referee đánh dấu Ready trước khi start race |
 | `MAX_TOURNAMENT_RACES` | `10` | Số race tối đa trong một giải |
 | `SESSION_DAYS` | `7` | Thời hạn session |
 | `SESSION_COOKIE_NAME` | `horse-racing-session` | Tên cookie đăng nhập |

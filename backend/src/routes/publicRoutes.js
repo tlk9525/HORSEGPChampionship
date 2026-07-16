@@ -1,8 +1,5 @@
 import { Hono } from 'hono';
 import {
-  MAX_OWNER_HORSES,
-  MAX_RACE_FIELD_SIZE,
-  MAX_TOURNAMENT_RACES,
   PUBLIC_RACE_STATUSES,
   USER_ROLES,
   FRONTEND_URL,
@@ -15,6 +12,7 @@ import {
   raceRefereeIds,
 } from '../services/domainService.js';
 import { streamRaceUpdates } from '../services/liveRaceEvents.js';
+import { systemSettingsFromDb } from '../services/systemSettingsService.js';
 
 const publicRaceStatuses = new Set(PUBLIC_RACE_STATUSES);
 
@@ -129,6 +127,7 @@ export const createPublicRoutes = (getDb) => {
     const db = await getDb();
     const user = await authenticate(c.req.raw, db);
     const raceEntries = visibleRaceEntries(db, user);
+    const settings = systemSettingsFromDb(db);
 
     return c.json({
       tournaments: db.tournaments,
@@ -146,10 +145,14 @@ export const createPublicRoutes = (getDb) => {
         ? (db.notifications || []).filter((n) => n.userId === user.id)
         : [],
       limits: {
-        maxOwnerHorses: MAX_OWNER_HORSES,
-        maxRaceFieldSize: MAX_RACE_FIELD_SIZE,
-        maxRacesPerTournament: MAX_TOURNAMENT_RACES,
+        maxOwnerHorses: settings.maxOwnerHorses,
+        maxRaceFieldSize: settings.maxHorsesPerRace,
+        minReadiedParticipants: settings.minReadiedParticipants,
+        maxRacesPerTournament: settings.maxRacesPerTournament,
+        defaultDistanceMeters: settings.defaultDistanceMeters,
+        closeRegistrationHours: settings.closeRegistrationHours,
       },
+      systemSettings: settings,
     });
   });
 
