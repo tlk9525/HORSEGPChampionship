@@ -7,6 +7,7 @@ export interface AuthUser {
   role: UserRole;
   status: 'pending' | 'active' | 'rejected';
   emailVerifiedAt?: string | null;
+  status: 'pending' | 'active' | 'approved' | 'rejected' | 'suspended' | 'locked';
 }
 
 export interface ApprovalItem {
@@ -142,7 +143,34 @@ export interface TournamentRecord {
 export interface SystemLimits {
   maxOwnerHorses: number;
   maxRaceFieldSize: number;
+  minReadiedParticipants: number;
   maxRacesPerTournament: number;
+  defaultDistanceMeters: number;
+  closeRegistrationHours: number;
+}
+
+export interface SystemSettings {
+  maxOwnerHorses: number;
+  defaultDistanceMeters: number;
+  maxHorsesPerRace: number;
+  minReadiedParticipants: number;
+  maxRacesPerTournament: number;
+  closeRegistrationHours: number;
+  autoPublishResults: boolean;
+  requireOwnerApproval: boolean;
+  requireJockeyApproval: boolean;
+  requireRefereeApproval: boolean;
+  allowSelfRegistration: boolean;
+  notifyHorseRegistration: boolean;
+  notifyJockeyRegistration: boolean;
+  notifyRaceResults: boolean;
+  notifyAdmins: boolean;
+  notifyReferees: boolean;
+  notifyOwners: boolean;
+  notifyJockeys: boolean;
+  maintenanceMode: boolean;
+  auditSettingsChanges: boolean;
+  archiveCompletedAfterDays: number;
 }
 
 export interface RaceEntryRecord {
@@ -162,10 +190,12 @@ export interface RaceEntryRecord {
   preRaceStatus: string;
   disqualified: boolean;
   resultStatus?: string;
+  resultOutcome?: 'finished' | 'dnf' | 'fell' | 'injured' | 'disqualified';
   position?: number | null;
   finishTime?: string;
   createdAt?: string;
   notes?: string;
+  incidentReason?: string;
   violationNotes?: string;
   horseName?: string;
   jockeyName?: string;
@@ -253,6 +283,7 @@ export interface BootstrapPayload {
   users: AuthUser[];
   notifications: NotificationItem[];
   limits: SystemLimits;
+  systemSettings: SystemSettings;
 }
 
 const API_URL = import.meta.env.PROD
@@ -391,6 +422,35 @@ export const getBootstrap = async ({ force = false } = {}) => {
 // Lấy danh sách các mục đang chờ phê duyệt (admin)
 export const getApprovals = async () =>
   request<{ approvals: ApprovalItem[] }>('/admin/approvals');
+
+export const getUsers = async () =>
+  request<{ users: AuthUser[] }>('/admin/users');
+
+export const getSystemSettings = async () =>
+  request<{ settings: SystemSettings }>('/admin/settings');
+
+export const updateSystemSettings = async (settings: Partial<SystemSettings>) =>
+  request<{ settings: SystemSettings }>('/admin/settings', {
+    method: 'PATCH',
+    body: JSON.stringify(settings),
+  });
+
+export const updateUser = async (
+  userId: string,
+  user: {
+    role: UserRole;
+    status: AuthUser['status'];
+  }
+) =>
+  request<{ user: AuthUser; users: AuthUser[] }>(`/admin/users/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(user),
+  });
+
+export const disableUser = async (userId: string) =>
+  request<{ user: AuthUser; users: AuthUser[] }>(`/admin/users/${userId}`, {
+    method: 'DELETE',
+  });
 
 // Phê duyệt hoặc từ chối một yêu cầu cụ thể (ngựa, tài khoản, đăng ký race, pairing)
 export const decideApproval = async (
@@ -596,6 +656,8 @@ export const getRaceBuilder = async () =>
     races: RaceRecord[];
     referees: RaceBuilderReferee[];
     maxRacesPerTournament: number;
+    defaultDistanceMeters: number;
+    closeRegistrationHours: number;
   }>('/admin/race-builder');
 
 // Tạo một cuộc đua mới trong giải đấu (admin)
@@ -704,9 +766,11 @@ export const markRaceEntryReadiness = async (
 export const recordRaceResult = async (
   entryId: string,
   result: {
+    resultOutcome?: 'finished' | 'dnf' | 'fell' | 'injured' | 'disqualified';
     position: string | number;
     finishTime: string;
     notes?: string;
+    incidentReason?: string;
     violationNotes?: string;
   }
 ) =>

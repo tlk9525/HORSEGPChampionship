@@ -91,6 +91,23 @@ const ensureRuntimeSchema = async () => {
           ADD COLUMN IF NOT EXISTS "emailVerificationExpiresAt" TIMESTAMPTZ,
           ADD COLUMN IF NOT EXISTS "emailVerificationSentAt" TIMESTAMPTZ
       `);
+      await getPool().query(
+        'ALTER TABLE "raceEntries" ADD COLUMN IF NOT EXISTS "resultOutcome" VARCHAR(32) NOT NULL DEFAULT \'finished\''
+      );
+      await getPool().query(
+        'ALTER TABLE "raceEntries" ADD COLUMN IF NOT EXISTS "incidentReason" TEXT'
+      );
+      await getPool().query(
+        `CREATE TABLE IF NOT EXISTS "systemSettings" (
+          "key" VARCHAR(128) PRIMARY KEY,
+          "value" TEXT NOT NULL,
+          "updatedBy" VARCHAR(64),
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT "fk_system_settings_updated_by"
+            FOREIGN KEY ("updatedBy") REFERENCES "users" ("id")
+            ON DELETE SET NULL
+        )`
+      );
     })().catch((error) => {
       runtimeSchemaPromise = undefined;
       throw error;
@@ -175,6 +192,7 @@ export const readDb = async () => {
     refereeReports,
     notifications,
     sessions,
+    systemSettings,
   ] = await Promise.all([
     selectAll('users', [{ column: 'id' }]),
     selectAll('tournaments', [{ column: 'id' }]),
@@ -223,6 +241,7 @@ export const readDb = async () => {
       { column: 'createdAt', direction: 'DESC' },
       { column: 'token' },
     ]),
+    selectAll('systemSettings', [{ column: 'key' }]),
   ]);
 
   const racesWithAssignments = races.map((race) => {
@@ -280,6 +299,7 @@ export const readDb = async () => {
     raceActionLogs,
     refereeReports,
     sessions,
+    systemSettings,
   };
 
   dbBaselines.set(db, structuredClone(db));
@@ -384,7 +404,7 @@ export const writeDb = async (db) => {
     (baseline.users || []).map((user) => [user.id, user])
   );
   // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến write rows.
-  const writeRows = async (tableName, columns, rows = []) => {
+  const writeRows = async (tableName, columns, rows = [], keyColumn) => {
     persistedRows.set(tableName, rows);
     await upsertChangedRows(
       client,
@@ -392,7 +412,7 @@ export const writeDb = async (db) => {
       columns,
       rows,
       baseline[tableName] || [],
-      tableName === 'sessions' ? 'token' : 'id'
+      keyColumn || (tableName === 'sessions' ? 'token' : 'id')
     );
   };
 
@@ -672,9 +692,11 @@ export const writeDb = async (db) => {
         'preRaceStatus',
         'disqualified',
         'resultStatus',
+        'resultOutcome',
         'position',
         'finishTime',
         'notes',
+        'incidentReason',
         'violationNotes',
         'createdAt',
       ],
@@ -690,9 +712,11 @@ export const writeDb = async (db) => {
         preRaceStatus: entry.preRaceStatus || 'pending',
         disqualified: entry.disqualified ?? false,
         resultStatus: entry.resultStatus || 'draft',
+        resultOutcome: entry.resultOutcome || 'finished',
         position: entry.position ?? null,
         finishTime: entry.finishTime || '',
         notes: entry.notes || '',
+        incidentReason: entry.incidentReason || '',
         violationNotes: entry.violationNotes || '',
         invitationId: entry.invitationId || null,
         createdAt: entry.createdAt || null,
@@ -756,6 +780,13 @@ export const writeDb = async (db) => {
       }))
     );
 
+    await writeRows(
+      'systemSettings',
+      ['key', 'value', 'updatedBy', 'updatedAt'],
+      db.systemSettings || [],
+      'key'
+    );
+
     for (const tableName of tableDeleteOrder) {
       const keyColumn = tableName === 'sessions' ? 'token' : 'id';
       const currentKeys = new Set(
@@ -798,7 +829,10 @@ export const persistRaceEntryResult = async (entry, report = null) => {
            "finishTime" = $3,
            "notes" = $4,
            "violationNotes" = $5,
-           "resultStatus" = $6
+           "resultStatus" = $6,
+           "resultOutcome" = $7,
+           "incidentReason" = $8,
+           "disqualified" = $9
        WHERE "id" = $1`,
       [
         entry.id,
@@ -807,6 +841,9 @@ export const persistRaceEntryResult = async (entry, report = null) => {
         entry.notes || '',
         entry.violationNotes || '',
         entry.resultStatus || 'draft',
+        entry.resultOutcome || 'finished',
+        entry.incidentReason || '',
+        Boolean(entry.disqualified),
       ]
     );
 
@@ -937,19 +974,23 @@ export const persistRefereeRaceAction = async ({
          SET "preRaceStatus" = $2,
              "disqualified" = $3,
              "resultStatus" = $4,
-             "position" = $5,
-             "finishTime" = $6,
-             "notes" = $7,
-             "violationNotes" = $8
+             "resultOutcome" = $5,
+             "position" = $6,
+             "finishTime" = $7,
+             "notes" = $8,
+             "incidentReason" = $9,
+             "violationNotes" = $10
          WHERE "id" = $1`,
         [
           entry.id,
           entry.preRaceStatus || 'pending',
           Boolean(entry.disqualified),
           entry.resultStatus || 'draft',
+          entry.resultOutcome || 'finished',
           entry.position ?? null,
           entry.finishTime || '',
           entry.notes || '',
+          entry.incidentReason || '',
           entry.violationNotes || '',
         ]
       );
@@ -1068,10 +1109,12 @@ export const persistAdminRaceAction = async ({
              "disqualified" = $8,
              "status" = $9,
              "resultStatus" = $10,
-             "position" = $11,
-             "finishTime" = $12,
-             "notes" = $13,
-             "violationNotes" = $14
+             "resultOutcome" = $11,
+             "position" = $12,
+             "finishTime" = $13,
+             "notes" = $14,
+             "incidentReason" = $15,
+             "violationNotes" = $16
          WHERE "id" = $1`,
         [
           entry.id,
@@ -1084,9 +1127,11 @@ export const persistAdminRaceAction = async ({
           Boolean(entry.disqualified),
           entry.status || 'approved',
           entry.resultStatus || 'draft',
+          entry.resultOutcome || 'finished',
           entry.position ?? null,
           entry.finishTime || '',
           entry.notes || '',
+          entry.incidentReason || '',
           entry.violationNotes || '',
         ]
       );
@@ -1234,6 +1279,40 @@ export const persistRegisteredUser = async (user, notifications = []) => {
         ]
       );
     }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+// Lưu cấu hình hệ thống bằng transaction nhỏ, tránh ghi lại toàn bộ database.
+export const persistSystemSettings = async (settingsRows = []) => {
+  await ensureRuntimeSchema();
+
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+
+    for (const setting of settingsRows) {
+      await client.query(
+        `INSERT INTO "systemSettings" ("key", "value", "updatedBy", "updatedAt")
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT ("key") DO UPDATE SET
+           "value" = EXCLUDED."value",
+           "updatedBy" = EXCLUDED."updatedBy",
+           "updatedAt" = EXCLUDED."updatedAt"`,
+        [
+          setting.key,
+          setting.value,
+          setting.updatedBy || null,
+          setting.updatedAt || nowIso(),
+        ]
+      );
+    }
+
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');

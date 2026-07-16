@@ -1,6 +1,7 @@
 import type { RaceRecord, RaceReplayRunner } from '../services/api';
 
 export type RaceSurface = 'Turf' | 'Dirt' | 'Synthetic';
+export type RaceSimulationOutcome = 'finished' | 'dnf' | 'fell' | 'injured' | 'disqualified';
 
 export interface RaceSimulationEntryInput {
   id: string;
@@ -14,6 +15,7 @@ export interface RaceSimulationEntryInput {
   horseSpeedRating?: number | null;
   horseStaminaRating?: number | null;
   horseFormRating?: number | null;
+  horseHealthRating?: number | null;
   horseOverallRating?: number | null;
 }
 
@@ -36,6 +38,11 @@ export interface RaceSimulationRunner {
   form: number;
   phase: number;
   performanceScore: number;
+  simulationOutcome: RaceSimulationOutcome;
+  incidentReason: string;
+  nonFinishRisk: number;
+  distanceMeters: number;
+  incidentDistanceMeters?: number;
   finishTimeSeconds: number;
   checkpoints: RaceCheckpoint[];
 }
@@ -51,6 +58,9 @@ export interface RaceSimulationPlan {
 interface RaceDisplayRunnerLike {
   progress?: number;
   finishTimeSeconds?: number;
+  simulationOutcome?: RaceSimulationOutcome;
+  incidentDistanceMeters?: number;
+  distanceMeters?: number;
   lane?: number | null;
   displayGate?: number | null;
   entryId?: string;
@@ -75,6 +85,24 @@ const silkPalette = [
   '#14b8a6',
   '#f472b6',
 ];
+
+const simulationOutcomeLabels: Record<RaceSimulationOutcome, string> = {
+  finished: 'Finished',
+  dnf: 'DNF',
+  fell: 'Fell',
+  injured: 'Injured',
+  disqualified: 'DQ',
+};
+
+const simulationIncidentReasons: Record<Exclude<RaceSimulationOutcome, 'finished'>, string> = {
+  dnf: 'Simulator: did not finish after losing momentum.',
+  fell: 'Simulator: horse fell during the race.',
+  injured: 'Simulator: pulled up because of possible injury.',
+  disqualified: 'Simulator: disqualified for a race-rule violation.',
+};
+
+export const raceSimulationOutcomeLabel = (outcome?: RaceSimulationOutcome) =>
+  simulationOutcomeLabels[outcome || 'finished'];
 
 // Ghi chú: Hàm này giới hạn một giá trị số trong khoảng min và max.
 export const clamp = (value: number, min: number, max: number) =>
@@ -146,6 +174,52 @@ const shuffleValues = <T,>(values: T[], seed: number) => {
 const numericRating = (value: number | null | undefined, fallback = 75) =>
   Number.isFinite(Number(value)) ? Number(value) : fallback;
 
+const buildNonFinishRisk = ({
+  health,
+  stamina,
+  form,
+  carriedWeight,
+  distanceMeters,
+  surface,
+}: {
+  health: number;
+  stamina: number;
+  form: number;
+  carriedWeight: number;
+  distanceMeters: number;
+  surface: RaceSurface;
+}) => {
+  const healthRisk = clamp((82 - health) * 0.00045, 0, 0.025);
+  const staminaRisk = clamp((80 - stamina) * 0.00032, 0, 0.018);
+  const formRisk = clamp((76 - form) * 0.00016, 0, 0.008);
+  const distanceRisk = clamp((distanceMeters - 1400) / 100000, 0, 0.018);
+  const surfaceRisk = surface === 'Dirt' ? 0.006 : surface === 'Synthetic' ? 0.003 : 0;
+  const weightRisk = clamp((carriedWeight - 124) * 0.00035, 0, 0.006);
+
+  return clamp(0.018 + healthRisk + staminaRisk + formRisk + distanceRisk + surfaceRisk + weightRisk, 0.006, 0.095);
+};
+
+const pickNonFinishOutcome = (
+  random: () => number,
+  risk: number,
+  health: number,
+  stamina: number
+): RaceSimulationOutcome => {
+  if (random() >= risk) return 'finished';
+
+  const healthPressure = clamp((78 - health) / 40, 0, 1);
+  const staminaPressure = clamp((78 - stamina) / 40, 0, 1);
+  const fellThreshold = 0.2 + healthPressure * 0.08;
+  const injuredThreshold = fellThreshold + 0.2 + healthPressure * 0.18;
+  const dnfThreshold = injuredThreshold + 0.48 + staminaPressure * 0.12;
+  const roll = random();
+
+  if (roll < fellThreshold) return 'fell';
+  if (roll < injuredThreshold) return 'injured';
+  if (roll < dnfThreshold) return 'dnf';
+  return 'disqualified';
+};
+
 // Ghi chú: Hàm này tạo thứ tự cổng xuất phát hiển thị cho các runner.
 const buildVisualGateOrder = (seed: number, fieldSize: number) =>
   shuffleValues(
@@ -180,6 +254,7 @@ export const createRaceSimulationPlan = ({
     (a, b) => Number(a.lane || 999) - Number(b.lane || 999)
   );
   const visualGates = buildVisualGateOrder(seed, sortedEntries.length);
+  const safeDistanceMeters = Math.max(400, distanceMeters);
 
   const scoredRunners = sortedEntries.map((entry, index) => {
     const rating = numericRating(
@@ -190,6 +265,7 @@ export const createRaceSimulationPlan = ({
     const speed = numericRating(entry.horseSpeedRating, rating);
     const stamina = numericRating(entry.horseStaminaRating, rating);
     const form = numericRating(entry.horseFormRating, rating);
+    const health = numericRating(entry.horseHealthRating, numericRating(entry.horseOverallRating, rating));
     const horseWeightFactor = numericRating(entry.horseWeightLb, 1000) > 0
       ? (numericRating(entry.horseWeightLb, 1000) - 1000) * 0.002
       : 0;
@@ -205,6 +281,28 @@ export const createRaceSimulationPlan = ({
       form * 0.15 -
       weightPenalty +
       raceVariance;
+    const nonFinishRisk = buildNonFinishRisk({
+      health,
+      stamina,
+      form,
+      carriedWeight,
+      distanceMeters: safeDistanceMeters,
+      surface,
+    });
+    const simulationOutcome = pickNonFinishOutcome(random, nonFinishRisk, health, stamina);
+    const incidentDistanceMeters = simulationOutcome === 'finished'
+      ? undefined
+      : Math.round(
+        safeDistanceMeters *
+          clamp(
+            0.18 +
+              random() * 0.72 +
+              (simulationOutcome === 'dnf' ? 0.08 : 0) -
+              (simulationOutcome === 'fell' ? 0.06 : 0),
+            0.12,
+            0.94
+          )
+      );
 
     return {
       entryId: entry.id,
@@ -220,6 +318,14 @@ export const createRaceSimulationPlan = ({
       form,
       phase: random() * Math.PI * 2,
       performanceScore,
+      simulationOutcome,
+      incidentReason:
+        simulationOutcome === 'finished'
+          ? ''
+          : simulationIncidentReasons[simulationOutcome],
+      nonFinishRisk,
+      distanceMeters: safeDistanceMeters,
+      incidentDistanceMeters,
       finishTimeSeconds: 0,
       checkpoints: [] as RaceCheckpoint[],
     };
@@ -238,15 +344,20 @@ export const createRaceSimulationPlan = ({
   const fieldAverageScore =
     scoredRunners.reduce((total, runner) => total + runner.performanceScore, 0) /
     scoredRunners.length;
-  const safeDistanceMeters = Math.max(400, distanceMeters);
   const baseFinishTime = safeDistanceMeters / baseSpeedBySurface[surface];
   const checkpointSize = safeDistanceMeters <= 1200 ? 50 : 100;
 
   scoredRunners.forEach((runner) => {
+    const runnerDistanceMeters = runner.incidentDistanceMeters || safeDistanceMeters;
     const abilitySpeedFactor =
       1 + (runner.performanceScore - fieldAverageScore) * 0.004;
     const desiredFinishTime =
       baseFinishTime / abilitySpeedFactor + (random() - 0.5) * 0.12;
+    const desiredEndTime =
+      runner.simulationOutcome === 'finished'
+        ? desiredFinishTime
+        : desiredFinishTime *
+          clamp((runnerDistanceMeters / safeDistanceMeters) + 0.03 + random() * 0.08, 0.22, 0.98);
     const rawCheckpoints: RaceCheckpoint[] = [
       { distanceMeters: 0, timeSeconds: 0 },
     ];
@@ -254,10 +365,10 @@ export const createRaceSimulationPlan = ({
 
     for (
       let checkpointDistance = checkpointSize;
-      checkpointDistance <= safeDistanceMeters;
+      checkpointDistance <= runnerDistanceMeters;
       checkpointDistance += checkpointSize
     ) {
-      const segmentEnd = Math.min(checkpointDistance, safeDistanceMeters);
+      const segmentEnd = Math.min(checkpointDistance, runnerDistanceMeters);
       const segmentStart = rawCheckpoints.at(-1)?.distanceMeters ?? 0;
       const segmentDistance = segmentEnd - segmentStart;
       const raceProgress = (segmentStart + segmentDistance / 2) / safeDistanceMeters;
@@ -291,18 +402,18 @@ export const createRaceSimulationPlan = ({
       });
     }
 
-    if (rawCheckpoints.at(-1)?.distanceMeters !== safeDistanceMeters) {
+    if (rawCheckpoints.at(-1)?.distanceMeters !== runnerDistanceMeters) {
       const segmentStart = rawCheckpoints.at(-1)?.distanceMeters ?? 0;
       rawElapsed +=
-        (safeDistanceMeters - segmentStart) / baseSpeedBySurface[surface];
+        (runnerDistanceMeters - segmentStart) / baseSpeedBySurface[surface];
       rawCheckpoints.push({
-        distanceMeters: safeDistanceMeters,
+        distanceMeters: runnerDistanceMeters,
         timeSeconds: rawElapsed,
       });
     }
 
-    const timeScale = desiredFinishTime / rawElapsed;
-    runner.finishTimeSeconds = desiredFinishTime;
+    const timeScale = desiredEndTime / rawElapsed;
+    runner.finishTimeSeconds = desiredEndTime;
     runner.checkpoints = rawCheckpoints.map((checkpoint) => ({
       ...checkpoint,
       timeSeconds: checkpoint.timeSeconds * timeScale,
@@ -322,11 +433,21 @@ export const createRaceSimulationPlan = ({
 
 // Ghi chú: Hàm này tính vị trí tiến độ của runner tại một mốc thời gian replay.
 export const progressForRunner = (
-  runner: Pick<RaceSimulationRunner, 'finishTimeSeconds' | 'checkpoints'>,
+  runner: Pick<RaceSimulationRunner, 'finishTimeSeconds' | 'checkpoints'> & {
+    distanceMeters?: number;
+    incidentDistanceMeters?: number;
+    simulationOutcome?: RaceSimulationOutcome;
+  },
   elapsedSeconds: number
 ) => {
   if (elapsedSeconds <= 0) return 0;
-  if (elapsedSeconds >= runner.finishTimeSeconds) return 1;
+  const totalDistanceMeters =
+    runner.distanceMeters || runner.checkpoints.at(-1)?.distanceMeters || 1;
+  const terminalProgress = runner.simulationOutcome && runner.simulationOutcome !== 'finished'
+    ? clamp((runner.incidentDistanceMeters || runner.checkpoints.at(-1)?.distanceMeters || 0) / totalDistanceMeters, 0, 1)
+    : 1;
+
+  if (elapsedSeconds >= runner.finishTimeSeconds) return terminalProgress;
 
   const nextCheckpointIndex = runner.checkpoints.findIndex(
     (checkpoint) => checkpoint.timeSeconds >= elapsedSeconds
@@ -347,7 +468,7 @@ export const progressForRunner = (
     (nextCheckpoint.distanceMeters - previousCheckpoint.distanceMeters) *
       checkpointProgress;
 
-  return clamp(currentDistance / runner.checkpoints.at(-1)!.distanceMeters, 0, 1);
+  return clamp(currentDistance / totalDistanceMeters, 0, terminalProgress);
 };
 
 // Ghi chú: Hàm này sắp xếp runner để hiển thị theo thứ hạng hiện tại trên đường đua.

@@ -28,7 +28,9 @@ import {
   deleteTournament,
   getApprovals,
   getBootstrap,
+  getSystemSettings,
   updateTournament,
+  updateSystemSettings,
 } from '../services/api';
 import { statusLabel } from '../utils/domain';
 import { messageToneClasses } from '../utils/messageTone';
@@ -85,8 +87,10 @@ const raceStatusBadgeClass = (status: string) => {
 type SystemSettingsTab = 'race' | 'approval' | 'notifications' | 'system';
 
 interface SystemSettingsState {
+  maxOwnerHorses: number;
   defaultDistanceMeters: number;
   maxHorsesPerRace: number;
+  minReadiedParticipants: number;
   maxRacesPerTournament: number;
   closeRegistrationHours: number;
   autoPublishResults: boolean;
@@ -124,8 +128,9 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   const [races, setRaces] = useState<RaceRecord[]>([]);
   const [pairings, setPairings] = useState<HorseRaceRegistration[]>([]);
   const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
-  const [maxRaceFieldSize, setMaxRaceFieldSize] = useState(10);
-  const [maxRacesPerTournament, setMaxRacesPerTournament] = useState(10);
+  const [maxRaceFieldSize, setMaxRaceFieldSize] = useState(0);
+  const [minReadiedParticipants, setMinReadiedParticipants] = useState(0);
+  const [maxRacesPerTournament, setMaxRacesPerTournament] = useState(0);
   const [showCreateTournament, setShowCreateTournament] = useState(false);
   const [tournamentMessage, setTournamentMessage] = useState('');
   const [editTournament, setEditTournament] = useState<TournamentRecord | null>(null);
@@ -136,9 +141,11 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   const [systemSettingsTab, setSystemSettingsTab] = useState<SystemSettingsTab>('race');
   const [systemSettingsMessage, setSystemSettingsMessage] = useState('');
   const [systemSettings, setSystemSettings] = useState<SystemSettingsState>({
+    maxOwnerHorses: 0,
     defaultDistanceMeters: 1600,
-    maxHorsesPerRace: 10,
-    maxRacesPerTournament: 10,
+    maxHorsesPerRace: 0,
+    minReadiedParticipants: 0,
+    maxRacesPerTournament: 0,
     closeRegistrationHours: 24,
     autoPublishResults: false,
     requireOwnerApproval: true,
@@ -192,13 +199,23 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
         setRaces(data.races || []);
         setPairings(data.horseRaceRegistrations || []);
         setRaceEntries(data.raceEntries || []);
-        setMaxRaceFieldSize(data.limits?.maxRaceFieldSize || 10);
-        setMaxRacesPerTournament(data.limits?.maxRacesPerTournament || 10);
+        const nextSettings = data.systemSettings;
+        const nextMaxRaceFieldSize =
+          nextSettings?.maxHorsesPerRace ?? data.limits?.maxRaceFieldSize ?? 0;
+        const nextMinReadiedParticipants =
+          nextSettings?.minReadiedParticipants ?? data.limits?.minReadiedParticipants ?? 0;
+        const nextMaxRacesPerTournament =
+          nextSettings?.maxRacesPerTournament ?? data.limits?.maxRacesPerTournament ?? 0;
+
+        setMaxRaceFieldSize(nextMaxRaceFieldSize);
+        setMinReadiedParticipants(nextMinReadiedParticipants);
+        setMaxRacesPerTournament(nextMaxRacesPerTournament);
         setSystemSettings((current) => ({
           ...current,
-          maxHorsesPerRace: data.limits?.maxRaceFieldSize || current.maxHorsesPerRace,
-          maxRacesPerTournament:
-            data.limits?.maxRacesPerTournament || current.maxRacesPerTournament,
+          ...(nextSettings || {}),
+          maxHorsesPerRace: nextMaxRaceFieldSize,
+          minReadiedParticipants: nextMinReadiedParticipants,
+          maxRacesPerTournament: nextMaxRacesPerTournament,
         }));
         setTotalUsers(data.users.length);
         setTournaments(data.tournaments || []);
@@ -302,9 +319,19 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   };
 
   const saveSystemSettingsDraft = () => {
-    setSystemSettingsMessage(
-      'Settings draft saved in this screen. Connect /api/admin/settings to persist it.'
-    );
+    updateSystemSettings(systemSettings)
+      .then(({ settings }) => {
+        setSystemSettings(settings);
+        setMaxRaceFieldSize(settings.maxHorsesPerRace);
+        setMinReadiedParticipants(settings.minReadiedParticipants);
+        setMaxRacesPerTournament(settings.maxRacesPerTournament);
+        setSystemSettingsMessage('System settings saved.');
+      })
+      .catch((error) =>
+        setSystemSettingsMessage(
+          error instanceof Error ? error.message : 'Unable to save settings'
+        )
+      );
   };
 
   const renderNumberSetting = (
@@ -956,7 +983,9 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
                                     {race.status === 'published' && (() => {
                                       const readiness = raceReadiness(race.id);
-                                      const disabled = readiness.ready === 0 || readiness.unchecked > 0;
+                                      const disabled =
+                                        readiness.ready < minReadiedParticipants ||
+                                        readiness.unchecked > 0;
 
                                       return (
                                         <button
@@ -964,7 +993,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                                           disabled={disabled}
                                           title={
                                             disabled
-                                              ? `Need at least one Ready participant and 0 unchecked. Current: ${readiness.ready} ready, ${readiness.unchecked} unchecked.`
+                                              ? `Need at least ${minReadiedParticipants} Ready participants and 0 unchecked. Current: ${readiness.ready} ready, ${readiness.unchecked} unchecked.`
                                               : undefined
                                           }
                                           className="flex items-center gap-2 px-4 py-2 bg-[#d4af37]/10 text-[#d4af37] disabled:opacity-40 disabled:cursor-not-allowed rounded-xl hover:bg-[#d4af37]/20 transition-all border border-[#d4af37]/30 text-sm font-semibold"
@@ -1087,6 +1116,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                   {
                     icon: Users,
                     label: 'Manage Users',
+                    onClick: () => onNavigate('manage-users'),
                   },
 
                   {
@@ -1098,7 +1128,12 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                   {
                     icon: Settings,
                     label: 'System Settings',
-                    onClick: () => setShowSystemSettings(true),
+                    onClick: () => {
+                      getSystemSettings()
+                        .then(({ settings }) => setSystemSettings(settings))
+                        .catch(() => undefined);
+                      setShowSystemSettings(true);
+                    },
                   },
                 ].map((action, index) => {
 
@@ -1168,7 +1203,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                     System Settings
                   </h2>
                   <p className="text-gray-400 mt-2">
-                    Prototype cấu hình vận hành hệ thống. Bản này đang lưu tạm trên màn hình.
+                    Cấu hình vận hành hệ thống. Lưu xong sẽ áp dụng cho các race tiếp theo.
                   </p>
                 </div>
 
@@ -1225,6 +1260,12 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                           'Giới hạn số horse-jockey pair được publish trong một race.',
                           'maxHorsesPerRace',
                           2
+                        )}
+                        {renderNumberSetting(
+                          'Minimum ready horses per race',
+                          'Số horse tối thiểu phải được referee đánh dấu Ready trước khi start race.',
+                          'minReadiedParticipants',
+                          1
                         )}
                         {renderNumberSetting(
                           'Max races per tournament',
@@ -1342,7 +1383,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                       onClick={saveSystemSettingsDraft}
                       className="flex-1 py-4 bg-[#d4af37] rounded-2xl text-white font-bold"
                     >
-                      Save Draft
+                      Save Settings
                     </button>
                   </div>
                 </div>

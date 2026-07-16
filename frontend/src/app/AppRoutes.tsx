@@ -19,6 +19,7 @@ const ResultsPage = lazy(() => import('./components/ResultsPage'));
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const CreateRacePage = lazy(() => import('./components/CreateRacePage'));
 const EditRacePage = lazy(() => import('./components/EditRacePage'));
+const UserManagement = lazy(() => import('./components/UserManagement'));
 const LoginPage = lazy(() => import('./components/LoginPage'));
 const VerifyEmailPage = lazy(() => import('./components/VerifyEmailPage'));
 
@@ -75,6 +76,10 @@ export default function AppRoutes({
       <Route path="/simulation-demo/:raceId" element={<RaceSimulationDemo />} />
       <Route path="/results" element={<ResultsPage />} />
       <Route path="/admin" element={<AdminPanel onNavigate={onNavigate} />} />
+      <Route
+        path="/admin/users"
+        element={<UserManagement currentUser={currentUser} onNavigate={onNavigate} />}
+      />
       <Route path="/admin/races/new" element={<CreateRacePage onNavigate={onNavigate} />} />
       <Route path="/admin/races/:raceId/edit" element={<EditRacePage onNavigate={onNavigate} />} />
       <Route path="/login" element={<LoginPage onLogin={onLogin} />} />
