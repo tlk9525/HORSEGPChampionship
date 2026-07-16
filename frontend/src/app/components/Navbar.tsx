@@ -24,6 +24,7 @@ interface NavbarProps {
   onNavigate: (page: string) => void;
 }
 
+// Ghi chú: Hàm này render thanh điều hướng theo trạng thái đăng nhập và role.
 export default function Navbar({
   currentPage,
   currentUser,
@@ -37,6 +38,7 @@ export default function Navbar({
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
 
+  // Ghi chú: Hàm này tải nghiệp vụ liên quan đến load notifications.
   const loadNotifications = () => {
     if (!currentUser) {
       setNotifications([]);
@@ -65,6 +67,7 @@ export default function Navbar({
   }, [isNotificationsOpen]);
 
   useEffect(() => {
+    // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle click outside.
     const handleClickOutside = (event: MouseEvent) => {
       if (
         notificationsRef.current &&
@@ -99,6 +102,7 @@ export default function Navbar({
   const unreadCount = notifications.filter((item) => !item.read).length;
   const visibleNotifications = notifications.slice(0, 6);
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến read notification.
   const readNotification = (notificationId: string) => {
     markNotificationRead(notificationId).then(loadNotifications);
   };

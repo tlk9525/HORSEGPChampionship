@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { ArrowLeft, CalendarClock, Trash2 } from 'lucide-react';
 import {
   RaceRecord,
+  TournamentRecord,
   deleteRace,
   getRaceBuilder,
   updateRace,
@@ -15,16 +16,33 @@ interface EditRacePageProps {
 
 const EDITABLE_RACE_STATUSES = ['registration-open', 'registration-closed'];
 
+const raceDateWithinTournamentMessage = (
+  tournament: TournamentRecord | null,
+  raceDate: string
+) => {
+  if (!tournament) return '';
+  if (tournament.startDate && raceDate < tournament.startDate) {
+    return 'Race date must be on or after tournament start date.';
+  }
+  if (tournament.finalDate && raceDate > tournament.finalDate) {
+    return 'Race date must be on or before tournament end date.';
+  }
+  return '';
+};
+
+// Ghi chú: Hàm này đổi thời gian ISO sang định dạng input datetime-local.
 const toDatetimeLocal = (value?: string) => {
   if (!value) return '';
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return '';
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến pad.
   const pad = (part: number) => String(part).padStart(2, '0');
 
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
+// Ghi chú: Hàm này render form chỉnh sửa hoặc xóa race hiện có.
 export default function EditRacePage({
   onNavigate,
 }: EditRacePageProps) {
@@ -33,6 +51,7 @@ export default function EditRacePage({
     'min-h-[54px] w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 outline-none focus:border-[#d4af37]/70 focus:ring-2 focus:ring-[#d4af37]/20 disabled:cursor-not-allowed disabled:opacity-60';
 
   const [editingRace, setEditingRace] = useState<RaceRecord | null>(null);
+  const [editingTournament, setEditingTournament] = useState<TournamentRecord | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [message, setMessage] = useState('');
@@ -62,6 +81,9 @@ export default function EditRacePage({
         }
 
         setEditingRace(race);
+        setEditingTournament(
+          (data.tournaments || []).find((item) => item.id === race.tournamentId) || null
+        );
         setForm({
           raceName: race.name,
           raceDate: race.date || '',
@@ -76,6 +98,7 @@ export default function EditRacePage({
       .finally(() => setIsLoading(false));
   }, [raceId]);
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle delete.
   const handleDelete = () => {
     if (!raceId) return;
 
@@ -94,6 +117,7 @@ export default function EditRacePage({
       });
   };
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle submit.
   const handleSubmit = () => {
     setMessage('');
 
@@ -126,6 +150,11 @@ export default function EditRacePage({
     }
     if (regCloses > raceStartsAt) {
       setMessage('Registration must close before the race starts.');
+      return;
+    }
+    const raceDateError = raceDateWithinTournamentMessage(editingTournament, form.raceDate);
+    if (raceDateError) {
+      setMessage(raceDateError);
       return;
     }
 

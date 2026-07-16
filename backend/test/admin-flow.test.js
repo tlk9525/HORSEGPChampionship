@@ -96,6 +96,23 @@ test('admin cannot set tournament end date before start date', async () => {
   assert.equal(db.tournaments[0].name, 'Original Tournament');
 });
 
+test('admin cannot create a tournament with end date before start date', async () => {
+  const db = baseDb();
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/tournaments', {
+    name: 'Invalid Tournament',
+    startDate: '2099-02-15',
+    finalDate: '2099-02-01',
+    location: 'Track',
+  });
+
+  assert.equal(result.status, 400);
+  assert.match(result.body.message, /End date must be after start date/i);
+  assert.equal(db.tournaments.length, 1);
+});
+
 test('admin can delete a tournament with all dependent race data', async () => {
   const db = baseDb();
   db.tournaments.push({ id: 'other-tournament', name: 'Other', status: 'active' });
@@ -203,6 +220,69 @@ test('creating a race does not copy approved pairs from another race', async () 
   assert.equal(db.raceEntries.length, 0);
 });
 
+test('admin cannot create a race after the tournament end date', async () => {
+  const db = baseDb();
+  db.tournaments[0] = {
+    ...db.tournaments[0],
+    startDate: '2099-01-01',
+    finalDate: '2099-01-10',
+  };
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/races', {
+    tournamentId: 'tournament-1',
+    raceNumber: 'R1',
+    name: 'Race',
+    date: '2099-01-11',
+    time: '14:00',
+    venue: 'Track',
+    distance: 1200,
+    surface: 'Turf',
+    raceClass: 'Open',
+    refereeUserId: 'referee-1',
+    registrationOpensAt: '2099-01-09T08:00:00.000Z',
+    registrationClosesAt: '2099-01-09T12:00:00.000Z',
+  });
+
+  assert.equal(result.status, 400);
+  assert.match(result.body.message, /on or before tournament end date/i);
+  assert.equal(db.races.length, 0);
+});
+
+test('admin cannot edit a race outside the tournament schedule', async () => {
+  const db = baseDb();
+  db.tournaments[0] = {
+    ...db.tournaments[0],
+    startDate: '2099-01-01',
+    finalDate: '2099-01-10',
+  };
+  db.races = [{
+    id: 'race-1',
+    tournamentId: 'tournament-1',
+    name: 'Race',
+    date: '2099-01-05',
+    time: '10:00',
+    status: 'registration-open',
+    registrationOpensAt: '2099-01-01T08:00:00.000Z',
+    registrationClosesAt: '2099-01-01T12:00:00.000Z',
+  }];
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/races/race-1', {
+    name: 'Race',
+    date: '2099-01-11',
+    time: '10:00',
+    registrationOpensAt: '2099-01-01T08:00:00.000Z',
+    registrationClosesAt: '2099-01-01T12:00:00.000Z',
+  }, 'PATCH');
+
+  assert.equal(result.status, 400);
+  assert.match(result.body.message, /on or before tournament end date/i);
+  assert.equal(db.races[0].date, '2099-01-05');
+});
+
 test('admin cannot close registration before 10 horse-jockey pairs are approved', async () => {
   const db = baseDb();
   db.races = [{
@@ -285,6 +365,14 @@ test('admin can close registration after 10 horse-jockey pairs are approved', as
     status: 'approved',
     disqualified: false,
   }));
+  db.raceRefereeAssignments = [{
+    id: 'assignment-1',
+    raceId: 'race-1',
+    refereeUserId: 'referee-1',
+    assignedBy: 'admin-1',
+    status: 'assigned',
+    assignedAt: '2099-01-01T00:00:00.000Z',
+  }];
   const app = new Hono();
   app.route('/', createAdminRoutes(async () => db, async () => undefined));
 
@@ -298,6 +386,53 @@ test('admin can close registration after 10 horse-jockey pairs are approved', as
     db.raceEntries.map((entry) => entry.lane).sort((a, b) => a - b),
     [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
   );
+});
+
+test('admin cannot close a preset race without an assigned referee', async () => {
+  const db = baseDb();
+  db.users = [
+    ...db.users,
+    ...Array.from({ length: 10 }, (_, index) => ({
+      id: `jockey-${index + 1}`,
+      name: `Jockey ${index + 1}`,
+      role: 'jockey',
+      status: 'active',
+    })),
+  ];
+  db.races = [{
+    id: 'race-1',
+    tournamentId: 'tournament-1',
+    name: 'Preset Race',
+    date: '2099-01-01',
+    time: '10:00',
+    status: 'registration-open',
+    raceClass: 'Open',
+    handicapMin: 115,
+    handicapMax: 135,
+  }];
+  db.horses = Array.from({ length: 10 }, (_, index) => ({
+    id: `horse-${index + 1}`,
+    name: `Horse ${index + 1}`,
+    ownerUserId: 'owner-1',
+    overallRating: 50 + index,
+  }));
+  db.raceEntries = Array.from({ length: 10 }, (_, index) => ({
+    id: `entry-${index + 1}`,
+    raceId: 'race-1',
+    horseId: `horse-${index + 1}`,
+    jockeyUserId: `jockey-${index + 1}`,
+    status: 'approved',
+    disqualified: false,
+  }));
+  db.raceRefereeAssignments = [];
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/races/race-1/close-registration');
+
+  assert.equal(result.status, 400);
+  assert.match(result.body.message, /assign at least one referee/i);
+  assert.equal(db.races[0].status, 'registration-open');
 });
 
 test('admin cannot publish legacy closed registration with fewer than 10 pairs', async () => {
@@ -322,6 +457,58 @@ test('admin cannot publish legacy closed registration with fewer than 10 pairs',
 
   assert.equal(result.status, 400);
   assert.match(result.body.message, /exactly 10 distinct approved/i);
+  assert.equal(db.races[0].status, 'registration-closed');
+});
+
+test('admin cannot publish a preset race without an assigned referee', async () => {
+  const db = baseDb();
+  db.users = [
+    ...db.users,
+    ...Array.from({ length: 10 }, (_, index) => ({
+      id: `owner-${index + 1}`,
+      name: `Owner ${index + 1}`,
+      role: 'owner',
+      status: 'active',
+    })),
+    ...Array.from({ length: 10 }, (_, index) => ({
+      id: `jockey-${index + 1}`,
+      name: `Jockey ${index + 1}`,
+      role: 'jockey',
+      status: 'active',
+    })),
+  ];
+  db.races = [{
+    id: 'race-1',
+    tournamentId: 'tournament-1',
+    name: 'Preset Race',
+    status: 'registration-closed',
+  }];
+  db.horses = Array.from({ length: 10 }, (_, index) => ({
+    id: `horse-${index + 1}`,
+    name: `Horse ${index + 1}`,
+    ownerUserId: `owner-${index + 1}`,
+    overallRating: 70 + index,
+  }));
+  db.raceEntries = Array.from({ length: 10 }, (_, index) => ({
+    id: `entry-${index + 1}`,
+    raceId: 'race-1',
+    horseId: `horse-${index + 1}`,
+    jockeyUserId: `jockey-${index + 1}`,
+    status: 'approved',
+    lane: index + 1,
+    handicap: 126 + index,
+    ratingSnapshot: 70 + index,
+    preRaceStatus: 'ready-for-referee',
+    disqualified: false,
+  }));
+  db.raceRefereeAssignments = [];
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/races/race-1/publish');
+
+  assert.equal(result.status, 400);
+  assert.match(result.body.message, /assign at least one referee/i);
   assert.equal(db.races[0].status, 'registration-closed');
 });
 
@@ -369,6 +556,14 @@ test('admin publish uses row-level persistence when available', async () => {
     preRaceStatus: 'ready-for-referee',
     disqualified: false,
   }));
+  db.raceRefereeAssignments = [{
+    id: 'assignment-1',
+    raceId: 'race-1',
+    refereeUserId: 'referee-1',
+    assignedBy: 'admin-1',
+    status: 'assigned',
+    assignedAt: '2099-01-01T00:00:00.000Z',
+  }];
   let persistedPayload;
   const app = new Hono();
   app.route('/', createAdminRoutes(

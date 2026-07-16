@@ -174,7 +174,7 @@ export interface RaceEntryRecord {
   raceName?: string;
 }
 
-export interface RaceReplayCheckpoint {
+interface RaceReplayCheckpoint {
   distanceMeters: number;
   timeSeconds: number;
 }
@@ -199,7 +199,7 @@ export interface RaceReplayRunner {
   checkpoints: RaceReplayCheckpoint[];
 }
 
-export interface RaceReplayTimeline {
+interface RaceReplayTimeline {
   version: number;
   generatedAt: string;
   raceId: string;
@@ -262,7 +262,8 @@ const BOOTSTRAP_CACHE_TTL_MS = 10_000;
 let bootstrapCache: { data: BootstrapPayload; fetchedAt: number } | null = null;
 let bootstrapRequest: Promise<BootstrapPayload> | null = null;
 
-export function invalidateBootstrapCache() {
+// Ghi chú: Hàm này xóa cache bootstrap để lần đọc tiếp theo lấy dữ liệu mới.
+function invalidateBootstrapCache() {
   bootstrapCache = null;
   bootstrapRequest = null;
 }
@@ -609,6 +610,7 @@ export const updateRace = async (
     body: JSON.stringify(race),
   });
 
+// Ghi chú: Hàm này gọi API xóa race.
 export const deleteRace = async (raceId: string) =>
   request<{ ok: boolean; raceId: string }>(`/admin/races/${raceId}`, {
     method: 'DELETE',

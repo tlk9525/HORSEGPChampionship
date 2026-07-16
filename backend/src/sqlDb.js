@@ -60,6 +60,7 @@ const requiredRuntimeTables = [
   'sessions',
 ];
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến ensure runtime schema.
 const ensureRuntimeSchema = async () => {
   if (!runtimeSchemaPromise) {
     runtimeSchemaPromise = (async () => {
@@ -278,6 +279,7 @@ export const readDb = async () => {
   return db;
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến comparable value.
 const comparableValue = (row, column) => {
   const value =
     column === 'isRead' && row[column] === undefined
@@ -288,6 +290,7 @@ const comparableValue = (row, column) => {
   return value ?? null;
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến row key.
 const rowKey = (row, keyColumn) => String(row[keyColumn] ?? '');
 
 // Chỉ UPSERT các hàng mới hoặc thực sự thay đổi so với snapshot lúc request bắt đầu.
@@ -336,6 +339,7 @@ const upsertChangedRows = async (
   }
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến derived referee assignment id.
 const derivedRefereeAssignmentId = (raceId, refereeUserId) => {
   const digest = createHash('sha1')
     .update(`${raceId}:${refereeUserId}`)
@@ -372,6 +376,7 @@ export const writeDb = async (db) => {
   const baselineUsersById = new Map(
     (baseline.users || []).map((user) => [user.id, user])
   );
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến write rows.
   const writeRows = async (tableName, columns, rows = []) => {
     persistedRows.set(tableName, rows);
     await upsertChangedRows(

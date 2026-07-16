@@ -18,6 +18,7 @@ import {
 } from '../services/api';
 import { formatWeightLb, statusLabel } from '../utils/domain';
 
+// Ghi chú: Hàm này render danh bạ jockey công khai.
 export default function JockeyDirectoryPage() {
   const [jockeys, setJockeys] = useState<JockeyProfileRecord[]>([]);
   const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);

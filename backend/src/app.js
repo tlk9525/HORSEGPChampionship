@@ -11,6 +11,7 @@ import { createOwnerRoutes } from './routes/ownerRoutes.js';
 import { createPublicRoutes } from './routes/publicRoutes.js';
 import { createRefereeRoutes } from './routes/refereeRoutes.js';
 
+// Ghi chú: Hàm này khởi tạo Hono app, gắn middleware, route và xử lý lỗi chung cho backend.
 export const createApp = ({
   getDb,
   writeDb,

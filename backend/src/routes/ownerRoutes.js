@@ -26,6 +26,7 @@ import {
   raceEligibilityRange,
 } from '../services/handicapService.js';
 
+// Ghi chú: Hàm này kiểm tra các chỉ số rating owner nhập nằm trong khoảng hợp lệ.
 const validRatingComponents = (values) =>
   values.every((value) => {
     if (value === undefined || value === null || value === '') return true;
@@ -33,6 +34,7 @@ const validRatingComponents = (values) =>
     return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100;
   });
 
+// Ghi chú: Hàm này tạo nhóm route owner routes cho backend.
 export const createOwnerRoutes = (getDb, writeDb) => {
   const app = new Hono();
 
