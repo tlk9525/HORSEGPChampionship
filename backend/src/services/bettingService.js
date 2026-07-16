@@ -1,5 +1,9 @@
 import { createNotification } from './notificationService.js';
 import { RACE_TIMEZONE_OFFSET } from '../config/constants.js';
+import {
+  CREDIT_TRANSACTION_TYPES,
+  creditCredits,
+} from './creditService.js';
 
 const winningEntry = (entries = []) =>
   entries.find(
@@ -8,31 +12,6 @@ const winningEntry = (entries = []) =>
       !entry.disqualified &&
       entry.preRaceStatus !== 'absent'
   );
-
-/** Keep the betting wallets table in sync with spectator credit balance. */
-export const syncWalletCredits = (db, userId, credits, updatedAt = new Date().toISOString()) => {
-  const nextCredits = Number(credits ?? 0);
-  db.wallets = db.wallets || [];
-  const wallet = db.wallets.find((item) => item.userId === userId);
-  if (wallet) {
-    wallet.credits = nextCredits;
-    wallet.updatedAt = updatedAt;
-    return wallet;
-  }
-
-  const created = { userId, credits: nextCredits, updatedAt };
-  db.wallets.push(created);
-  return created;
-};
-
-export const adjustUserCredits = (db, userId, delta, updatedAt = new Date().toISOString()) => {
-  const user = db.users.find((item) => item.id === userId);
-  if (!user) return null;
-  user.credits = Number(user.credits ?? 0) + Number(delta || 0);
-  user.updatedAt = updatedAt;
-  syncWalletCredits(db, userId, user.credits, updatedAt);
-  return user;
-};
 
 /**
  * Parse race wall-clock date/time as Vietnam time (+07:00) so betting cutoff
@@ -82,9 +61,13 @@ export const refundRaceBets = (db, raceId, reason = 'Race cancelled') => {
     bet.payout = amount;
     bet.settledAt = settledAt;
 
-    const user = adjustUserCredits(db, bet.userId, amount, settledAt);
-    if (user) {
-      affectedUserIds.add(user.id);
+    const credited = creditCredits(db, bet.userId, amount, {
+      type: CREDIT_TRANSACTION_TYPES.BET_REFUNDED,
+      metadata: { betId: bet.id, raceId, reason },
+      createdAt: settledAt,
+    });
+    if (credited?.user) {
+      affectedUserIds.add(credited.user.id);
     }
 
     createNotification(
@@ -161,7 +144,12 @@ export const settleRaceBets = (db, raceId, entries = []) => {
     bet.payout = payout;
     bet.settledAt = settledAt;
 
-    const user = adjustUserCredits(db, bet.userId, payout, settledAt);
+    const credited = creditCredits(db, bet.userId, payout, {
+      type: CREDIT_TRANSACTION_TYPES.BET_PAYOUT,
+      metadata: { betId: bet.id, raceId, pot, winningEntryId: winner.id },
+      createdAt: settledAt,
+    });
+    const user = credited?.user;
     if (user) {
       affectedUserIds.add(user.id);
 

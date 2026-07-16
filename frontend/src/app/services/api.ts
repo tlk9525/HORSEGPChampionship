@@ -1,5 +1,11 @@
 export type UserRole = 'admin' | 'owner' | 'jockey' | 'referee' | 'spectator';
 
+export interface DailyReward {
+  claimed: boolean;
+  amount: number;
+  streak: number;
+}
+
 export interface AuthUser {
   id: string;
   name: string;
@@ -7,6 +13,9 @@ export interface AuthUser {
   role: UserRole;
   status: 'pending' | 'active' | 'approved' | 'rejected' | 'suspended' | 'locked';
   credits?: number | null;
+  loginStreak?: number;
+  lastLoginRewardDate?: string | null;
+  dailyReward?: DailyReward;
 }
 
 export interface BetRecord {
@@ -31,6 +40,9 @@ export interface RacePot {
 
 export interface SpectatorWallet {
   credits: number;
+  loginStreak: number;
+  lastLoginRewardDate: string | null;
+  dailyReward: DailyReward;
   bets: BetRecord[];
 }
 
@@ -355,7 +367,7 @@ const request = async <T>(path: string, options: RequestInit = {}): Promise<T> =
 
 // Đăng nhập bằng email/password; session được backend lưu trong HttpOnly cookie.
 export const login = async (email: string, password: string) => {
-  return request<{ user: AuthUser }>('/login', {
+  return request<{ user: AuthUser; dailyReward?: DailyReward }>('/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
   });
@@ -812,6 +824,8 @@ export interface AdminBettingSpectator {
   id: string;
   name: string;
   credits: number;
+  loginStreak: number;
+  lastLoginRewardDate: string | null;
   totalBets: number;
   totalWagered: number;
   totalWon: number;

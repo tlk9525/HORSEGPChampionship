@@ -58,6 +58,8 @@ const buildSettlementDb = () => {
       },
     ],
     notifications: [],
+    wallets: [],
+    creditTransactions: [],
     raceEntries: [],
     races: [],
     horses: [],
@@ -107,6 +109,14 @@ test('settleRaceBets splits the pot among winning horse bettors', () => {
   assert.equal(db.users.find((user) => user.id === 'spectator-a').credits, 90);
   assert.equal(db.users.find((user) => user.id === 'spectator-b').credits, 80);
   assert.equal(db.users.find((user) => user.id === 'spectator-c').credits, 30);
+  assert.equal(
+    db.creditTransactions.filter((transaction) => transaction.type === 'bet_payout').length,
+    2
+  );
+  assert.equal(
+    db.creditTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
+    100
+  );
 });
 
 test('settleRaceBets marks all bets lost when nobody picked the winner', () => {
@@ -146,4 +156,10 @@ test('refundRaceBets returns credits when a race is cancelled', () => {
   assert.ok(db.bets.every((bet) => bet.status === 'refunded'));
   assert.equal(db.bets.find((bet) => bet.id === 'bet-a').payout, 20);
   assert.equal(racePotTotal(db, 'race-1'), 0);
+  assert.equal(db.creditTransactions.length, 3);
+  assert.ok(db.creditTransactions.every((transaction) => transaction.type === 'bet_refunded'));
+  assert.equal(
+    db.creditTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
+    100
+  );
 });

@@ -91,6 +91,10 @@ export default function BettingPage({
   const [races, setRaces] = useState<RaceRecord[]>([]);
   const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
   const [credits, setCredits] = useState(currentUser?.credits ?? 0);
+  const [loginStreak, setLoginStreak] = useState(currentUser?.loginStreak ?? 0);
+  const [dailyReward, setDailyReward] = useState(
+    currentUser?.dailyReward || { claimed: false, amount: 0, streak: 0 }
+  );
   const [bets, setBets] = useState<BetRecord[]>([]);
   const [potsByRaceId, setPotsByRaceId] = useState<Record<string, number>>({});
   const [entryTotals, setEntryTotals] = useState<Record<string, number>>({});
@@ -107,13 +111,21 @@ export default function BettingPage({
         setRaces(bootstrap.races);
         setRaceEntries(bootstrap.raceEntries || []);
         setCredits(wallet.credits);
+        setLoginStreak(wallet.loginStreak);
+        setDailyReward(wallet.dailyReward);
         setBets(wallet.bets);
         setPotsByRaceId(
           Object.fromEntries(pots.map((pot: RacePot) => [pot.raceId, pot.total]))
         );
         setEntryTotals(apiEntryTotals || {});
         if (currentUser && onUserUpdate) {
-          onUserUpdate({ ...currentUser, credits: wallet.credits });
+          onUserUpdate({
+            ...currentUser,
+            credits: wallet.credits,
+            loginStreak: wallet.loginStreak,
+            lastLoginRewardDate: wallet.lastLoginRewardDate,
+            dailyReward: wallet.dailyReward,
+          });
         }
       })
       .catch((error) =>
@@ -253,11 +265,23 @@ export default function BettingPage({
             </p>
           </div>
 
-          <div className="flex items-center gap-3 rounded-2xl border border-[#d4af37]/30 bg-[#12304f] px-5 py-4">
-            <Coins className="h-6 w-6 text-[#d4af37]" />
-            <div>
-              <p className="text-xs uppercase tracking-widest text-gray-400">Available Credits</p>
-              <p className="text-2xl font-black text-white">{credits}</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="flex items-center gap-3 rounded-2xl border border-[#d4af37]/30 bg-[#12304f] px-5 py-4">
+              <Coins className="h-6 w-6 text-[#d4af37]" />
+              <div>
+                <p className="text-xs uppercase tracking-widest text-gray-400">Available Credits</p>
+                <p className="text-2xl font-black text-white">{credits}</p>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-[#12304f] px-5 py-4">
+              <p className="text-xs uppercase tracking-widest text-gray-400">Login Streak</p>
+              <p className="text-2xl font-black text-white">Day {loginStreak}</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-400/20 bg-[#12304f] px-5 py-4">
+              <p className="text-xs uppercase tracking-widest text-gray-400">Today Bonus</p>
+              <p className="text-lg font-black text-emerald-400">
+                {dailyReward.claimed ? `+${dailyReward.amount} claimed` : 'Not claimed today'}
+              </p>
             </div>
           </div>
         </div>

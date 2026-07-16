@@ -232,6 +232,8 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
           id: user.id,
           name: user.name,
           credits: Number(user.credits ?? 0),
+          loginStreak: Number(user.loginStreak ?? 0),
+          lastLoginRewardDate: user.lastLoginRewardDate || null,
           totalBets: userBets.length,
           totalWagered: userBets.reduce((sum, bet) => sum + Number(bet.amount || 0), 0),
           totalWon: userBets
@@ -799,6 +801,9 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
     const existingActionLogIds = new Set(
       (db.raceActionLogs || []).map((log) => log.id)
     );
+    const existingCreditTransactionIds = new Set(
+      (db.creditTransactions || []).map((transaction) => transaction.id)
+    );
     const assignedRefereeIds = raceRefereeIds(db, race);
     let affectedTournament = null;
     let affectedHorses = [];
@@ -1266,6 +1271,9 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
         tournament: affectedTournament,
         bets: settledBets,
         users: affectedSpectators,
+        creditTransactions: (db.creditTransactions || []).filter(
+          (transaction) => !existingCreditTransactionIds.has(transaction.id)
+        ),
         notifications: (db.notifications || []).filter(
           (notification) => !existingNotificationIds.has(notification.id)
         ),
