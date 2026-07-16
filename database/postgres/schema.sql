@@ -2,6 +2,8 @@
 -- Run:
 --   npm run db:init
 
+DROP TABLE IF EXISTS "bets";
+DROP TABLE IF EXISTS "wallets";
 DROP TABLE IF EXISTS "notifications";
 DROP TABLE IF EXISTS "sessions";
 DROP TABLE IF EXISTS "raceActionLogs";
@@ -300,6 +302,8 @@ CREATE TABLE "raceEntries" (
 );
 
 CREATE INDEX "idx_race_entries_race" ON "raceEntries" ("raceId");
+
+-- Betting tables (wallets + bets) live in migrations/004_betting.sql
 
 CREATE TABLE "refereeReports" (
   "id" VARCHAR(64) PRIMARY KEY,

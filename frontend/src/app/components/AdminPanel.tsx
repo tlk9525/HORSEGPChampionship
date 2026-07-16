@@ -15,8 +15,12 @@ import {
   Pencil,
   Plus,
   Trash2,
+  Coins,
+  TrendingUp,
 } from 'lucide-react';
 import {
+  AdminBettingRaceSummary,
+  AdminBettingSpectator,
   ApprovalItem,
   HorseRaceRegistration,
   RaceEntryRecord,
@@ -26,6 +30,7 @@ import {
   createTournament,
   decideApproval,
   deleteTournament,
+  getAdminBetting,
   getApprovals,
   getBootstrap,
   getSystemSettings,
@@ -164,6 +169,10 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     archiveCompletedAfterDays: 90,
   });
 
+  const [bettingRaces, setBettingRaces] = useState<AdminBettingRaceSummary[]>([]);
+  const [bettingSpectators, setBettingSpectators] = useState<AdminBettingSpectator[]>([]);
+  const [showBettingModal, setShowBettingModal] = useState(false);
+
   const [expandedTournaments, setExpandedTournaments] = useState<Record<string, boolean>>({});
   // Ghi chú: Hàm này bật/tắt nghiệp vụ liên quan đến toggle tournament.
   const toggleTournament = (tournamentId: string) => {
@@ -221,6 +230,12 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
         setTournaments(data.tournaments || []);
       })
       .catch(() => undefined);
+    getAdminBetting()
+      .then((data) => {
+        setBettingRaces(data.raceSummaries || []);
+        setBettingSpectators(data.spectators || []);
+      })
+      .catch(() => undefined);
   }, []);
 
   // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle decision.
@@ -267,6 +282,9 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     ...activeEntryPairKeys,
   ]).size;
 
+  const totalPoolCredits = bettingRaces.reduce((sum, race) => sum + race.poolTotal, 0);
+  const totalActiveBets = bettingRaces.reduce((sum, race) => sum + race.counts.pending, 0);
+
   const systemStats = [
     {
       label: 'Total Users',
@@ -296,6 +314,13 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       value: String(activePairingCount),
       change: 'Matched Owner + Jockey',
       icon: BarChart3,
+    },
+
+    {
+      label: 'Betting Pool',
+      value: `${totalPoolCredits.toFixed(0)}`,
+      change: `${totalActiveBets} active bets`,
+      icon: Coins,
     },
   ];
 
@@ -657,7 +682,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
         {/* STATS */}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
 
           {systemStats.map((stat, index) => {
 
@@ -1160,6 +1185,79 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                   );
                 })}
               </div>
+            </div>
+
+            {/* BETTING ACTIVITY */}
+
+            <div className="bg-[#12304f] border border-white/10 rounded-3xl p-8">
+
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-3xl font-black text-white">
+                  Betting Activity
+                </h2>
+                <button
+                  onClick={() => setShowBettingModal(true)}
+                  className="px-4 py-2 bg-[#d4af37]/20 border border-[#d4af37] rounded-xl text-[#d4af37] font-bold text-sm hover:bg-[#d4af37] hover:text-white transition-all"
+                >
+                  View All
+                </button>
+              </div>
+
+              {bettingRaces.length === 0 ? (
+                <p className="text-gray-400">No betting activity yet.</p>
+              ) : (
+                <div className="space-y-4">
+                  {bettingRaces.slice(0, 5).map((race) => (
+                    <div
+                      key={race.raceId}
+                      className="bg-[#071a2f] border border-white/10 rounded-2xl p-4"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-white font-bold truncate">
+                          {race.raceName}
+                        </h4>
+                        <span className={`px-2 py-1 rounded-lg text-xs font-bold ${raceStatusBadgeClass(race.raceStatus)}`}>
+                          {statusLabel(race.raceStatus)}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <span className="text-gray-500">Pool</span>
+                          <span className="block text-[#d4af37] font-bold">
+                            {race.poolTotal.toFixed(0)} credits
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Bettors</span>
+                          <span className="block text-white font-bold">
+                            {race.uniqueBettors}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Pending</span>
+                          <span className="block text-yellow-400 font-bold">
+                            {race.counts.pending}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Settled</span>
+                          <span className="block text-emerald-400 font-bold">
+                            {race.counts.won + race.counts.lost}
+                          </span>
+                        </div>
+                      </div>
+
+                      {race.totalPaidOut > 0 && (
+                        <div className="mt-2 pt-2 border-t border-white/5 flex items-center gap-1 text-sm text-emerald-400">
+                          <TrendingUp className="w-3.5 h-3.5" />
+                          <span className="font-semibold">{race.totalPaidOut.toFixed(0)}</span> credits paid out
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* RECENT ACTIVITY */}
@@ -1685,6 +1783,124 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
             </div>
           </div>
         )}
+
+
+        {/* BETTING MODAL */}
+
+        {showBettingModal && (
+          <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-50 p-4">
+            <div className="bg-[#12304f] p-8 rounded-3xl w-full max-w-5xl border border-white/10 max-h-[85vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-3xl font-black text-white flex items-center gap-3">
+                  <Coins className="w-8 h-8 text-[#d4af37]" />
+                  Betting Overview
+                </h2>
+                <button
+                  onClick={() => setShowBettingModal(false)}
+                  className="px-4 py-2 bg-white/10 rounded-xl text-white hover:bg-white/20 transition-all"
+                >
+                  Close
+                </button>
+              </div>
+
+              {/* Summary stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                {[
+                  { label: 'Total Wagered', value: bettingRaces.reduce((s, r) => s + r.totalWagered, 0).toFixed(0), color: 'text-[#d4af37]' },
+                  { label: 'Active Pool', value: totalPoolCredits.toFixed(0), color: 'text-yellow-400' },
+                  { label: 'Total Paid Out', value: bettingRaces.reduce((s, r) => s + r.totalPaidOut, 0).toFixed(0), color: 'text-emerald-400' },
+                  { label: 'Total Refunded', value: bettingRaces.reduce((s, r) => s + r.totalRefunded, 0).toFixed(0), color: 'text-sky-400' },
+                ].map((stat) => (
+                  <div key={stat.label} className="bg-[#071a2f] border border-white/10 rounded-2xl p-4 text-center">
+                    <div className={`text-2xl font-black ${stat.color}`}>{stat.value}</div>
+                    <div className="text-gray-400 text-sm mt-1">{stat.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Race pools table */}
+              <div className="mb-8">
+                <h3 className="text-xl font-bold text-white mb-4">Race Pools</h3>
+                {bettingRaces.length === 0 ? (
+                  <p className="text-gray-400">No bets placed yet.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-gray-500 border-b border-white/10">
+                          <th className="pb-3 pr-4">Race</th>
+                          <th className="pb-3 pr-4">Status</th>
+                          <th className="pb-3 pr-4 text-right">Pool</th>
+                          <th className="pb-3 pr-4 text-right">Bettors</th>
+                          <th className="pb-3 pr-4 text-right">Pending</th>
+                          <th className="pb-3 pr-4 text-right">Won</th>
+                          <th className="pb-3 pr-4 text-right">Lost</th>
+                          <th className="pb-3 pr-4 text-right">Refunded</th>
+                          <th className="pb-3 text-right">Paid Out</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-white">
+                        {bettingRaces.map((race) => (
+                          <tr key={race.raceId} className="border-b border-white/5 hover:bg-white/5">
+                            <td className="py-3 pr-4 font-semibold">{race.raceName}</td>
+                            <td className="py-3 pr-4">
+                              <span className={`px-2 py-1 rounded-lg text-xs font-bold ${raceStatusBadgeClass(race.raceStatus)}`}>
+                                {statusLabel(race.raceStatus)}
+                              </span>
+                            </td>
+                            <td className="py-3 pr-4 text-right text-[#d4af37] font-bold">{race.poolTotal.toFixed(0)}</td>
+                            <td className="py-3 pr-4 text-right">{race.uniqueBettors}</td>
+                            <td className="py-3 pr-4 text-right text-yellow-400">{race.counts.pending}</td>
+                            <td className="py-3 pr-4 text-right text-emerald-400">{race.counts.won}</td>
+                            <td className="py-3 pr-4 text-right text-red-400">{race.counts.lost}</td>
+                            <td className="py-3 pr-4 text-right text-sky-400">{race.counts.refunded}</td>
+                            <td className="py-3 text-right text-emerald-400 font-semibold">{race.totalPaidOut.toFixed(0)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Spectator leaderboard */}
+              <div>
+                <h3 className="text-xl font-bold text-white mb-4">Spectator Leaderboard</h3>
+                {bettingSpectators.length === 0 ? (
+                  <p className="text-gray-400">No spectators registered.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-gray-500 border-b border-white/10">
+                          <th className="pb-3 pr-4">#</th>
+                          <th className="pb-3 pr-4">Spectator</th>
+                          <th className="pb-3 pr-4 text-right">Credits</th>
+                          <th className="pb-3 pr-4 text-right">Total Bets</th>
+                          <th className="pb-3 pr-4 text-right">Total Wagered</th>
+                          <th className="pb-3 text-right">Total Won</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-white">
+                        {bettingSpectators.map((spectator, idx) => (
+                          <tr key={spectator.id} className="border-b border-white/5 hover:bg-white/5">
+                            <td className="py-3 pr-4 text-gray-500">{idx + 1}</td>
+                            <td className="py-3 pr-4 font-semibold">{spectator.name}</td>
+                            <td className="py-3 pr-4 text-right text-[#d4af37] font-bold">{spectator.credits.toFixed(0)}</td>
+                            <td className="py-3 pr-4 text-right">{spectator.totalBets}</td>
+                            <td className="py-3 pr-4 text-right">{spectator.totalWagered.toFixed(0)}</td>
+                            <td className="py-3 text-right text-emerald-400 font-semibold">{spectator.totalWon.toFixed(0)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

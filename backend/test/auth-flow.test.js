@@ -86,5 +86,6 @@ test('registration hashes passwords before persistence', async () => {
 
   assert.equal(response.status, 201);
   assert.equal(await bcrypt.compare('password123', persistedUser.password), true);
+  assert.equal(persistedUser.credits, 100);
   assert.equal(JSON.stringify(await response.json()).includes('password'), false);
 });

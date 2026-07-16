@@ -10,6 +10,7 @@ import { createNotificationRoutes } from './routes/notificationRoutes.js';
 import { createOwnerRoutes } from './routes/ownerRoutes.js';
 import { createPublicRoutes } from './routes/publicRoutes.js';
 import { createRefereeRoutes } from './routes/refereeRoutes.js';
+import { createSpectatorRoutes } from './routes/spectatorRoutes.js';
 
 // Ghi chú: Hàm này khởi tạo Hono app, gắn middleware, route và xử lý lỗi chung cho backend.
 export const createApp = ({
@@ -22,6 +23,8 @@ export const createApp = ({
   persistLoginSession,
   persistRegisteredUser,
   persistSystemSettings,
+  persistPlaceBet,
+  persistCancelBet,
   deleteSession,
 }) => {
   const app = new Hono();
@@ -78,6 +81,10 @@ export const createApp = ({
     )
   );
   app.route('/api/notifications', createNotificationRoutes(getDb, writeDb));
+  app.route(
+    '/api/spectator',
+    createSpectatorRoutes(getDb, writeDb, persistPlaceBet, persistCancelBet)
+  );
 
   return app;
 };

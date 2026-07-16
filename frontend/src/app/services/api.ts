@@ -6,6 +6,32 @@ export interface AuthUser {
   email: string;
   role: UserRole;
   status: 'pending' | 'active' | 'approved' | 'rejected' | 'suspended' | 'locked';
+  credits?: number | null;
+}
+
+export interface BetRecord {
+  id: string;
+  userId: string;
+  raceId: string;
+  raceEntryId: string;
+  amount: number;
+  status: 'pending' | 'won' | 'lost' | 'cancelled' | 'refunded';
+  payout?: number;
+  createdAt: string;
+  settledAt?: string | null;
+  horseName?: string;
+  jockeyName?: string;
+  raceName?: string;
+}
+
+export interface RacePot {
+  raceId: string;
+  total: number;
+}
+
+export interface SpectatorWallet {
+  credits: number;
+  bets: BetRecord[];
 }
 
 export interface ApprovalItem {
@@ -751,3 +777,48 @@ export const recordRaceResult = async (
       body: JSON.stringify(result),
     }
   );
+
+export const getSpectatorWallet = () =>
+  request<SpectatorWallet>('/spectator/wallet');
+
+export const getRacePots = () =>
+  request<{ pots: RacePot[]; entryTotals: Record<string, number> }>('/spectator/pots');
+
+export const placeBet = (raceEntryId: string, amount: number) =>
+  request<{ bet: BetRecord; credits: number }>('/spectator/bets', {
+    method: 'POST',
+    body: JSON.stringify({ raceEntryId, amount }),
+  });
+
+export const cancelBet = (betId: string) =>
+  request<{ ok: boolean; credits: number }>(`/spectator/bets/${betId}/cancel`, {
+    method: 'POST',
+  });
+
+export interface AdminBettingRaceSummary {
+  raceId: string;
+  raceName: string;
+  raceStatus: string;
+  totalBets: number;
+  uniqueBettors: number;
+  poolTotal: number;
+  totalWagered: number;
+  totalPaidOut: number;
+  totalRefunded: number;
+  counts: { pending: number; won: number; lost: number; refunded: number };
+}
+
+export interface AdminBettingSpectator {
+  id: string;
+  name: string;
+  credits: number;
+  totalBets: number;
+  totalWagered: number;
+  totalWon: number;
+}
+
+export const getAdminBetting = () =>
+  request<{
+    raceSummaries: AdminBettingRaceSummary[];
+    spectators: AdminBettingSpectator[];
+  }>('/admin/betting');
