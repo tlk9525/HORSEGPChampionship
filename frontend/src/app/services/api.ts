@@ -610,6 +610,24 @@ export const updateRace = async (
     body: JSON.stringify(race),
   });
 
+// Reset race đã hủy về trạng thái mở đăng ký với lịch mới
+export const resetRace = async (
+  raceId: string,
+  race: {
+    date: string;
+    time: string;
+    registrationOpensAt: string;
+    registrationClosesAt: string;
+  }
+) =>
+  request<{ race: RaceRecord; entries: RaceEntryRecord[]; notifications: NotificationItem[] }>(
+    `/admin/races/${raceId}/reset-race`,
+    {
+      method: 'POST',
+      body: JSON.stringify(race),
+    }
+  );
+
 // Ghi chú: Hàm này gọi API xóa race.
 export const deleteRace = async (raceId: string) =>
   request<{ ok: boolean; raceId: string }>(`/admin/races/${raceId}`, {
@@ -626,6 +644,7 @@ export const adminRaceAction = async (
     | 'finish-race'
     | 'complete-results'
     | 'cancel-race'
+    | 'reset-race'
 ) =>
   request<{ race: RaceRecord; entries: RaceEntryRecord[]; notifications: NotificationItem[] }>(
     `/admin/races/${raceId}/${action}`,

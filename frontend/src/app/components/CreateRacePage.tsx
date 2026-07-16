@@ -55,6 +55,7 @@ export default function CreateRacePage({
   const [loadError, setLoadError] = useState(false);
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const [form, setForm] = useState({
     tournamentId: '',
@@ -139,6 +140,7 @@ export default function CreateRacePage({
 
   // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle submit.
   const handleSubmit = () => {
+    setSubmitAttempted(true);
     setMessage('');
 
     const tournamentRaceCount = races.filter(
@@ -149,19 +151,21 @@ export default function CreateRacePage({
       return;
     }
 
-    if (
-      !form.tournamentId ||
-      !form.raceName ||
-      !form.raceDate ||
-      !form.startTime ||
-      !form.venue ||
-      !form.distance ||
-      !form.surfaceType ||
-      form.handicapMin === '' ||
-      form.handicapMax === '' ||
-      form.refereeUserIds.length === 0
-    ) {
-      setMessage('Please complete the race schedule, venue, distance and referees.');
+    const missingFields = [
+      !form.tournamentId && 'Tournament',
+      !form.raceName && 'Race name',
+      !form.raceDate && 'Race date',
+      !form.startTime && 'Start time',
+      !form.venue && 'Venue',
+      !form.distance && 'Distance',
+      !form.surfaceType && 'Surface',
+      form.handicapMin === '' && 'Minimum weight',
+      form.handicapMax === '' && 'Top weight',
+      form.refereeUserIds.length === 0 && 'Assigned referees',
+    ].filter(Boolean);
+
+    if (missingFields.length > 0) {
+      setMessage(`Please complete: ${missingFields.join(', ')}.`);
       return;
     }
 
@@ -491,8 +495,12 @@ export default function CreateRacePage({
                 <div className="min-w-0">
                   <label className="block text-gray-300 mb-2">Surface</label>
                   <select
-                    className={fieldClass}
+                    className={`${fieldClass} ${submitAttempted && !form.surfaceType
+                      ? 'border-amber-400/70 ring-2 ring-amber-400/20 text-amber-100'
+                      : ''
+                    }`}
                     value={form.surfaceType}
+                    aria-invalid={submitAttempted && !form.surfaceType}
                     onChange={(event) =>
                       setForm({
                         ...form,
@@ -500,11 +508,16 @@ export default function CreateRacePage({
                       })
                     }
                   >
-                    <option value="">Select surface</option>
+                    <option value="" disabled>Select surface</option>
                     <option>Turf</option>
                     <option>Dirt</option>
                     <option>Synthetic</option>
                   </select>
+                  {submitAttempted && !form.surfaceType && (
+                    <p className="mt-2 text-sm font-semibold text-amber-200">
+                      Surface is required.
+                    </p>
+                  )}
                 </div>
 
                 <div className="min-w-0">

@@ -598,6 +598,7 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
       'finish-race',
       'complete-results',
       'cancel-race',
+      'reset-race',
     ];
 
     if (!validActions.includes(action)) return c.json({ message: 'Invalid action' }, 400);
@@ -632,6 +633,128 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
     const assignedRefereeIds = raceRefereeIds(db, race);
     let affectedTournament = null;
     let affectedHorses = [];
+
+    if (action === 'reset-race') {
+      if (race.status !== 'cancelled') {
+        return c.json({ message: 'Only a cancelled race can be reset' }, 400);
+      }
+
+      const { date, time, registrationOpensAt, registrationClosesAt } = await c.req.json();
+      if (!date || !time || !registrationOpensAt || !registrationClosesAt) {
+        return c.json({ message: 'Race date, start time and registration window are required' }, 400);
+      }
+
+      const tournament = db.tournaments.find((item) => item.id === race.tournamentId);
+      if (!tournament) {
+        return c.json({ message: 'Race tournament not found' }, 400);
+      }
+
+      const regOpens = new Date(registrationOpensAt);
+      const regCloses = new Date(registrationClosesAt);
+      const raceStartsAt = new Date(`${date}T${time}`);
+      if (
+        !Number.isFinite(regOpens.getTime()) ||
+        !Number.isFinite(regCloses.getTime()) ||
+        !Number.isFinite(raceStartsAt.getTime())
+      ) {
+        return c.json({ message: 'Race and registration times must be valid' }, 400);
+      }
+      if (regOpens >= regCloses) {
+        return c.json({ message: 'Registration close time must be after open time' }, 400);
+      }
+      if (regCloses > raceStartsAt) {
+        return c.json({ message: 'Registration must close before the race starts' }, 400);
+      }
+      const raceDateError = validateRaceDateInTournament(tournament, date);
+      if (raceDateError) {
+        return c.json({ message: raceDateError }, 400);
+      }
+
+      const allRaceEntries = (db.raceEntries || []).filter((entry) => entry.raceId === race.id);
+      const entryIds = new Set(allRaceEntries.map((entry) => entry.id));
+      const recipientIds = new Set();
+      allRaceEntries.forEach((entry) => {
+        const horse = db.horses.find((item) => item.id === entry.horseId);
+        if (horse?.ownerUserId) recipientIds.add(horse.ownerUserId);
+        if (entry.jockeyUserId) recipientIds.add(entry.jockeyUserId);
+      });
+      (db.horseRaceRegistrations || [])
+        .filter((registration) => registration.raceId === race.id)
+        .forEach((registration) => {
+          if (registration.ownerUserId) recipientIds.add(registration.ownerUserId);
+          if (registration.jockeyUserId) recipientIds.add(registration.jockeyUserId);
+        });
+      (db.jockeyRaceRegistrations || [])
+        .filter((registration) => registration.raceId === race.id)
+        .forEach((registration) => {
+          if (registration.jockeyUserId) recipientIds.add(registration.jockeyUserId);
+        });
+      (db.jockeyInvitations || [])
+        .filter((invitation) => invitation.raceId === race.id)
+        .forEach((invitation) => {
+          if (invitation.ownerUserId) recipientIds.add(invitation.ownerUserId);
+          if (invitation.jockeyUserId) recipientIds.add(invitation.jockeyUserId);
+        });
+      assignedRefereeIds.forEach((refereeId) => recipientIds.add(refereeId));
+      db.users
+        .filter((item) => ['admin', 'spectator'].includes(item.role))
+        .forEach((item) => recipientIds.add(item.id));
+
+      race.date = date;
+      race.raceDate = date;
+      race.time = time;
+      race.raceTime = time;
+      race.registrationOpensAt = regOpens.toISOString();
+      race.registrationClosesAt = regCloses.toISOString();
+      race.status = 'registration-open';
+      race.participants = 0;
+      race.ownerConfirmed = 0;
+      race.jockeyConfirmed = 0;
+      race.resultStatus = 'draft';
+      race.awardsPublished = false;
+      race.replayTimeline = null;
+      race.updatedAt = new Date().toISOString();
+
+      db.raceEntries = (db.raceEntries || []).filter((entry) => entry.raceId !== race.id);
+      db.horseRaceRegistrations = (db.horseRaceRegistrations || []).filter(
+        (registration) => registration.raceId !== race.id
+      );
+      db.jockeyRaceRegistrations = (db.jockeyRaceRegistrations || []).filter(
+        (registration) => registration.raceId !== race.id
+      );
+      db.jockeyInvitations = (db.jockeyInvitations || []).filter(
+        (invitation) => invitation.raceId !== race.id
+      );
+      db.refereeReports = (db.refereeReports || []).filter(
+        (report) => report.raceId !== race.id && !entryIds.has(report.raceEntryId)
+      );
+
+      recipientIds.forEach((userId) =>
+        createNotification(
+          db,
+          userId,
+          'Race reset',
+          `${race.name} has been reset with a new registration window and start time.`
+        )
+      );
+
+      recordRaceAction(db, {
+        raceId: race.id,
+        userId: c.get('user').id,
+        action,
+        fromStatus,
+        toStatus: race.status,
+        details: `Reset schedule to ${date} ${time} and cleared race registrations`,
+      });
+
+      await writeDb(db);
+      broadcastRaceUpdate(race.id);
+      return c.json({
+        race,
+        entries: [],
+        notifications: db.notifications || [],
+      });
+    }
 
     if (action === 'close-registration') {
       if (race.status !== 'registration-open') {

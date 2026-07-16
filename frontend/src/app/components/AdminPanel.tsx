@@ -99,6 +99,8 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   const [tournamentMessage, setTournamentMessage] = useState('');
   const [editTournament, setEditTournament] = useState<TournamentRecord | null>(null);
   const [deleteTournamentTarget, setDeleteTournamentTarget] = useState<TournamentRecord | null>(null);
+  const [cancelRaceTarget, setCancelRaceTarget] = useState<RaceRecord | null>(null);
+  const [isCancellingRace, setIsCancellingRace] = useState(false);
 
   const [expandedTournaments, setExpandedTournaments] = useState<Record<string, boolean>>({});
   // Ghi chú: Hàm này bật/tắt nghiệp vụ liên quan đến toggle tournament.
@@ -227,9 +229,6 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
         maxRacesPerTournament
   );
 
-  const [showViewModal, setShowViewModal] =
-    useState<RaceRecord | null>(null);
-
   // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle race action.
   const handleRaceAction = (
     raceId: string,
@@ -265,11 +264,43 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       );
   };
 
-  // Ghi chú: Hàm này xác nhận nghiệp vụ liên quan đến confirm cancel race.
-  const confirmCancelRace = (raceId: string) => {
-    const confirmed = window.confirm('Are you sure you want to cancel this race?');
-    if (!confirmed) return;
-    handleRaceAction(raceId, 'cancel-race');
+  // Ghi chú: Hàm này hủy race rồi chuyển sang màn reset lịch.
+  const confirmCancelRace = () => {
+    if (!cancelRaceTarget) return;
+
+    setIsCancellingRace(true);
+    adminRaceAction(cancelRaceTarget.id, 'cancel-race')
+      .then((result) => {
+        setRaces((current) =>
+          current.map((race) => (race.id === result.race.id ? result.race : race))
+        );
+        if (Array.isArray(result.entries)) {
+          setRaceEntries((current) => {
+            const updatedEntryIds = new Set(result.entries.map((entry) => entry.id));
+
+            return [
+              ...current.filter((entry) => !updatedEntryIds.has(entry.id)),
+              ...result.entries,
+            ];
+          });
+        }
+        setApprovalMessage('Race cancelled. Set a new registration window and start time to reset it.');
+        sessionStorage.setItem('selectedRaceId', result.race.id);
+        setCancelRaceTarget(null);
+        onNavigate('edit-race');
+      })
+      .catch((error) =>
+        setApprovalMessage(
+          error instanceof Error ? error.message : 'Race action failed'
+        )
+      )
+      .finally(() => setIsCancellingRace(false));
+  };
+
+  // Ghi chú: Hàm này mở trang chi tiết race từ Admin Panel.
+  const openRaceDetails = (raceId: string) => {
+    sessionStorage.setItem('selectedRaceId', raceId);
+    onNavigate('race-details');
   };
 
   // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến race readiness.
@@ -827,7 +858,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                                     )}
 
                                     <button
-                                      onClick={() => confirmCancelRace(race.id)}
+                                      onClick={() => setCancelRaceTarget(race)}
                                       disabled={['in-progress', 'finished', 'completed', 'cancelled'].includes(race.status)}
                                       className="flex items-center gap-2 px-4 py-2 bg-red-600/10 text-red-300 rounded-xl hover:bg-red-600/20 transition-all border border-red-600/30 text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                                     >
@@ -840,7 +871,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                                         sessionStorage.setItem('selectedRaceId', race.id);
                                         onNavigate('edit-race');
                                       }}
-                                      disabled={!['registration-open', 'registration-closed'].includes(race.status)}
+                                      disabled={!['registration-open', 'registration-closed', 'cancelled'].includes(race.status)}
                                       className="flex items-center gap-2 px-4 py-2 bg-[#d4af37]/10 text-[#d4af37] rounded-xl hover:bg-[#d4af37] hover:text-white transition-all border border-[#d4af37]/30 text-sm font-semibold disabled:opacity-50 disabled:hover:bg-[#d4af37]/10 disabled:hover:text-[#d4af37]"
                                     >
                                       <Pencil className="w-4 h-4" />
@@ -848,7 +879,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                                     </button>
 
                                     <button
-                                      onClick={() => setShowViewModal(race)}
+                                      onClick={() => openRaceDetails(race.id)}
                                       className="flex items-center gap-2 px-4 py-2 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-all text-sm font-semibold"
                                     >
                                       <Eye className="w-4 h-4" />
@@ -881,7 +912,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                               </div>
                             </div>
                             <button
-                              onClick={() => setShowViewModal(race)}
+                              onClick={() => openRaceDetails(race.id)}
                               className="flex items-center gap-2 px-4 py-2 bg-white/5 text-white rounded-xl hover:bg-white/10 transition-all text-sm font-semibold"
                             >
                               <Eye className="w-4 h-4" />
@@ -1030,6 +1061,49 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                 >
                   <Trash2 className="w-5 h-5" />
                   Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {cancelRaceTarget && (
+          <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-[60] p-4">
+            <div className="bg-[#12304f] p-8 rounded-3xl w-full max-w-lg border border-red-500/30">
+              <div className="flex items-center gap-3 text-red-300 mb-4">
+                <XCircle className="w-6 h-6" />
+                <h2 className="text-2xl font-black text-white">
+                  Cancel Race?
+                </h2>
+              </div>
+
+              <p className="text-gray-300 leading-relaxed">
+                Cancel <span className="font-bold text-white">{cancelRaceTarget.name}</span> now?
+                The race will be kept for audit/testing, then you will be taken to reset its
+                registration window and start time before running it again.
+              </p>
+
+              <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 mt-5 text-sm text-amber-100">
+                Existing race registrations and entries are not reset until you submit the reset
+                form on the next screen.
+              </div>
+
+              <div className="flex gap-4 mt-8">
+                <button
+                  onClick={() => setCancelRaceTarget(null)}
+                  disabled={isCancellingRace}
+                  className="flex-1 py-4 bg-white/10 rounded-2xl text-white disabled:opacity-60"
+                >
+                  Keep Race
+                </button>
+
+                <button
+                  onClick={confirmCancelRace}
+                  disabled={isCancellingRace}
+                  className="flex-1 flex items-center justify-center gap-2 py-4 bg-red-600 hover:bg-red-700 disabled:opacity-60 rounded-2xl text-white font-bold"
+                >
+                  <XCircle className="w-5 h-5" />
+                  {isCancellingRace ? 'Cancelling...' : 'Cancel & Reset'}
                 </button>
               </div>
             </div>
@@ -1245,92 +1319,6 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                   Create & Open Registration
                 </button>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* VIEW MODAL */}
-
-        {showViewModal && (
-
-          <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-50">
-
-            <div className="bg-[#12304f] p-8 rounded-3xl w-full max-w-lg border border-white/10">
-
-              <h2 className="text-3xl font-black text-white mb-8">
-                Race Details
-              </h2>
-
-              <div className="space-y-5">
-
-                <div>
-
-                  <div className="text-gray-400 text-sm">
-                    Race Name
-                  </div>
-
-                  <div className="text-white text-2xl font-bold">
-                    {showViewModal.name}
-                  </div>
-                </div>
-
-                <div>
-
-                  <div className="text-gray-400 text-sm">
-                    Date
-                  </div>
-
-                  <div className="text-white">
-                    {showViewModal.date}
-                  </div>
-                </div>
-
-                <div>
-
-                  <div className="text-gray-400 text-sm">
-                    Time
-                  </div>
-
-                  <div className="text-white">
-                    {showViewModal.time}
-                  </div>
-                </div>
-
-                <div>
-
-                  <div className="text-gray-400 text-sm">
-                    Participants
-                  </div>
-
-                  <div className="text-white">
-                    {
-                      showViewModal.participants
-                    }
-                  </div>
-                </div>
-
-                <div>
-
-                  <div className="text-gray-400 text-sm">
-                    Status
-                  </div>
-
-                  <div className="text-green-500 font-bold">
-                    {
-                      showViewModal.status
-                    }
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={() =>
-                  setShowViewModal(null)
-                }
-                className="w-full mt-8 py-4 bg-[#d4af37] rounded-2xl text-white font-bold"
-              >
-                Close
-              </button>
             </div>
           </div>
         )}

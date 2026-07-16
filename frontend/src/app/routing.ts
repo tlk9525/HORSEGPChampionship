@@ -40,7 +40,7 @@ export const protectedPages: Record<AppPage, UserRole[] | undefined> = {
   admin: ['admin'],
   'create-race': ['admin'],
   'edit-race': ['admin'],
-  horses: ['admin', 'owner'],
+  horses: ['owner'],
   'register-horse': ['owner'],
   'race-registration': ['owner'],
   'edit-horse': ['owner'],
