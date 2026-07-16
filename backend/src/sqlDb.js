@@ -1261,6 +1261,40 @@ export const persistRegisteredUser = async (user, notifications = []) => {
   }
 };
 
+// Lưu cấu hình hệ thống bằng transaction nhỏ, tránh ghi lại toàn bộ database.
+export const persistSystemSettings = async (settingsRows = []) => {
+  await ensureRuntimeSchema();
+
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+
+    for (const setting of settingsRows) {
+      await client.query(
+        `INSERT INTO "systemSettings" ("key", "value", "updatedBy", "updatedAt")
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT ("key") DO UPDATE SET
+           "value" = EXCLUDED."value",
+           "updatedBy" = EXCLUDED."updatedBy",
+           "updatedAt" = EXCLUDED."updatedAt"`,
+        [
+          setting.key,
+          setting.value,
+          setting.updatedBy || null,
+          setting.updatedAt || nowIso(),
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 // Xóa đúng phiên đăng xuất thay vì ghi lại toàn bộ bảng session.
 export const deleteSession = async (token) => {
   if (!token) return;
