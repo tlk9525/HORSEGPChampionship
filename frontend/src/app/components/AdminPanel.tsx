@@ -307,6 +307,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
         maxRacesPerTournament
   );
 
+  // Ghi chú: Hàm này xử lý thao tác updateSystemSetting trong luồng nghiệp vụ.
   const updateSystemSetting = <Key extends keyof SystemSettingsState>(
     key: Key,
     value: SystemSettingsState[Key]
@@ -318,6 +319,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     setSystemSettingsMessage('');
   };
 
+  // Ghi chú: Hàm này xử lý thao tác saveSystemSettingsDraft trong luồng nghiệp vụ.
   const saveSystemSettingsDraft = () => {
     updateSystemSettings(systemSettings)
       .then(({ settings }) => {
@@ -334,6 +336,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       );
   };
 
+  // Ghi chú: Hàm này xử lý logic renderNumberSetting.
   const renderNumberSetting = (
     label: string,
     description: string,
@@ -358,6 +361,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     </label>
   );
 
+  // Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho renderToggleSetting.
   const renderToggleSetting = (
     label: string,
     description: string,

@@ -75,87 +75,87 @@ Backend được chia theo lớp:
 
 ```text
 Horse Racing Tournament Website/
-├── frontend/
-│   ├── index.html
-│   ├── vite.config.ts
-│   ├── tailwind.config.js
-│   └── src/
-│       ├── App.tsx
-│       ├── main.tsx
-│       └── app/
-│           ├── AppRoutes.tsx
-│           ├── routing.ts
-│           ├── components/
-│           │   ├── AdminPanel.tsx
-│           │   ├── CreateRacePage.tsx
-│           │   ├── EditRacePage.tsx
-│           │   ├── Footer.tsx
-│           │   ├── HorseDetails.tsx
-│           │   ├── HorseDirectoryPage.tsx
-│           │   ├── HorseManagement.tsx
-│           │   ├── JockeyDirectoryPage.tsx
-│           │   ├── JockeyPage.tsx
-│           │   ├── LandingPage.tsx
-│           │   ├── LiveRace.tsx
-│           │   ├── LoginPage.tsx
-│           │   ├── Navbar.tsx
-│           │   ├── RaceDetails.tsx
-│           │   ├── RaceRegistrationPage.tsx
-│           │   ├── RaceSimulationDemo.tsx
-│           │   ├── RegisterHorsePage.tsx
-│           │   ├── ResultsPage.tsx
-│           │   ├── TournamentDetails.tsx
-│           │   └── TournamentPage.tsx
-│           ├── services/
-│           │   └── api.ts
-│           └── utils/
-│               ├── domain.ts
-│               ├── messageTone.ts
-│               ├── raceSimulation.ts
-│               └── rating.ts
+├── frontend/                         # Phần giao diện React chạy trên trình duyệt.
+│   ├── index.html                    # File HTML gốc để Vite gắn React app vào.
+│   ├── vite.config.ts                # Cấu hình Vite: build, dev server và plugin React.
+│   ├── tailwind.config.js            # Cấu hình Tailwind CSS cho style toàn frontend.
+│   └── src/                          # Source chính của frontend.
+│       ├── App.tsx                   # Shell chính: auth guard, layout và khung render app.
+│       ├── main.tsx                  # Điểm khởi động React, mount App vào index.html.
+│       └── app/                      # Code nghiệp vụ frontend sau khi tách khỏi root src.
+│           ├── AppRoutes.tsx         # Định nghĩa toàn bộ route/page được render theo trạng thái.
+│           ├── routing.ts            # Map page, role được phép vào và helper redirect.
+│           ├── components/           # Các màn hình và component giao diện theo nghiệp vụ.
+│           │   ├── AdminPanel.tsx             # Dashboard admin: duyệt hồ sơ, quản lý race, user, settings.
+│           │   ├── CreateRacePage.tsx         # Form tạo race mới trong tournament.
+│           │   ├── EditRacePage.tsx           # Form sửa race chưa công bố hoặc reset race bị huỷ.
+│           │   ├── Footer.tsx                 # Footer chung của website.
+│           │   ├── HorseDetails.tsx           # Trang chi tiết hồ sơ ngựa, rating và lịch sử race.
+│           │   ├── HorseDirectoryPage.tsx     # Danh sách ngựa công khai để xem và lọc.
+│           │   ├── HorseManagement.tsx        # Khu owner quản lý ngựa của mình.
+│           │   ├── JockeyDirectoryPage.tsx    # Danh sách jockey công khai.
+│           │   ├── JockeyPage.tsx             # Portal jockey: hồ sơ, đăng ký race, lời mời.
+│           │   ├── LandingPage.tsx            # Trang chủ giới thiệu nhanh giải và luồng chính.
+│           │   ├── LiveRace.tsx               # Màn race đang chạy, nhận cập nhật live qua SSE.
+│           │   ├── LoginPage.tsx              # Giao diện đăng nhập và đăng ký tài khoản.
+│           │   ├── Navbar.tsx                 # Thanh điều hướng theo vai trò người dùng.
+│           │   ├── RaceDetails.tsx            # Chi tiết một race: entry, trạng thái, kết quả.
+│           │   ├── RaceRegistrationPage.tsx   # Owner đăng ký ngựa vào race và chọn/mời jockey.
+│           │   ├── RaceSimulationDemo.tsx     # Màn mô phỏng race demo để kiểm thử/giải thích race.
+│           │   ├── RegisterHorsePage.tsx      # Form owner tạo hồ sơ ngựa mới.
+│           │   ├── ResultsPage.tsx            # Trang xem kết quả race đã hoàn tất.
+│           │   ├── TournamentDetails.tsx      # Chi tiết tournament và các race thuộc tournament.
+│           │   └── TournamentPage.tsx         # Danh sách tournament và thao tác quản lý cơ bản.
+│           ├── services/             # Lớp gọi API từ frontend xuống backend.
+│           │   └── api.ts            # Khai báo type dữ liệu và hàm request cho toàn frontend.
+│           └── utils/                # Helper dùng chung ở frontend.
+│               ├── domain.ts         # Hàm lấy tên/ngữ nghĩa domain như owner, jockey, race.
+│               ├── messageTone.ts    # Chọn màu thông báo theo nội dung success/error/warning.
+│               ├── raceSimulation.ts # Logic mô phỏng race và rủi ro non-finish phía frontend.
+│               └── rating.ts         # Helper tính/lấy rating ngựa ở frontend.
 │
-├── backend/
-│   └── src/
-│       ├── app.js
-│       ├── index.js
-│       ├── sqlDb.js
-│       ├── config/
-│       │   └── constants.js
-│       ├── routes/
-│       │   ├── adminRoutes.js
-│       │   ├── authRoutes.js
-│       │   ├── jockeyRoutes.js
-│       │   ├── notificationRoutes.js
-│       │   ├── ownerRoutes.js
-│       │   ├── publicRoutes.js
-│       │   └── refereeRoutes.js
-│       └── services/
-│           ├── authService.js
-│           ├── domainService.js
-│           ├── handicapService.js
-│           ├── liveRaceEvents.js
-│           ├── notificationService.js
-│           ├── raceAuditService.js
-│           └── raceReplayTimeline.js
-├── backend/test/
-│   └── *.test.js
+├── backend/                          # Phần API Node.js/Hono và nghiệp vụ server.
+│   └── src/                          # Source chính của backend.
+│       ├── app.js                    # Tạo Hono app, gắn middleware và route.
+│       ├── index.js                  # Entry backend: đọc env, mở DB, start server.
+│       ├── sqlDb.js                  # Lớp đọc/ghi PostgreSQL và chuẩn hoá dữ liệu trả về.
+│       ├── config/                   # Cấu hình hằng số dùng chung backend.
+│       │   └── constants.js          # Giới hạn race, session, role, cookie và env mặc định.
+│       ├── routes/                   # API endpoint chia theo vai trò/domain.
+│       │   ├── adminRoutes.js        # API admin: tournament, race, approvals, user, settings.
+│       │   ├── authRoutes.js         # API đăng nhập, đăng ký, logout và session hiện tại.
+│       │   ├── jockeyRoutes.js       # API cho jockey: hồ sơ, race registration, invitation.
+│       │   ├── notificationRoutes.js # API đọc và đánh dấu thông báo.
+│       │   ├── ownerRoutes.js        # API cho owner: ngựa, đăng ký race, chọn jockey.
+│       │   ├── publicRoutes.js       # API public/bootstrap cho dữ liệu hiển thị chung.
+│       │   └── refereeRoutes.js      # API referee: check-in, incident, submit result.
+│       └── services/                 # Nghiệp vụ dùng lại giữa nhiều route.
+│           ├── authService.js        # Xử lý session cookie, public user và kiểm tra role.
+│           ├── domainService.js      # Helper domain: tên entity, entry race, approval review.
+│           ├── handicapService.js    # Tính rating, eligibility range và handicap.
+│           ├── liveRaceEvents.js     # Phát SSE để màn live race cập nhật realtime.
+│           ├── notificationService.js # Tạo thông báo cho admin/referee/owner/jockey.
+│           ├── raceAuditService.js   # Ghi log hành động quan trọng trên race.
+│           └── raceReplayTimeline.js # Dựng timeline replay chính thức/provisional cho race.
+├── backend/test/                     # Test backend bằng node:test.
+│   └── *.test.js                     # Test flow admin, owner, jockey, referee và service.
 │
-├── database/postgres/
-│   ├── migrations/
-│   ├── schema.sql
-│   └── seed.sql
-├── docs/
-│   ├── business-flow-and-roles.md
-│   ├── erd.drawio
-│   ├── horse-racing-erd-explanation.xlsx
-│   ├── schema-erd.md
-│   ├── STD.drawio
-│   ├── race-state-diagram.drawio
-│   ├── tournament-state-diagram.drawio
-│   └── horse-racing-status-reference.docx
-├── scripts/
-│   └── run-postgres-file.mjs
-└── package.json
+├── database/postgres/                # SQL để tạo và cập nhật database PostgreSQL.
+│   ├── migrations/                   # Các file migration thay đổi schema theo thời gian.
+│   ├── schema.sql                    # Schema chính: tạo bảng, constraint và index.
+│   └── seed.sql                      # Dữ liệu mẫu để chạy demo/local.
+├── docs/                             # Tài liệu phân tích và thiết kế hệ thống.
+│   ├── business-flow-and-roles.md    # Mô tả luồng nghiệp vụ và quyền từng vai trò.
+│   ├── erd.drawio                    # Sơ đồ ERD dạng draw.io.
+│   ├── horse-racing-erd-explanation.xlsx # Bảng giải thích entity/relationship trong ERD.
+│   ├── schema-erd.md                 # Tài liệu ERD/schema dạng markdown.
+│   ├── STD.drawio                    # State transition diagram tổng quát.
+│   ├── race-state-diagram.drawio     # State diagram riêng cho vòng đời race.
+│   ├── tournament-state-diagram.drawio # State diagram riêng cho tournament.
+│   └── horse-racing-status-reference.docx # Tài liệu tham chiếu các trạng thái.
+├── scripts/                          # Script tiện ích chạy ngoài app.
+│   └── run-postgres-file.mjs         # Chạy file SQL vào PostgreSQL theo env hiện tại.
+└── package.json                      # Metadata dự án, dependencies và npm scripts.
 ```
 
 ## Vai trò người dùng

@@ -101,6 +101,7 @@ const simulationIncidentReasons: Record<Exclude<RaceSimulationOutcome, 'finished
   disqualified: 'Simulator: disqualified for a race-rule violation.',
 };
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho raceSimulationOutcomeLabel.
 export const raceSimulationOutcomeLabel = (outcome?: RaceSimulationOutcome) =>
   simulationOutcomeLabels[outcome || 'finished'];
 
@@ -174,6 +175,7 @@ const shuffleValues = <T,>(values: T[], seed: number) => {
 const numericRating = (value: number | null | undefined, fallback = 75) =>
   Number.isFinite(Number(value)) ? Number(value) : fallback;
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho buildNonFinishRisk.
 const buildNonFinishRisk = ({
   health,
   stamina,
@@ -199,6 +201,7 @@ const buildNonFinishRisk = ({
   return clamp(0.018 + healthRisk + staminaRisk + formRisk + distanceRisk + surfaceRisk + weightRisk, 0.006, 0.095);
 };
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho pickNonFinishOutcome.
 const pickNonFinishOutcome = (
   random: () => number,
   risk: number,

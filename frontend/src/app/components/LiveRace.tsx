@@ -59,6 +59,7 @@ const resultOutcomeOptions: Array<{ value: ResultOutcome; label: string }> = [
   { value: 'disqualified', label: 'Disqualified' },
 ];
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho resultOutcomeLabel.
 const resultOutcomeLabel = (value?: string) =>
   resultOutcomeOptions.find((option) => option.value === value)?.label || 'Finished normally';
 
@@ -73,9 +74,11 @@ const leaderboardLaneColors = [
   '#14b8a6',
 ];
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho silkPaletteByLane.
 const silkPaletteByLane = (lane?: number | null) =>
   leaderboardLaneColors[Math.max(0, Number(lane || 1) - 1) % leaderboardLaneColors.length];
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho finishTimeSortValue.
 const finishTimeSortValue = (value?: string) => {
   const parsed = parseFinishTimeSeconds(value);
 

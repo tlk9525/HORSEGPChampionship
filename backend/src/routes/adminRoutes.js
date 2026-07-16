@@ -46,6 +46,7 @@ const nonRejectedEntry = (entry) => entry.status !== 'rejected';
 const USER_ROLES = ['admin', 'owner', 'jockey', 'referee', 'spectator'];
 const USER_STATUSES = ['pending', 'active', 'rejected', 'suspended', 'locked'];
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho sortedPublicUsers.
 const sortedPublicUsers = (db) =>
   [...(db.users || [])]
     .sort((first, second) => {
@@ -55,11 +56,15 @@ const sortedPublicUsers = (db) =>
     })
     .map(publicUser);
 
+// Ghi chú: Hàm này tính nhanh giá trị cấu hình activeAdminCount.
 const activeAdminCount = (db) =>
   (db.users || []).filter((user) => user.role === 'admin' && user.status === 'active').length;
 
+// Ghi chú: Hàm này tính nhanh giá trị cấu hình raceFieldSize.
 const raceFieldSize = (db) => systemSettingsFromDb(db).maxHorsesPerRace;
+// Ghi chú: Hàm này lấy và chuẩn hóa dữ liệu cho minReadiedParticipants.
 const minReadiedParticipants = (db) => systemSettingsFromDb(db).minReadiedParticipants;
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho maxTournamentRaces.
 const maxTournamentRaces = (db) => systemSettingsFromDb(db).maxRacesPerTournament;
 
 // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến tournament has ended.
