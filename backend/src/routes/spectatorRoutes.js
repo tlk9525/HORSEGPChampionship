@@ -10,8 +10,13 @@ import {
   isBettableEntry,
   racePotTotal,
   raceStartMs,
-  syncWalletCredits,
 } from '../services/bettingService.js';
+import {
+  CREDIT_TRANSACTION_TYPES,
+  creditCredits,
+  debitCredits,
+  vietnamDateKey,
+} from '../services/creditService.js';
 
 const BETTABLE_RACE_STATUSES = new Set(['published']);
 
@@ -45,6 +50,12 @@ export const createSpectatorRoutes = (
     const user = c.get('user');
     const db = c.get('db');
     const dbUser = db.users.find((item) => item.id === user.id);
+    const todayRewardTransaction = (db.creditTransactions || []).find(
+      (transaction) =>
+        transaction.userId === user.id &&
+        transaction.type === CREDIT_TRANSACTION_TYPES.DAILY_LOGIN_BONUS &&
+        transaction.metadata?.rewardDate === vietnamDateKey()
+    );
     const bets = (db.bets || [])
       .filter((bet) => bet.userId === user.id)
       .map((bet) => {
@@ -61,6 +72,13 @@ export const createSpectatorRoutes = (
 
     return c.json({
       credits: Number(dbUser?.credits ?? 0),
+      loginStreak: Number(dbUser?.loginStreak ?? 0),
+      lastLoginRewardDate: dbUser?.lastLoginRewardDate || null,
+      dailyReward: {
+        claimed: Boolean(todayRewardTransaction),
+        amount: Number(todayRewardTransaction?.amount || 0),
+        streak: Number(dbUser?.loginStreak ?? 0),
+      },
       bets,
     });
   });
@@ -171,9 +189,15 @@ export const createSpectatorRoutes = (
       }
       nextCredits = result.credits;
     } else {
-      dbUser.credits = nextCredits;
-      dbUser.updatedAt = createdAt;
-      syncWalletCredits(db, dbUser.id, dbUser.credits, createdAt);
+      const debited = debitCredits(db, dbUser.id, parsedAmount, {
+        type: CREDIT_TRANSACTION_TYPES.BET_PLACED,
+        metadata: { betId: bet.id, raceId: bet.raceId, raceEntryId },
+        createdAt,
+      });
+      if (!debited) {
+        return c.json({ message: 'Insufficient credits for this bet.' }, 400);
+      }
+      nextCredits = debited.credits;
       db.bets = [...(db.bets || []), bet];
       await writeDb(db);
     }
@@ -181,7 +205,6 @@ export const createSpectatorRoutes = (
     if (dbUser) {
       dbUser.credits = nextCredits;
       dbUser.updatedAt = createdAt;
-      syncWalletCredits(db, dbUser.id, nextCredits, createdAt);
     }
     if (!(db.bets || []).some((item) => item.id === bet.id)) {
       db.bets = [...(db.bets || []), bet];
@@ -247,11 +270,12 @@ export const createSpectatorRoutes = (
     } else {
       bet.status = 'cancelled';
       bet.settledAt = now;
-      if (dbUser) {
-        dbUser.credits = nextCredits;
-        dbUser.updatedAt = now;
-        syncWalletCredits(db, dbUser.id, dbUser.credits, now);
-      }
+      const credited = creditCredits(db, user.id, amount, {
+        type: CREDIT_TRANSACTION_TYPES.BET_CANCELLED,
+        metadata: { betId: bet.id, raceId: bet.raceId },
+        createdAt: now,
+      });
+      nextCredits = credited?.credits ?? nextCredits;
       await writeDb(db);
     }
 
@@ -260,7 +284,6 @@ export const createSpectatorRoutes = (
     if (dbUser) {
       dbUser.credits = nextCredits;
       dbUser.updatedAt = now;
-      syncWalletCredits(db, dbUser.id, nextCredits, now);
     }
 
     return c.json({

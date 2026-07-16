@@ -5,7 +5,7 @@ import {
   computeRaceHandicap,
   horseOverallRating,
   officialHorseRating,
-} from './handicapService.js';
+} from '../src/services/handicapService.js';
 
 test('initial rating uses the documented attribute weights', () => {
   assert.equal(

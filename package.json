@@ -6,9 +6,10 @@
   "scripts": {
     "api": "node --env-file-if-exists=.env backend/src/index.js",
     "start": "node --env-file-if-exists=.env backend/src/index.js",
-    "db:init": "node --env-file-if-exists=.env scripts/run-postgres-file.mjs database/postgres/schema.sql && node --env-file-if-exists=.env scripts/run-postgres-file.mjs database/postgres/migrations/004_betting.sql && node --env-file-if-exists=.env scripts/run-postgres-file.mjs database/postgres/seed.sql",
+    "db:init": "node --env-file-if-exists=.env scripts/run-postgres-file.mjs database/postgres/schema.sql && node --env-file-if-exists=.env scripts/run-postgres-file.mjs database/postgres/migrations/004_betting.sql && node --env-file-if-exists=.env scripts/run-postgres-file.mjs database/postgres/migrations/005_credit_ledger.sql && node --env-file-if-exists=.env scripts/run-postgres-file.mjs database/postgres/seed.sql",
     "db:schema": "node --env-file-if-exists=.env scripts/run-postgres-file.mjs database/postgres/schema.sql",
     "db:migrate-betting": "node --env-file-if-exists=.env scripts/run-postgres-file.mjs database/postgres/migrations/004_betting.sql",
+    "db:migrate-credit": "node --env-file-if-exists=.env scripts/run-postgres-file.mjs database/postgres/migrations/005_credit_ledger.sql",
     "db:seed": "node --env-file-if-exists=.env scripts/run-postgres-file.mjs database/postgres/seed.sql",
     "test": "node --test backend/src/services/*.test.js backend/test/*.test.js",
     "typecheck": "tsc --noEmit",

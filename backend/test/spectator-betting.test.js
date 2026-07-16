@@ -42,6 +42,8 @@ const buildDb = () => {
         role: 'spectator',
         status: 'active',
         credits: 100,
+        loginStreak: 0,
+        lastLoginRewardDate: null,
         createdAt: now,
         updatedAt: now,
       },
@@ -107,6 +109,8 @@ const buildDb = () => {
     ],
     jockeyProfiles: [],
     bets: [],
+    wallets: [],
+    creditTransactions: [],
     notifications: [],
     tournaments: [],
     jockeyRaceRegistrations: [],
@@ -134,7 +138,13 @@ test('spectator can place a bet before the race starts', async () => {
     headers: { Cookie: 'horse-racing-session=session-token' },
   });
   assert.equal(walletResponse.status, 200);
-  assert.deepEqual(await walletResponse.json(), { credits: 100, bets: [] });
+  assert.deepEqual(await walletResponse.json(), {
+    credits: 100,
+    loginStreak: 0,
+    lastLoginRewardDate: null,
+    dailyReward: { claimed: false, amount: 0, streak: 0 },
+    bets: [],
+  });
 
   const betResponse = await app.request('/api/spectator/bets', {
     method: 'POST',
@@ -151,7 +161,33 @@ test('spectator can place a bet before the race starts', async () => {
   assert.equal(betBody.bet.amount, 25);
   assert.equal(db.users[0].credits, 75);
   assert.equal(db.bets.length, 1);
+  assert.equal(db.creditTransactions.length, 1);
+  assert.equal(db.creditTransactions[0].type, 'bet_placed');
+  assert.equal(db.creditTransactions[0].amount, -25);
+  assert.equal(db.creditTransactions[0].balanceAfter, 75);
   assert.ok(persisted);
+});
+
+test('spectator cannot place a bet without enough credits', async () => {
+  const db = buildDb();
+  db.users[0].credits = 5;
+  const app = new Hono();
+  app.route('/api/spectator', createSpectatorRoutes(async () => db, async () => undefined));
+
+  const response = await app.request('/api/spectator/bets', {
+    method: 'POST',
+    headers: {
+      Cookie: 'horse-racing-session=session-token',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ raceEntryId: 'entry-1', amount: 10 }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).message, /Insufficient credits/i);
+  assert.equal(db.users[0].credits, 5);
+  assert.equal(db.bets.length, 0);
+  assert.equal(db.creditTransactions.length, 0);
 });
 
 test('spectator cannot bet within one minute of race start', async () => {
@@ -227,6 +263,12 @@ test('spectator can cancel a pending bet and get credits back', async () => {
   assert.equal(cancelBody.credits, 100);
   assert.equal(db.users[0].credits, 100);
   assert.equal(db.bets[0].status, 'cancelled');
+  assert.deepEqual(
+    db.creditTransactions.map((transaction) => transaction.type),
+    ['bet_placed', 'bet_cancelled']
+  );
+  assert.equal(db.creditTransactions[1].amount, 30);
+  assert.equal(db.creditTransactions[1].balanceAfter, 100);
   assert.ok(persisted);
 });
 

@@ -1876,6 +1876,8 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                           <th className="pb-3 pr-4">#</th>
                           <th className="pb-3 pr-4">Spectator</th>
                           <th className="pb-3 pr-4 text-right">Credits</th>
+                          <th className="pb-3 pr-4 text-right">Login Streak</th>
+                          <th className="pb-3 pr-4">Last Reward</th>
                           <th className="pb-3 pr-4 text-right">Total Bets</th>
                           <th className="pb-3 pr-4 text-right">Total Wagered</th>
                           <th className="pb-3 text-right">Total Won</th>
@@ -1887,6 +1889,8 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                             <td className="py-3 pr-4 text-gray-500">{idx + 1}</td>
                             <td className="py-3 pr-4 font-semibold">{spectator.name}</td>
                             <td className="py-3 pr-4 text-right text-[#d4af37] font-bold">{spectator.credits.toFixed(0)}</td>
+                            <td className="py-3 pr-4 text-right">Day {spectator.loginStreak}</td>
+                            <td className="py-3 pr-4 text-gray-300">{spectator.lastLoginRewardDate || '-'}</td>
                             <td className="py-3 pr-4 text-right">{spectator.totalBets}</td>
                             <td className="py-3 pr-4 text-right">{spectator.totalWagered.toFixed(0)}</td>
                             <td className="py-3 text-right text-emerald-400 font-semibold">{spectator.totalWon.toFixed(0)}</td>
