@@ -2,12 +2,9 @@ import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import {
   ACTIVE_TOURNAMENT_STATUSES,
-  MAX_RACE_FIELD_SIZE,
-  MAX_TOURNAMENT_RACES,
-  MIN_READIED_PARTICIPANTS,
   RACE_CLASS_WEIGHT_RANGES,
 } from '../config/constants.js';
-import { requireRole } from '../services/authService.js';
+import { publicUser, requireRole } from '../services/authService.js';
 import {
   approvedRaceEntries,
   formatApprovals,
@@ -34,6 +31,11 @@ import {
   notifyAdmins,
 } from '../services/notificationService.js';
 import {
+  sanitizeSystemSettings,
+  settingsToRows,
+  systemSettingsFromDb,
+} from '../services/systemSettingsService.js';
+import {
   buildOfficialReplayTimeline,
   buildProvisionalRaceTimeline,
 } from '../services/raceReplayTimeline.js';
@@ -41,6 +43,25 @@ import { racePotTotal, refundRaceBets, settleRaceBets } from '../services/bettin
 
 // Helpers nội bộ
 const nonRejectedEntry = (entry) => entry.status !== 'rejected';
+
+const USER_ROLES = ['admin', 'owner', 'jockey', 'referee', 'spectator'];
+const USER_STATUSES = ['pending', 'active', 'rejected', 'suspended', 'locked'];
+
+const sortedPublicUsers = (db) =>
+  [...(db.users || [])]
+    .sort((first, second) => {
+      const firstDate = new Date(first.createdAt || 0).getTime();
+      const secondDate = new Date(second.createdAt || 0).getTime();
+      return secondDate - firstDate || first.name.localeCompare(second.name);
+    })
+    .map(publicUser);
+
+const activeAdminCount = (db) =>
+  (db.users || []).filter((user) => user.role === 'admin' && user.status === 'active').length;
+
+const raceFieldSize = (db) => systemSettingsFromDb(db).maxHorsesPerRace;
+const minReadiedParticipants = (db) => systemSettingsFromDb(db).minReadiedParticipants;
+const maxTournamentRaces = (db) => systemSettingsFromDb(db).maxRacesPerTournament;
 
 // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến tournament has ended.
 const tournamentHasEnded = (tournament, at = new Date()) => {
@@ -118,7 +139,8 @@ const validatePairForRace = (db, race, pair) => {
       entry.horseId !== pair.horseId && nonRejectedEntry(entry)
   );
   if (jockeyConflict) return `${jockeyName(db, pair.jockeyUserId)} is already assigned in ${race.name}.`;
-  if (approvedRaceEntries(db, race.id).length >= MAX_RACE_FIELD_SIZE) return `${race.name} already has ${MAX_RACE_FIELD_SIZE} approved horses.`;
+  const maxRaceEntries = raceFieldSize(db);
+  if (approvedRaceEntries(db, race.id).length >= maxRaceEntries) return `${race.name} already has ${maxRaceEntries} approved horses.`;
   return null;
 };
 
@@ -145,7 +167,7 @@ const addPairToRace = (db, race, pair, createdAt) => {
   return true;
 };
 // Ghi chú: Hàm này tạo nhóm route admin routes cho backend.
-export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
+export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persistSystemSettings) => {
   const app = new Hono();
 
   // Middleware xác thực — chỉ admin mới truy cập được
@@ -217,8 +239,91 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
     return c.json({ raceSummaries, spectators });
   });
 
+  app.get('/users', (c) => {
+    const db = c.get('db');
+    return c.json({ users: sortedPublicUsers(db) });
+  });
+
+  app.get('/settings', (c) => {
+    const db = c.get('db');
+    return c.json({ settings: systemSettingsFromDb(db) });
+  });
+
+  app.patch('/settings', async (c) => {
+    const db = c.get('db');
+    const user = c.get('user');
+    const current = systemSettingsFromDb(db);
+    const input = await c.req.json();
+    const settings = sanitizeSystemSettings(input, current);
+    const now = new Date().toISOString();
+
+    const settingsRows = settingsToRows(settings, user.id, now);
+
+    if (persistSystemSettings) {
+      await persistSystemSettings(settingsRows);
+    } else {
+      db.systemSettings = settingsRows;
+      await writeDb(db);
+    }
+
+    return c.json({ settings });
+  });
+
+  app.patch('/users/:id', async (c) => {
+    const currentUser = c.get('user');
+    const db = c.get('db');
+    const id = c.req.param('id');
+    const { role, status } = await c.req.json();
+    const target = (db.users || []).find((user) => user.id === id);
+
+    if (!target) return c.json({ message: 'User not found' }, 404);
+    if (!USER_ROLES.includes(role)) return c.json({ message: 'Invalid role' }, 400);
+    if (!USER_STATUSES.includes(status)) return c.json({ message: 'Invalid status' }, 400);
+    if (target.id === currentUser.id && (role !== 'admin' || status !== 'active')) {
+      return c.json({ message: 'You cannot remove your own active admin access' }, 400);
+    }
+    if (
+      target.role === 'admin' &&
+      target.status === 'active' &&
+      (role !== 'admin' || status !== 'active') &&
+      activeAdminCount(db) <= 1
+    ) {
+      return c.json({ message: 'At least one active admin is required' }, 400);
+    }
+
+    target.role = role;
+    target.status = status;
+    target.updatedAt = new Date().toISOString();
+
+    await writeDb(db);
+    return c.json({ user: publicUser(target), users: sortedPublicUsers(db) });
+  });
+
+  app.delete('/users/:id', async (c) => {
+    const currentUser = c.get('user');
+    const db = c.get('db');
+    const id = c.req.param('id');
+    const target = (db.users || []).find((user) => user.id === id);
+
+    if (!target) return c.json({ message: 'User not found' }, 404);
+    if (target.id === currentUser.id) {
+      return c.json({ message: 'You cannot disable your own account' }, 400);
+    }
+    if (target.role === 'admin' && target.status === 'active' && activeAdminCount(db) <= 1) {
+      return c.json({ message: 'At least one active admin is required' }, 400);
+    }
+
+    target.status = 'suspended';
+    target.updatedAt = new Date().toISOString();
+
+    await writeDb(db);
+    return c.json({ user: publicUser(target), users: sortedPublicUsers(db) });
+  });
+
+  // Lấy dữ liệu trang tạo cuộc đua: giải, các cuộc đua hiện có, danh sách trọng tài
   app.get('/race-builder', (c) => {
     const db = c.get('db');
+    const settings = systemSettingsFromDb(db);
     const referees = db.users
       .filter((item) => item.role === 'referee' && item.status === 'active')
       .map((item) => ({ id: item.id, name: item.name }));
@@ -228,7 +333,9 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
       ),
       races: db.races || [],
       referees,
-      maxRacesPerTournament: MAX_TOURNAMENT_RACES,
+      maxRacesPerTournament: settings.maxRacesPerTournament,
+      defaultDistanceMeters: settings.defaultDistanceMeters,
+      closeRegistrationHours: settings.closeRegistrationHours,
     });
   });
 
@@ -416,9 +523,10 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
       return c.json({ message: 'Selected tournament must exist and be open before creating races' }, 400);
     }
     const existingTournamentRaces = tournamentRaces(db, tournament.id);
-    if (existingTournamentRaces.length >= MAX_TOURNAMENT_RACES) {
+    const settings = systemSettingsFromDb(db);
+    if (existingTournamentRaces.length >= settings.maxRacesPerTournament) {
       return c.json(
-        { message: `${tournament.name} already has the maximum ${MAX_TOURNAMENT_RACES} races` },
+        { message: `${tournament.name} already has the maximum ${settings.maxRacesPerTournament} races` },
         409
       );
     }
@@ -426,8 +534,11 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
     const now = new Date();
     // Registration window is set per-race (not per-tournament anymore)
     const registrationOpensAt = reqRegOpens ? new Date(reqRegOpens) : now;
-    const registrationClosesAt = reqRegCloses ? new Date(reqRegCloses) : new Date(`${date}T${time}`);
     const raceStartsAt = new Date(`${date}T${time}`);
+    const defaultRegistrationClosesAt = new Date(
+      raceStartsAt.getTime() - settings.closeRegistrationHours * 60 * 60 * 1000
+    );
+    const registrationClosesAt = reqRegCloses ? new Date(reqRegCloses) : defaultRegistrationClosesAt;
 
     if (!Number.isFinite(raceStartsAt.getTime())) {
       return c.json({ message: 'Race date and time must be valid' }, 400);
@@ -815,20 +926,21 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
       if (race.status !== 'registration-open') {
         return c.json({ message: 'Only an open registration can be closed' }, 400);
       }
-      if (entries.length > MAX_RACE_FIELD_SIZE) {
+      const maxRaceEntries = raceFieldSize(db);
+      if (entries.length > maxRaceEntries) {
         return c.json(
-          { message: `A race can have at most ${MAX_RACE_FIELD_SIZE} horses and ${MAX_RACE_FIELD_SIZE} jockeys on the track.` },
+          { message: `A race can have at most ${maxRaceEntries} horses and ${maxRaceEntries} jockeys on the track.` },
           400
         );
       }
       if (
-        approvedPairEntries.length !== MAX_RACE_FIELD_SIZE ||
-        approvedHorseCount !== MAX_RACE_FIELD_SIZE ||
-        approvedJockeyCount !== MAX_RACE_FIELD_SIZE
+        approvedPairEntries.length !== maxRaceEntries ||
+        approvedHorseCount !== maxRaceEntries ||
+        approvedJockeyCount !== maxRaceEntries
       ) {
         return c.json(
           {
-            message: `Registration can close only after Admin approves exactly ${MAX_RACE_FIELD_SIZE} distinct horse-jockey pairs. Current: ${approvedPairCount}/${MAX_RACE_FIELD_SIZE}.`,
+            message: `Registration can close only after Admin approves exactly ${maxRaceEntries} distinct horse-jockey pairs. Current: ${approvedPairCount}/${maxRaceEntries}.`,
           },
           400
         );
@@ -878,13 +990,14 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
         return c.json({ message: 'Close registration before publishing the race' }, 400);
       }
       if (
-        approvedPairEntries.length !== MAX_RACE_FIELD_SIZE ||
-        approvedHorseCount !== MAX_RACE_FIELD_SIZE ||
-        approvedJockeyCount !== MAX_RACE_FIELD_SIZE
+        approvedPairEntries.length !== raceFieldSize(db) ||
+        approvedHorseCount !== raceFieldSize(db) ||
+        approvedJockeyCount !== raceFieldSize(db)
       ) {
+        const maxRaceEntries = raceFieldSize(db);
         return c.json(
           {
-            message: `A race can be published only with exactly ${MAX_RACE_FIELD_SIZE} distinct approved horse-jockey pairs. Current: ${approvedPairCount}/${MAX_RACE_FIELD_SIZE}.`,
+            message: `A race can be published only with exactly ${maxRaceEntries} distinct approved horse-jockey pairs. Current: ${approvedPairCount}/${maxRaceEntries}.`,
           },
           400
         );
@@ -926,7 +1039,8 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
       if (uncheckedEntries.length > 0) {
         return c.json({ message: 'Every participant must be marked Ready or Absent before starting the race' }, 400);
       }
-      if(readyEntries.length < MIN_READIED_PARTICIPANTS) {
+      const requiredReadyCount = minReadiedParticipants(db);
+      if(readyEntries.length < requiredReadyCount) {
         race.status = 'cancelled';
         race.updatedAt = new Date().toISOString();
         const refund = refundRaceBets(
@@ -950,7 +1064,7 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
         .forEach((item) => recipientIds.add(item.id));
 
        recipientIds.forEach((userId) =>createNotification(db,userId,'Race cancelled',
-      `${race.name} has been cancelled due to insufficient participants. Only ${readyEntries.length} participants were marked Ready, but at least ${MIN_READIED_PARTICIPANTS} are required.`
+      `${race.name} has been cancelled due to insufficient participants. Only ${readyEntries.length} participants were marked Ready, but at least ${requiredReadyCount} are required.`
       )
       );
       }else{
@@ -1261,9 +1375,10 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction) => {
           );
           if (!alreadyEntered) {
             const approvedCount = approvedRaceEntries(db, invitation.raceId).length;
-            if (approvedCount >= MAX_RACE_FIELD_SIZE) {
+            const maxRaceEntries = raceFieldSize(db);
+            if (approvedCount >= maxRaceEntries) {
               return c.json(
-                { message: `This race already has ${MAX_RACE_FIELD_SIZE} approved horses. Reject or remove an entry before approving another one.` },
+                { message: `This race already has ${maxRaceEntries} approved horses. Reject or remove an entry before approving another one.` },
                 400
               );
             }

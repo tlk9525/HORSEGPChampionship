@@ -40,6 +40,30 @@ const raceDateWithinTournamentMessage = (
   return '';
 };
 
+const formatDatetimeLocal = (date: Date) => {
+  const pad = (value: number) => String(value).padStart(2, '0');
+
+  return [
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+    `${pad(date.getHours())}:${pad(date.getMinutes())}`,
+  ].join('T');
+};
+
+const suggestedRegistrationClose = (
+  raceDate: string,
+  startTime: string,
+  closeRegistrationHours: number
+) => {
+  if (!raceDate || !startTime) return '';
+
+  const raceStartsAt = new Date(`${raceDate}T${startTime}`);
+  if (!Number.isFinite(raceStartsAt.getTime())) return '';
+
+  return formatDatetimeLocal(
+    new Date(raceStartsAt.getTime() - closeRegistrationHours * 60 * 60 * 1000)
+  );
+};
+
 // Ghi chú: Hàm này render form tạo race mới cho admin.
 export default function CreateRacePage({
   onNavigate,
@@ -50,7 +74,8 @@ export default function CreateRacePage({
   const [tournaments, setTournaments] = useState<TournamentRecord[]>([]);
   const [races, setRaces] = useState<RaceRecord[]>([]);
   const [referees, setReferees] = useState<RaceBuilderReferee[]>([]);
-  const [maxRacesPerTournament, setMaxRacesPerTournament] = useState(10);
+  const [maxRacesPerTournament, setMaxRacesPerTournament] = useState(0);
+  const [closeRegistrationHours, setCloseRegistrationHours] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [message, setMessage] = useState('');
@@ -104,13 +129,18 @@ export default function CreateRacePage({
         setTournaments(data.tournaments);
         setRaces(data.races || []);
         setReferees(data.referees);
-        setMaxRacesPerTournament(data.maxRacesPerTournament || 10);
+        const nextMaxRacesPerTournament = data.maxRacesPerTournament ?? 0;
+        const nextDefaultDistanceMeters = data.defaultDistanceMeters ?? 0;
+        const nextCloseRegistrationHours = data.closeRegistrationHours ?? 0;
+
+        setMaxRacesPerTournament(nextMaxRacesPerTournament);
+        setCloseRegistrationHours(nextCloseRegistrationHours);
 
         const existingRaces = data.races || [];
         const firstTournament = data.tournaments.find(
           (tournament) =>
             existingRaces.filter((race) => race.tournamentId === tournament.id).length <
-            (data.maxRacesPerTournament || 10)
+            nextMaxRacesPerTournament
         );
         const usedNumbers = firstTournament
           ? existingRaces
@@ -127,6 +157,7 @@ export default function CreateRacePage({
           tournamentId: firstTournament?.id || '',
           raceNumber: current.raceNumber || nextRaceNumber,
           venue: current.venue || firstTournament?.location || '',
+          distance: current.distance || String(nextDefaultDistanceMeters || ''),
           refereeUserIds: data.referees[0] ? [data.referees[0].id] : [],
         }));
         setLoadError(false);
@@ -399,12 +430,20 @@ export default function CreateRacePage({
                     type="date"
                     className={fieldClass}
                     value={form.raceDate}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const nextRaceDate = event.target.value;
                       setForm({
                         ...form,
-                        raceDate: event.target.value,
-                      })
-                    }
+                        raceDate: nextRaceDate,
+                        registrationClosesAt:
+                          form.registrationClosesAt ||
+                          suggestedRegistrationClose(
+                            nextRaceDate,
+                            form.startTime,
+                            closeRegistrationHours
+                          ),
+                      });
+                    }}
                   />
                 </div>
 
@@ -414,12 +453,20 @@ export default function CreateRacePage({
                     type="time"
                     className={fieldClass}
                     value={form.startTime}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const nextStartTime = event.target.value;
                       setForm({
                         ...form,
-                        startTime: event.target.value,
-                      })
-                    }
+                        startTime: nextStartTime,
+                        registrationClosesAt:
+                          form.registrationClosesAt ||
+                          suggestedRegistrationClose(
+                            form.raceDate,
+                            nextStartTime,
+                            closeRegistrationHours
+                          ),
+                      });
+                    }}
                   />
                 </div>
 

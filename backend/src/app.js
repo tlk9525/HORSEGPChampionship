@@ -22,6 +22,7 @@ export const createApp = ({
   persistAdminRaceAction,
   persistLoginSession,
   persistRegisteredUser,
+  persistSystemSettings,
   deleteSession,
 }) => {
   const app = new Hono();
@@ -66,7 +67,7 @@ export const createApp = ({
   );
   app.route('/api/owner', createOwnerRoutes(getDb, writeDb));
   app.route('/api/jockey', createJockeyRoutes(getDb, writeDb));
-  app.route('/api/admin', createAdminRoutes(getDb, writeDb, persistAdminRaceAction));
+  app.route('/api/admin', createAdminRoutes(getDb, writeDb, persistAdminRaceAction, persistSystemSettings));
   app.route(
     '/api/referee',
     createRefereeRoutes(

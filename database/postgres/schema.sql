@@ -280,9 +280,11 @@ CREATE TABLE "raceEntries" (
   "preRaceStatus" VARCHAR(32) NOT NULL DEFAULT 'pending',
   "disqualified" BOOLEAN NOT NULL DEFAULT FALSE,
   "resultStatus" VARCHAR(32) NOT NULL DEFAULT 'draft',
+  "resultOutcome" VARCHAR(32) NOT NULL DEFAULT 'finished',
   "position" INTEGER,
   "finishTime" VARCHAR(64),
   "notes" TEXT,
+  "incidentReason" TEXT,
   "violationNotes" TEXT,
   "createdAt" TIMESTAMPTZ,
   CONSTRAINT "fk_race_entries_race"
@@ -382,4 +384,14 @@ CREATE TABLE "sessions" (
   CONSTRAINT "fk_sessions_user"
     FOREIGN KEY ("userId") REFERENCES "users" ("id")
     ON DELETE CASCADE
+);
+
+CREATE TABLE "systemSettings" (
+  "key" VARCHAR(128) PRIMARY KEY,
+  "value" TEXT NOT NULL,
+  "updatedBy" VARCHAR(64),
+  "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT "fk_system_settings_updated_by"
+    FOREIGN KEY ("updatedBy") REFERENCES "users" ("id")
+    ON DELETE SET NULL
 );

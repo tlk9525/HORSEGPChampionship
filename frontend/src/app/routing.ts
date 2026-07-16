@@ -21,7 +21,8 @@ export type AppPage =
   | 'betting'
   | 'admin'
   | 'create-race'
-  | 'edit-race';
+  | 'edit-race'
+  | 'manage-users';
 
 export const roleHome: Record<UserRole, AppPage> = {
   admin: 'admin',
@@ -41,6 +42,7 @@ export const protectedPages: Record<AppPage, UserRole[] | undefined> = {
   admin: ['admin'],
   'create-race': ['admin'],
   'edit-race': ['admin'],
+  'manage-users': ['admin'],
   horses: ['owner'],
   'register-horse': ['owner'],
   'race-registration': ['owner'],
@@ -85,6 +87,7 @@ export const pageFromPath = (pathname: string): AppPage => {
   if (path === '/results') return 'results';
   if (path === '/betting') return 'betting';
   if (path === '/admin') return 'admin';
+  if (path === '/admin/users') return 'manage-users';
   if (path === '/admin/races/new') return 'create-race';
   if (/^\/admin\/races\/[^/]+\/edit$/.test(path)) return 'edit-race';
 
@@ -129,6 +132,7 @@ export const pathForPage = (
     'edit-race': context.selectedRaceId
       ? `/admin/races/${context.selectedRaceId}/edit`
       : '/admin',
+    'manage-users': '/admin/users',
   };
 
   return (page in paths ? paths[page as AppPage] : undefined) || '/tournaments';

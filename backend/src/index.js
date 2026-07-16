@@ -7,6 +7,7 @@ import {
   persistRaceEntryResult,
   persistLoginSession,
   persistRegisteredUser,
+  persistSystemSettings,
   deleteSession,
   readDb,
   writeDb,
@@ -25,6 +26,7 @@ const app = createApp({
   persistAdminRaceAction,
   persistLoginSession,
   persistRegisteredUser,
+  persistSystemSettings,
   deleteSession,
 });
 
