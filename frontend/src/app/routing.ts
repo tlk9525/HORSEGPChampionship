@@ -59,6 +59,7 @@ export interface RouteContext {
   selectedHorseId: string;
 }
 
+// Ghi chú: Hàm này chuyển URL pathname thành page nội bộ của ứng dụng.
 export const pageFromPath = (pathname: string): AppPage => {
   const path = pathname.replace(/\/+$/, '') || '/';
 
@@ -87,6 +88,7 @@ export const pageFromPath = (pathname: string): AppPage => {
   return 'tournaments';
 };
 
+// Ghi chú: Hàm này tạo URL pathname từ page và tham số định tuyến.
 export const pathForPage = (
   page: AppPage | string,
   context: RouteContext,
@@ -128,10 +130,12 @@ export const pathForPage = (
   return (page in paths ? paths[page as AppPage] : undefined) || '/tournaments';
 };
 
+// Ghi chú: Hàm này kiểm tra user hiện tại có quyền mở page hay không.
 export const canAccessPage = (page: AppPage, user: AuthUser | null) => {
   const allowedRoles = protectedPages[page];
   if (!allowedRoles) return true;
   return Boolean(user && allowedRoles.includes(user.role));
 };
 
+// Ghi chú: Hàm này xác định page có yêu cầu đăng nhập hoặc role riêng không.
 export const isProtectedPage = (page: AppPage) => Boolean(protectedPages[page]);

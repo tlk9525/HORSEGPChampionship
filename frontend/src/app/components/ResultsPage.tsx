@@ -14,6 +14,7 @@ import { statusLabel } from '../utils/domain';
 
 
 
+// Ghi chú: Hàm này render bảng kết quả race đã hoàn tất.
 export default function ResultsPage() {
   const [races, setRaces] = useState<RaceRecord[]>([]);
   const [entries, setEntries] = useState<RaceEntryRecord[]>([]);

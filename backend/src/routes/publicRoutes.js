@@ -54,6 +54,7 @@ const visibleRaceEntries = (db, user) => {
 
 // Lấy danh sách ngựa mà người dùng được phép xem
 const visibleHorses = (db, user, entries) => {
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến with owner name.
   const withOwnerName = (horse) => ({
     ...horse,
     ownerName: ownerName(db, horse.ownerUserId),
@@ -105,6 +106,7 @@ const visibleHorseRaceRegistrations = (db, user) => {
   return [];
 };
 
+// Ghi chú: Hàm này tạo nhóm route public routes cho backend.
 export const createPublicRoutes = (getDb) => {
   const app = new Hono();
 

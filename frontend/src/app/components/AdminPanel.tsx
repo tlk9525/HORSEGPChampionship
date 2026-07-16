@@ -37,6 +37,7 @@ interface AdminPanelProps {
   onNavigate: (page: string) => void;
 }
 
+// Ghi chú: Hàm này đổi ngày từ input date sang ISO để gửi backend.
 const dateInputToIso = (value: string) => {
   const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
 
@@ -65,6 +66,7 @@ const dateInputToIso = (value: string) => {
   return isValidDate ? `${year}-${month}-${day}` : '';
 };
 
+// Ghi chú: Hàm này chọn class màu badge theo trạng thái race.
 const raceStatusBadgeClass = (status: string) => {
   const classes: Record<string, string> = {
     draft: 'bg-gray-600/20 border border-gray-600/30 text-gray-300',
@@ -80,6 +82,7 @@ const raceStatusBadgeClass = (status: string) => {
   return classes[status] || classes.draft;
 };
 
+// Ghi chú: Hàm này render dashboard admin để duyệt hồ sơ, quản lý tournament và điều phối race.
 export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   const [pendingApprovals, setPendingApprovals] = useState<ApprovalItem[]>([]);
@@ -98,6 +101,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   const [deleteTournamentTarget, setDeleteTournamentTarget] = useState<TournamentRecord | null>(null);
 
   const [expandedTournaments, setExpandedTournaments] = useState<Record<string, boolean>>({});
+  // Ghi chú: Hàm này bật/tắt nghiệp vụ liên quan đến toggle tournament.
   const toggleTournament = (tournamentId: string) => {
     setExpandedTournaments((prev) => ({ ...prev, [tournamentId]: !prev[tournamentId] }));
   };
@@ -108,6 +112,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     location: '',
   });
 
+  // Ghi chú: Hàm này tải nghiệp vụ liên quan đến load approvals.
   const loadApprovals = () => {
     setIsLoadingApprovals(true);
 
@@ -138,6 +143,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       .catch(() => undefined);
   }, []);
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle decision.
   const handleDecision = (
     item: ApprovalItem,
     decision: 'approved' | 'rejected'
@@ -224,6 +230,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   const [showViewModal, setShowViewModal] =
     useState<RaceRecord | null>(null);
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle race action.
   const handleRaceAction = (
     raceId: string,
     action:
@@ -258,12 +265,14 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       );
   };
 
+  // Ghi chú: Hàm này xác nhận nghiệp vụ liên quan đến confirm cancel race.
   const confirmCancelRace = (raceId: string) => {
     const confirmed = window.confirm('Are you sure you want to cancel this race?');
     if (!confirmed) return;
     handleRaceAction(raceId, 'cancel-race');
   };
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến race readiness.
   const raceReadiness = (raceId: string) => {
     const entries = raceEntries.filter(
       (entry) => entry.raceId === raceId && entry.status === 'approved'
@@ -278,6 +287,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     return { total: entries.length, ready, unchecked };
   };
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến approved pair count.
   const approvedPairCount = (raceId: string) => {
     const entries = raceEntries.filter(
       (entry) =>
@@ -294,6 +304,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     );
   };
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle create tournament.
   const handleCreateTournament = () => {
     setTournamentMessage('');
     const startDate = dateInputToIso(tournamentForm.startDate);
@@ -312,6 +323,10 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
     if (!startDate || (tournamentForm.finalDate && !finalDate)) {
       setTournamentMessage('Tournament dates must be valid.');
+      return;
+    }
+    if (finalDate && finalDate < startDate) {
+      setTournamentMessage('End date must be after start date.');
       return;
     }
 
@@ -341,6 +356,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       );
   };
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle update tournament.
   const handleUpdateTournament = () => {
     if (!editTournament) return;
 
@@ -358,6 +374,10 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
     if (!startDate || (editTournament.finalDate && !finalDate)) {
       setTournamentMessage('Tournament dates must be valid.');
+      return;
+    }
+    if (finalDate && finalDate < startDate) {
+      setTournamentMessage('End date must be after start date.');
       return;
     }
 
@@ -380,11 +400,13 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       );
   };
 
+  // Ghi chú: Hàm này gửi request nghiệp vụ liên quan đến request delete tournament.
   const requestDeleteTournament = () => {
     if (!editTournament) return;
     setDeleteTournamentTarget(editTournament);
   };
 
+  // Ghi chú: Hàm này xác nhận nghiệp vụ liên quan đến confirm delete tournament.
   const confirmDeleteTournament = () => {
     if (!deleteTournamentTarget) return;
 

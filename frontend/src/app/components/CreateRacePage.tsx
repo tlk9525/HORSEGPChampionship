@@ -26,6 +26,21 @@ const RACE_CLASS_SETTINGS: Record<
   Open: { topWeightLb: '135', minWeightLb: '110', ratingMin: '0', ratingMax: '140' },
 };
 
+const raceDateWithinTournamentMessage = (
+  tournament: TournamentRecord | undefined,
+  raceDate: string
+) => {
+  if (!tournament) return '';
+  if (tournament.startDate && raceDate < tournament.startDate) {
+    return 'Race date must be on or after tournament start date.';
+  }
+  if (tournament.finalDate && raceDate > tournament.finalDate) {
+    return 'Race date must be on or before tournament end date.';
+  }
+  return '';
+};
+
+// Ghi chú: Hàm này render form tạo race mới cho admin.
 export default function CreateRacePage({
   onNavigate,
 }: CreateRacePageProps) {
@@ -68,6 +83,7 @@ export default function CreateRacePage({
 
   const tournamentOptions = useMemo(() => tournaments, [tournaments]);
 
+  // Ghi chú: Hàm này lấy nghiệp vụ liên quan đến get next race number.
   const getNextRaceNumber = (tournamentId: string) => {
     const usedNumbers = races
       .filter((race) => race.tournamentId === tournamentId)
@@ -121,6 +137,7 @@ export default function CreateRacePage({
       .finally(() => setIsLoading(false));
   }, []);
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle submit.
   const handleSubmit = () => {
     setMessage('');
 
@@ -171,6 +188,11 @@ export default function CreateRacePage({
       setMessage('Registration must close before the race starts.');
       return;
     }
+    const raceDateError = raceDateWithinTournamentMessage(selectedTournament, form.raceDate);
+    if (raceDateError) {
+      setMessage(raceDateError);
+      return;
+    }
     if (Number(form.distance) < 400 || Number(form.distance) > 10000) {
       setMessage('Race distance must be between 400m and 10,000m.');
       return;
@@ -218,6 +240,7 @@ export default function CreateRacePage({
       .finally(() => setIsSubmitting(false));
   };
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle tournament change.
   const handleTournamentChange = (tournamentId: string) => {
     const tournament = tournaments.find((item) => item.id === tournamentId);
     const nextRaceNumber = getNextRaceNumber(tournamentId);
@@ -230,6 +253,7 @@ export default function CreateRacePage({
     }));
   };
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle race class change.
   const handleRaceClassChange = (raceClass: string) => {
     const preset = RACE_CLASS_SETTINGS[raceClass];
     const fallback = RACE_CLASS_SETTINGS.Open;

@@ -11,6 +11,7 @@ const silkPalette = [
   '#f472b6',
 ];
 
+// Ghi chú: Hàm này tạo bộ sinh số giả ngẫu nhiên có seed cố định.
 const mulberry32 = (seed) => {
   let value = seed || 1;
 
@@ -23,6 +24,7 @@ const mulberry32 = (seed) => {
   };
 };
 
+// Ghi chú: Hàm này xáo trộn danh sách theo seed để kết quả mô phỏng ổn định.
 const shuffleValues = (values, seed) => {
   const random = mulberry32(seed);
   const next = [...values];
@@ -40,6 +42,7 @@ const shuffleValues = (values, seed) => {
   return next;
 };
 
+// Ghi chú: Hàm này tạo seed số ổn định từ chuỗi để replay race nhất quán.
 const hashRaceSeed = (value) => {
   let hash = 2166136261;
 
@@ -57,11 +60,13 @@ const baseSpeedBySurface = {
   Synthetic: 16.5,
 };
 
+// Ghi chú: Hàm này phân tích nghiệp vụ liên quan đến parse distance meters.
 const parseDistanceMeters = (distance) => {
   const parsed = Number(String(distance ?? '').replace(/[^\d.]/g, ''));
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 1600;
 };
 
+// Ghi chú: Hàm này chuẩn hóa loại mặt đường race về nhóm surface được mô phỏng hỗ trợ.
 const normalizeRaceSurface = (surface) => {
   const normalized = String(surface || '').toLowerCase();
   if (normalized.includes('dirt')) return 'Dirt';
@@ -69,6 +74,7 @@ const normalizeRaceSurface = (surface) => {
   return 'Turf';
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến finish time to seconds.
 const finishTimeToSeconds = (value) => {
   const raw = String(value || '').trim();
   if (!raw) return Number.NaN;
@@ -112,6 +118,7 @@ const finishTimeToSeconds = (value) => {
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 };
 
+// Ghi chú: Hàm này xây dựng nghiệp vụ liên quan đến build checkpoints.
 const buildCheckpoints = (distanceMeters, finishTimeSeconds, positionIndex) => {
   const checkpointSize = distanceMeters <= 1200 ? 50 : 100;
   const checkpoints = [{ distanceMeters: 0, timeSeconds: 0 }];
@@ -145,8 +152,10 @@ const buildCheckpoints = (distanceMeters, finishTimeSeconds, positionIndex) => {
   return checkpoints;
 };
 
+// Ghi chú: Hàm này giới hạn một giá trị số trong khoảng min và max.
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
+// Ghi chú: Hàm này dựng các checkpoint cạnh tranh để replay race có nhịp chạy tự nhiên hơn.
 const buildCompetitiveCheckpoints = ({
   distanceMeters,
   finishTimeSeconds,
@@ -232,6 +241,7 @@ const buildCompetitiveCheckpoints = ({
   return checkpoints;
 };
 
+// Ghi chú: Hàm này định dạng nghiệp vụ liên quan đến format finish time.
 const formatFinishTime = (seconds) => {
   const safeSeconds = Math.max(0, seconds);
   const minutes = Math.floor(safeSeconds / 60);
@@ -241,6 +251,7 @@ const formatFinishTime = (seconds) => {
   return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
 };
 
+// Ghi chú: Hàm này tính thời gian finish dùng cho hoạt ảnh replay.
 const buildVisualFinishTimeSeconds = (
   distanceMeters,
   surface,
@@ -255,9 +266,11 @@ const buildVisualFinishTimeSeconds = (
   return winnerSeconds + spreadSeconds * easing;
 };
 
+// Ghi chú: Hàm này chuẩn hóa rating thành số hợp lệ hoặc fallback.
 const numericRating = (value, fallback = 75) =>
   Number.isFinite(Number(value)) ? Number(value) : fallback;
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến scale checkpoints to finish.
 const scaleCheckpointsToFinish = (checkpoints, finishTimeSeconds, distanceMeters) => {
   if (!Array.isArray(checkpoints) || checkpoints.length < 2) {
     return null;
@@ -279,6 +292,7 @@ const scaleCheckpointsToFinish = (checkpoints, finishTimeSeconds, distanceMeters
   }));
 };
 
+// Ghi chú: Hàm này xây dựng nghiệp vụ liên quan đến build provisional race timeline.
 export const buildProvisionalRaceTimeline = ({ race, entries, horses = [] }) => {
   const approvedEntries = [...(entries || [])]
     .filter(
@@ -465,6 +479,7 @@ export const buildProvisionalRaceTimeline = ({ race, entries, horses = [] }) => 
   };
 };
 
+// Ghi chú: Hàm này xây dựng nghiệp vụ liên quan đến build official replay timeline.
 export const buildOfficialReplayTimeline = ({ race, entries, horses = [] }) => {
   const competingEntries = [...(entries || [])]
     .filter(

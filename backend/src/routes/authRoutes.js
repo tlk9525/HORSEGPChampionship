@@ -16,6 +16,7 @@ import {
   notifyAdmins,
 } from '../services/notificationService.js';
 
+// Ghi chú: Hàm này tạo nhóm route auth routes cho backend.
 export const createAuthRoutes = (
   getDb,
   writeDb,

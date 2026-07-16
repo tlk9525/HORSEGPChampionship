@@ -33,6 +33,7 @@ export const streamRaceUpdates = (req, raceId) => {
 
   const stream = new ReadableStream({
     start(controller) {
+      // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến send event.
       const sendEvent = (payload) => {
         const text = `event: race-update\ndata: ${JSON.stringify(payload)}\n\n`;
         controller.enqueue(encoder.encode(text));
@@ -51,6 +52,7 @@ export const streamRaceUpdates = (req, raceId) => {
         }
       }, 25000);
 
+      // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến listener.
       const listener = (payload) => {
         try {
           sendEvent(payload);

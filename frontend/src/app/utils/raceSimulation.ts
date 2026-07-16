@@ -17,7 +17,7 @@ export interface RaceSimulationEntryInput {
   horseOverallRating?: number | null;
 }
 
-export interface RaceCheckpoint {
+interface RaceCheckpoint {
   distanceMeters: number;
   timeSeconds: number;
 }
@@ -76,15 +76,18 @@ const silkPalette = [
   '#f472b6',
 ];
 
+// Ghi chú: Hàm này giới hạn một giá trị số trong khoảng min và max.
 export const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
+// Ghi chú: Hàm này chuyển distance của race thành số mét dùng cho mô phỏng.
 export const parseRaceDistanceMeters = (distance?: string | number | null) => {
   const parsed = Number(String(distance ?? '').replace(/[^\d.]/g, ''));
 
   return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 1600;
 };
 
+// Ghi chú: Hàm này chuẩn hóa loại mặt đường race về nhóm surface được mô phỏng hỗ trợ.
 export const normalizeRaceSurface = (surface?: string | null): RaceSurface => {
   const normalized = String(surface || '').toLowerCase();
 
@@ -93,6 +96,7 @@ export const normalizeRaceSurface = (surface?: string | null): RaceSurface => {
   return 'Turf';
 };
 
+// Ghi chú: Hàm này tạo seed số ổn định từ chuỗi để replay race nhất quán.
 export const hashRaceSeed = (value: string) => {
   let hash = 2166136261;
 
@@ -104,6 +108,7 @@ export const hashRaceSeed = (value: string) => {
   return hash >>> 0;
 };
 
+// Ghi chú: Hàm này tạo bộ sinh số giả ngẫu nhiên có seed cố định.
 const mulberry32 = (seed: number) => {
   let value = seed;
 
@@ -116,6 +121,7 @@ const mulberry32 = (seed: number) => {
   };
 };
 
+// Ghi chú: Hàm này xáo trộn danh sách theo seed để kết quả mô phỏng ổn định.
 const shuffleValues = <T,>(values: T[], seed: number) => {
   const random = mulberry32(seed || 1);
   const next = [...values];
@@ -136,15 +142,18 @@ const shuffleValues = <T,>(values: T[], seed: number) => {
   return next;
 };
 
+// Ghi chú: Hàm này chuẩn hóa rating thành số hợp lệ hoặc fallback.
 const numericRating = (value: number | null | undefined, fallback = 75) =>
   Number.isFinite(Number(value)) ? Number(value) : fallback;
 
+// Ghi chú: Hàm này tạo thứ tự cổng xuất phát hiển thị cho các runner.
 const buildVisualGateOrder = (seed: number, fieldSize: number) =>
   shuffleValues(
     Array.from({ length: fieldSize }, (_, index) => index + 1),
     seed
   );
 
+// Ghi chú: Hàm này định dạng thời gian mô phỏng thành chuỗi phút giây.
 export const formatRaceSimulationTime = (seconds: number) => {
   const safeSeconds = Math.max(0, seconds);
   const minutes = Math.floor(safeSeconds / 60);
@@ -154,6 +163,7 @@ export const formatRaceSimulationTime = (seconds: number) => {
   return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
 };
 
+// Ghi chú: Hàm này tạo toàn bộ kế hoạch mô phỏng race gồm runner, checkpoint và thời gian finish.
 export const createRaceSimulationPlan = ({
   seed,
   distanceMeters,
@@ -310,6 +320,7 @@ export const createRaceSimulationPlan = ({
   };
 };
 
+// Ghi chú: Hàm này tính vị trí tiến độ của runner tại một mốc thời gian replay.
 export const progressForRunner = (
   runner: Pick<RaceSimulationRunner, 'finishTimeSeconds' | 'checkpoints'>,
   elapsedSeconds: number
@@ -339,6 +350,7 @@ export const progressForRunner = (
   return clamp(currentDistance / runner.checkpoints.at(-1)!.distanceMeters, 0, 1);
 };
 
+// Ghi chú: Hàm này sắp xếp runner để hiển thị theo thứ hạng hiện tại trên đường đua.
 export const sortRaceDisplayRunners = <T extends RaceDisplayRunnerLike>(runners: T[]) =>
   [...runners].sort((a, b) => {
     const progressA = Number(a.progress ?? 0);
@@ -365,6 +377,7 @@ export const sortRaceDisplayRunners = <T extends RaceDisplayRunnerLike>(runners:
     return String(a.entryId || a.keyId || '').localeCompare(String(b.entryId || b.keyId || ''));
   });
 
+// Ghi chú: Hàm này chuyển finish time dạng chuỗi về số giây để dựng replay.
 const parseReplayTimeSeconds = (value?: string) => {
   if (!value) return Number.NaN;
 
@@ -391,6 +404,7 @@ const parseReplayTimeSeconds = (value?: string) => {
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 };
 
+// Ghi chú: Hàm này dựng checkpoint chính thức cho replay từ dữ liệu kết quả đã duyệt.
 const buildOfficialCheckpoints = (
   distanceMeters: number,
   finishTimeSeconds: number,
@@ -473,6 +487,7 @@ const buildOfficialCheckpoints = (
   }));
 };
 
+// Ghi chú: Hàm này tính thời gian finish dùng cho hoạt ảnh replay.
 const buildVisualFinishTimeSeconds = (
   distanceMeters: number,
   surface: RaceSurface,
@@ -491,6 +506,7 @@ const buildVisualFinishTimeSeconds = (
   return winnerSeconds + spreadSeconds * easing;
 };
 
+// Ghi chú: Hàm này chuẩn hóa runner từ kết quả chính thức thành dữ liệu replay hiển thị.
 export const normalizeOfficialReplayRunners = (
   runners: RaceReplayRunner[],
   race?: Pick<RaceRecord, 'id' | 'distance' | 'surface'>

@@ -23,6 +23,7 @@ interface HorseManagementProps {
 
 const horseRating = officialHorseRating;
 
+// Ghi chú: Hàm này render màn hình owner quản lý danh sách ngựa của mình.
 export default function HorseManagement({
   onNavigate,
   onSelectHorse,
@@ -35,6 +36,7 @@ export default function HorseManagement({
   const [statusFilter, setStatusFilter] = useState('');
   const [message, setMessage] = useState('');
 
+  // Ghi chú: Hàm này tải nghiệp vụ liên quan đến load portal.
   const loadPortal = () => {
     getOwnerPortal()
       .then((data) => {
@@ -54,9 +56,11 @@ export default function HorseManagement({
 
   const canAddHorse = horses.length < maxHorses;
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến horse entry count.
   const horseEntryCount = (horseId: string) =>
     raceEntries.filter((entry) => entry.horseId === horseId).length;
 
+  // Ghi chú: Hàm này lọc dữ liệu đang hoạt động nghiệp vụ liên quan đến active pairing for horse.
   const activePairingForHorse = (horseId: string) =>
     activePairings.find((pairing) => pairing.horseId === horseId);
 
