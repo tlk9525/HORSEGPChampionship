@@ -21,6 +21,7 @@ interface LoginPageProps {
   onLogin: (user: AuthUser) => void;
 }
 
+// Ghi chú: Hàm này render form đăng nhập và đăng ký tài khoản.
 export default function LoginPage({
   initialMode = 'login',
   onLogin,
@@ -46,6 +47,7 @@ export default function LoginPage({
     setIsRegister(initialMode === 'register');
   }, [initialMode]);
 
+  // Ghi chú: Hàm này gửi nghiệp vụ liên quan đến submit.
   const submit = async () => {
     setError('');
     setNotice('');

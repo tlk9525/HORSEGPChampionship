@@ -33,17 +33,20 @@ interface JockeyPageProps {
   onNavigate: (page: string) => void;
 }
 
+// Ghi chú: Hàm này định dạng số kèm hậu tố hoặc trả fallback khi thiếu dữ liệu.
 const numberLabel = (value?: number | null, suffix = '') => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return 'Not set';
   return `${parsed.toFixed(0)}${suffix}`;
 };
 
+// Ghi chú: Hàm này tạo nhãn rating cho ngựa trong màn hình jockey.
 const horseRatingLabel = (horse?: HorseRecord) => {
   const rating = horse?.overallRating ?? horse?.baseHandicap;
   return Number.isFinite(Number(rating)) ? Number(rating).toFixed(0) : 'TBD';
 };
 
+// Ghi chú: Hàm này render dashboard jockey, hồ sơ cá nhân và lời mời tham gia race.
 export default function JockeyPage({
   currentUser,
   onNavigate,
@@ -65,6 +68,7 @@ export default function JockeyPage({
     new Set()
   );
 
+  // Ghi chú: Hàm này tải nghiệp vụ liên quan đến load portal.
   const loadPortal = () => {
     getJockeyPortal()
       .then((data) => {
@@ -93,6 +97,7 @@ export default function JockeyPage({
     }
   }, [currentUser?.role]);
 
+  // Ghi chú: Hàm này công bố nghiệp vụ liên quan đến publish profile.
   const publishProfile = () => {
     saveJockeyProfile({
       bio,
@@ -109,6 +114,7 @@ export default function JockeyPage({
       );
   };
 
+  // Ghi chú: Hàm này phản hồi nghiệp vụ liên quan đến respond.
   const respond = (id: string, decision: 'accepted' | 'rejected') => {
     decideJockeyInvitation(id, decision)
       .then(() => {
@@ -124,12 +130,16 @@ export default function JockeyPage({
       );
   };
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến race by id.
   const raceById = (raceId: string) =>
     races.find((race) => race.id === raceId);
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến horse by id.
   const horseById = (horseId: string) =>
     horses.find((horse) => horse.id === horseId);
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến tournament by id.
   const tournamentById = (tournamentId?: string | null) =>
     tournaments.find((tournament) => tournament.id === tournamentId);
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến needs jockey response.
   const needsJockeyResponse = (invitation: JockeyInvitation) =>
     invitation.status === 'pending';
 
@@ -141,11 +151,13 @@ export default function JockeyPage({
     ? raceEntries
     : raceEntries.slice(0, 3);
 
+  // Ghi chú: Hàm này kiểm tra điều kiện nghiệp vụ liên quan đến can view line.
   const canViewLine = (race?: RaceRecord) =>
     Boolean(
       race &&
         ['published', 'in-progress', 'finished', 'completed'].includes(race.status)
     );
+  // Ghi chú: Hàm này bật/tắt nghiệp vụ liên quan đến toggle horse info.
   const toggleHorseInfo = (key: string) => {
     setExpandedHorseInfoKeys((current) => {
       const next = new Set(current);
@@ -160,6 +172,7 @@ export default function JockeyPage({
     });
   };
 
+  // Ghi chú: Hàm này render nghiệp vụ liên quan đến render horse information.
   const renderHorseInformation = (
     horse?: HorseRecord,
     ratingSnapshot?: number,

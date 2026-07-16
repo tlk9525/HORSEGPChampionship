@@ -15,7 +15,6 @@ import {
   getNotifications,
   markNotificationRead,
 } from '../services/api';
-import { canAccessPage, NAV_ITEMS } from '../config/accessControl';
 import { messageTone } from '../utils/messageTone';
 
 interface NavbarProps {
@@ -25,6 +24,7 @@ interface NavbarProps {
   onNavigate: (page: string) => void;
 }
 
+// Ghi chú: Hàm này render thanh điều hướng theo trạng thái đăng nhập và role.
 export default function Navbar({
   currentPage,
   currentUser,
@@ -38,6 +38,7 @@ export default function Navbar({
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
 
+  // Ghi chú: Hàm này tải nghiệp vụ liên quan đến load notifications.
   const loadNotifications = () => {
     if (!currentUser) {
       setNotifications([]);
@@ -66,6 +67,7 @@ export default function Navbar({
   }, [isNotificationsOpen]);
 
   useEffect(() => {
+    // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle click outside.
     const handleClickOutside = (event: MouseEvent) => {
       if (
         notificationsRef.current &&
@@ -80,14 +82,27 @@ export default function Navbar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const visibleNavItems = NAV_ITEMS.filter(
+  const navItems = [
+    { name: 'Tournaments', page: 'tournaments', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
+    { name: 'Horses', page: 'horses', roles: ['owner'] },
+    { name: 'Horse Profiles', page: 'horse-profiles', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
+    { name: 'Jockey Profiles', page: 'jockey-profiles', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
+    { name: 'Jockey Portal', page: 'jockeys', roles: ['jockey'] },
+    { name: 'Race Operations', page: 'live-race', roles: ['admin', 'referee', 'spectator'] },
+    { name: 'Race Replay', page: 'simulation-demo', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
+    { name: 'Results', page: 'results', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'], public: true },
+    { name: 'Admin', page: 'admin', roles: ['admin'] },
+  ];
+
+  const visibleNavItems = navItems.filter(
     (item) =>
       item.public ||
-      canAccessPage(item.page, currentUser?.role)
+      (currentUser && item.roles.includes(currentUser.role))
   );
   const unreadCount = notifications.filter((item) => !item.read).length;
   const visibleNotifications = notifications.slice(0, 6);
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến read notification.
   const readNotification = (notificationId: string) => {
     markNotificationRead(notificationId).then(loadNotifications);
   };

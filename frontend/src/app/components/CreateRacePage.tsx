@@ -26,6 +26,21 @@ const RACE_CLASS_SETTINGS: Record<
   Open: { topWeightLb: '135', minWeightLb: '110', ratingMin: '0', ratingMax: '140' },
 };
 
+const raceDateWithinTournamentMessage = (
+  tournament: TournamentRecord | undefined,
+  raceDate: string
+) => {
+  if (!tournament) return '';
+  if (tournament.startDate && raceDate < tournament.startDate) {
+    return 'Race date must be on or after tournament start date.';
+  }
+  if (tournament.finalDate && raceDate > tournament.finalDate) {
+    return 'Race date must be on or before tournament end date.';
+  }
+  return '';
+};
+
+// Ghi chú: Hàm này render form tạo race mới cho admin.
 export default function CreateRacePage({
   onNavigate,
 }: CreateRacePageProps) {
@@ -40,6 +55,7 @@ export default function CreateRacePage({
   const [loadError, setLoadError] = useState(false);
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const [form, setForm] = useState({
     tournamentId: '',
@@ -68,6 +84,7 @@ export default function CreateRacePage({
 
   const tournamentOptions = useMemo(() => tournaments, [tournaments]);
 
+  // Ghi chú: Hàm này lấy nghiệp vụ liên quan đến get next race number.
   const getNextRaceNumber = (tournamentId: string) => {
     const usedNumbers = races
       .filter((race) => race.tournamentId === tournamentId)
@@ -121,7 +138,9 @@ export default function CreateRacePage({
       .finally(() => setIsLoading(false));
   }, []);
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle submit.
   const handleSubmit = () => {
+    setSubmitAttempted(true);
     setMessage('');
 
     const tournamentRaceCount = races.filter(
@@ -132,19 +151,21 @@ export default function CreateRacePage({
       return;
     }
 
-    if (
-      !form.tournamentId ||
-      !form.raceName ||
-      !form.raceDate ||
-      !form.startTime ||
-      !form.venue ||
-      !form.distance ||
-      !form.surfaceType ||
-      form.handicapMin === '' ||
-      form.handicapMax === '' ||
-      form.refereeUserIds.length === 0
-    ) {
-      setMessage('Please complete the race schedule, venue, distance and referees.');
+    const missingFields = [
+      !form.tournamentId && 'Tournament',
+      !form.raceName && 'Race name',
+      !form.raceDate && 'Race date',
+      !form.startTime && 'Start time',
+      !form.venue && 'Venue',
+      !form.distance && 'Distance',
+      !form.surfaceType && 'Surface',
+      form.handicapMin === '' && 'Minimum weight',
+      form.handicapMax === '' && 'Top weight',
+      form.refereeUserIds.length === 0 && 'Assigned referees',
+    ].filter(Boolean);
+
+    if (missingFields.length > 0) {
+      setMessage(`Please complete: ${missingFields.join(', ')}.`);
       return;
     }
 
@@ -169,6 +190,11 @@ export default function CreateRacePage({
     }
     if (regCloses > raceStartsAt) {
       setMessage('Registration must close before the race starts.');
+      return;
+    }
+    const raceDateError = raceDateWithinTournamentMessage(selectedTournament, form.raceDate);
+    if (raceDateError) {
+      setMessage(raceDateError);
       return;
     }
     if (Number(form.distance) < 400 || Number(form.distance) > 10000) {
@@ -218,6 +244,7 @@ export default function CreateRacePage({
       .finally(() => setIsSubmitting(false));
   };
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle tournament change.
   const handleTournamentChange = (tournamentId: string) => {
     const tournament = tournaments.find((item) => item.id === tournamentId);
     const nextRaceNumber = getNextRaceNumber(tournamentId);
@@ -230,6 +257,7 @@ export default function CreateRacePage({
     }));
   };
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle race class change.
   const handleRaceClassChange = (raceClass: string) => {
     const preset = RACE_CLASS_SETTINGS[raceClass];
     const fallback = RACE_CLASS_SETTINGS.Open;
@@ -467,8 +495,12 @@ export default function CreateRacePage({
                 <div className="min-w-0">
                   <label className="block text-gray-300 mb-2">Surface</label>
                   <select
-                    className={fieldClass}
+                    className={`${fieldClass} ${submitAttempted && !form.surfaceType
+                      ? 'border-amber-400/70 ring-2 ring-amber-400/20 text-amber-100'
+                      : ''
+                    }`}
                     value={form.surfaceType}
+                    aria-invalid={submitAttempted && !form.surfaceType}
                     onChange={(event) =>
                       setForm({
                         ...form,
@@ -476,11 +508,16 @@ export default function CreateRacePage({
                       })
                     }
                   >
-                    <option value="">Select surface</option>
+                    <option value="" disabled>Select surface</option>
                     <option>Turf</option>
                     <option>Dirt</option>
                     <option>Synthetic</option>
                   </select>
+                  {submitAttempted && !form.surfaceType && (
+                    <p className="mt-2 text-sm font-semibold text-amber-200">
+                      Surface is required.
+                    </p>
+                  )}
                 </div>
 
                 <div className="min-w-0">

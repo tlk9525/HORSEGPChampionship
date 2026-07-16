@@ -30,6 +30,7 @@ interface AppRoutesProps {
   onLogin: (user: AuthUser) => void;
 }
 
+// Ghi chú: Hàm này chọn component màn hình cần render theo page hiện tại.
 export default function AppRoutes({
   currentUser,
   selectedHorse,

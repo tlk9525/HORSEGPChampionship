@@ -89,6 +89,7 @@ Horse Racing Tournament Website/
 │           │   ├── AdminPanel.tsx
 │           │   ├── CreateRacePage.tsx
 │           │   ├── EditRacePage.tsx
+│           │   ├── Footer.tsx
 │           │   ├── HorseDetails.tsx
 │           │   ├── HorseDirectoryPage.tsx
 │           │   ├── HorseManagement.tsx
@@ -110,6 +111,7 @@ Horse Racing Tournament Website/
 │           └── utils/
 │               ├── domain.ts
 │               ├── messageTone.ts
+│               ├── raceSimulation.ts
 │               └── rating.ts
 │
 ├── backend/
@@ -135,13 +137,17 @@ Horse Racing Tournament Website/
 │           ├── notificationService.js
 │           ├── raceAuditService.js
 │           └── raceReplayTimeline.js
+├── backend/test/
+│   └── *.test.js
 │
 ├── database/postgres/
+│   ├── migrations/
 │   ├── schema.sql
 │   └── seed.sql
 ├── docs/
 │   ├── business-flow-and-roles.md
 │   ├── erd.drawio
+│   ├── horse-racing-erd-explanation.xlsx
 │   ├── schema-erd.md
 │   ├── STD.drawio
 │   ├── race-state-diagram.drawio
@@ -194,7 +200,7 @@ Luồng chính:
 | Vòng đời race | `draft`, `registration-open`, `registration-closed`, `published`, `in-progress`, `finished`, `completed`, `cancelled` |
 | Phê duyệt đăng ký | `pending-jockey`, `pending-admin`, `approved`, `rejected`, `cancelled` |
 | Entry xuất phát | `approved`, `scratched` |
-| Kiểm tra trước race | `pending`, `ready`, `absent`, `incident`, `scratched` |
+| Kiểm tra trước race | `pending`, `ready-for-referee`, `ready`, `absent`, `incident`, `scratched` |
 | Kết quả | `draft`, `submitted`, `official`, `disqualified` |
 
 Ghi chú triển khai:
@@ -291,6 +297,8 @@ npm install
 cp .env.example .env
 ```
 
+Sau khi copy, chỉnh `POSTGRES_USER` và `POSTGRES_PASSWORD` theo PostgreSQL local của bạn.
+
 ### Khởi tạo database
 
 ```bash
@@ -366,6 +374,8 @@ npm run check
 | `npm run build` | Build frontend production |
 | `npm run preview` | Xem bản build |
 | `npm run check` | Typecheck + test + build |
+
+`npm run check` là lệnh nên chạy trước khi demo hoặc deploy vì nó bao gồm TypeScript, toàn bộ test backend và build frontend production.
 
 ## API chính
 

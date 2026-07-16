@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+// Ghi chú: Hàm này ghi lại lịch sử hành động trên race để phục vụ audit và truy vết.
 export const recordRaceAction = (
   db,
   { raceId, userId, action, fromStatus, toStatus, details = '' }

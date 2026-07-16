@@ -3,6 +3,7 @@ import { SESSION_COOKIE_NAME } from '../config/constants.js';
 // Trả về thông tin user công khai, loại bỏ trường password để tránh lộ thông tin nhạy cảm
 export const publicUser = ({ password, emailVerificationTokenHash, emailVerificationExpiresAt, emailVerificationSentAt, ...user }) => user;
 
+// Ghi chú: Hàm này lấy token đăng nhập từ cookie của request.
 const cookieToken = (req) => {
   const cookieHeader =
     (typeof req.headers?.get === 'function'

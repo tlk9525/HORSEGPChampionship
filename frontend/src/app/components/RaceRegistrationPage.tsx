@@ -17,6 +17,7 @@ interface RaceRegistrationPageProps {
   onNavigate: (page: string) => void;
 }
 
+// Ghi chú: Hàm này render luồng owner đăng ký horse-jockey vào race.
 export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPageProps) {
   const fieldClass =
     'w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-[#d4af37]';
@@ -51,6 +52,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
     now < registrationClosesAt
   );
 
+  // Ghi chú: Hàm này tải nghiệp vụ liên quan đến load registration data.
   const loadRegistrationData = () => {
     if (!raceId) {
       setMessage('Please select a race first.');
@@ -104,6 +106,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
     (registration) => registration.id === form.registrationId
   );
 
+  // Ghi chú: Hàm này gửi nghiệp vụ liên quan đến submit horse registration.
   const submitHorseRegistration = () => {
     setMessage('');
 
@@ -131,6 +134,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
       );
   };
 
+  // Ghi chú: Hàm này gửi nghiệp vụ liên quan đến submit jockey selection.
   const submitJockeySelection = () => {
     setMessage('');
 

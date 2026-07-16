@@ -27,9 +27,11 @@ interface TournamentPageProps {
   onNavigate: (page: string) => void;
 }
 
+// Ghi chú: Hàm này chuẩn hóa số thứ tự race để sắp xếp trong tournament.
 const raceNumberValue = (raceNumber?: string) =>
   Number(String(raceNumber || '').replace(/\D/g, '')) || 999;
 
+// Ghi chú: Hàm này kiểm tra race còn mở đăng ký theo status và hạn đăng ký hay không.
 const raceRegistrationOpen = (race: RaceRecord) => {
   if (race.status !== 'registration-open') return false;
 
@@ -44,6 +46,7 @@ const raceRegistrationOpen = (race: RaceRecord) => {
   return now >= opensAt && now < closesAt;
 };
 
+// Ghi chú: Hàm này render danh sách tournament cho người dùng xem và chọn.
 export default function TournamentPage({
   currentUser,
   onNavigate,
@@ -60,6 +63,7 @@ export default function TournamentPage({
   const [expandedGateRaceIds, setExpandedGateRaceIds] = useState<string[]>([]);
   const [message, setMessage] = useState('');
 
+  // Ghi chú: Hàm này tải nghiệp vụ liên quan đến load tournaments.
   const loadTournaments = () => {
     getBootstrap()
       .then((data) => {
@@ -98,6 +102,7 @@ export default function TournamentPage({
     return map;
   }, [currentUser?.id, registrations]);
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle join race.
   const handleJoinRace = (raceId: string) => {
     joinRaceAsJockey(raceId)
       .then(() => {
@@ -109,6 +114,7 @@ export default function TournamentPage({
       );
   };
 
+  // Ghi chú: Hàm này chọn nghiệp vụ liên quan đến select tournament.
   const selectTournament = (tournamentId: string) => {
     setSelectedTournamentId(tournamentId);
     setScheduleExpanded(false);
@@ -116,6 +122,7 @@ export default function TournamentPage({
     sessionStorage.setItem('selectedTournamentId', tournamentId);
   };
 
+  // Ghi chú: Hàm này bật/tắt nghiệp vụ liên quan đến toggle gate assignments.
   const toggleGateAssignments = (raceId: string) => {
     setExpandedGateRaceIds((current) =>
       current.includes(raceId)
@@ -124,11 +131,13 @@ export default function TournamentPage({
     );
   };
 
+  // Ghi chú: Hàm này render component openTournamentDetails và xử lý dữ liệu hiển thị liên quan.
   const openTournamentDetails = (tournamentId: string) => {
     selectTournament(tournamentId);
     onNavigate('tournament-details');
   };
 
+  // Ghi chú: Hàm này mở nghiệp vụ liên quan đến open tournament races.
   const openTournamentRaces = (tournamentId: string) => {
     selectTournament(tournamentId);
 
@@ -149,11 +158,13 @@ export default function TournamentPage({
     onNavigate('race-details');
   };
 
+  // Ghi chú: Hàm này mở nghiệp vụ liên quan đến open race view.
   const openRaceView = (raceId: string, page = 'race-details') => {
     sessionStorage.setItem('selectedRaceId', raceId);
     onNavigate(page);
   };
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến status tone.
   const statusTone = (status: string) => {
     const tones: Record<string, string> = {
       draft: 'border-gray-500/30 bg-gray-500/10 text-gray-300',
@@ -168,6 +179,7 @@ export default function TournamentPage({
     return tones[status] || tones.draft;
   };
 
+  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến race action.
   const raceAction = (race: RaceRecord) => {
     if (['registration-open'].includes(race.status) && currentUser?.role === 'owner') {
       return { label: 'Register Horse', page: 'race-registration' };

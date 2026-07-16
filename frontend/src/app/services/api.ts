@@ -175,7 +175,7 @@ export interface RaceEntryRecord {
   raceName?: string;
 }
 
-export interface RaceReplayCheckpoint {
+interface RaceReplayCheckpoint {
   distanceMeters: number;
   timeSeconds: number;
 }
@@ -200,7 +200,7 @@ export interface RaceReplayRunner {
   checkpoints: RaceReplayCheckpoint[];
 }
 
-export interface RaceReplayTimeline {
+interface RaceReplayTimeline {
   version: number;
   generatedAt: string;
   raceId: string;
@@ -263,7 +263,8 @@ const BOOTSTRAP_CACHE_TTL_MS = 10_000;
 let bootstrapCache: { data: BootstrapPayload; fetchedAt: number } | null = null;
 let bootstrapRequest: Promise<BootstrapPayload> | null = null;
 
-export function invalidateBootstrapCache() {
+// Ghi chú: Hàm này xóa cache bootstrap để lần đọc tiếp theo lấy dữ liệu mới.
+function invalidateBootstrapCache() {
   bootstrapCache = null;
   bootstrapRequest = null;
 }
@@ -643,10 +644,23 @@ export const updateRace = async (
     body: JSON.stringify(race),
   });
 
-export const deleteRace = async (raceId: string) =>
-  request<{ ok: boolean; raceId: string }>(`/admin/races/${raceId}`, {
-    method: 'DELETE',
-  });
+// Reset race đã hủy về trạng thái mở đăng ký với lịch mới
+export const resetRace = async (
+  raceId: string,
+  race: {
+    date: string;
+    time: string;
+    registrationOpensAt: string;
+    registrationClosesAt: string;
+  }
+) =>
+  request<{ race: RaceRecord; entries: RaceEntryRecord[]; notifications: NotificationItem[] }>(
+    `/admin/races/${raceId}/reset-race`,
+    {
+      method: 'POST',
+      body: JSON.stringify(race),
+    }
+  );
 
 // Admin đóng đăng ký, publish race và duyệt kết quả cuối cùng
 export const adminRaceAction = async (
@@ -658,6 +672,7 @@ export const adminRaceAction = async (
     | 'finish-race'
     | 'complete-results'
     | 'cancel-race'
+    | 'reset-race'
 ) =>
   request<{ race: RaceRecord; entries: RaceEntryRecord[]; notifications: NotificationItem[] }>(
     `/admin/races/${raceId}/${action}`,

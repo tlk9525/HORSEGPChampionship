@@ -20,6 +20,7 @@ import {
 import { formatWeightLb, statusLabel } from '../utils/domain';
 import { officialHorseRating } from '../utils/rating';
 
+// Ghi chú: Hàm này render danh bạ ngựa công khai.
 export default function HorseDirectoryPage() {
   const navigate = useNavigate();
   const [horses, setHorses] = useState<HorseRecord[]>([]);
@@ -101,6 +102,7 @@ export default function HorseDirectoryPage() {
     ? selectedRaceEntries
     : selectedRaceEntries.slice(0, 5);
 
+  // Ghi chú: Hàm này mở nghiệp vụ liên quan đến open horse profile.
   const openHorseProfile = () => {
     if (!selectedHorse) return;
 

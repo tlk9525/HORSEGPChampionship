@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { authenticate } from '../services/authService.js';
 
+// Ghi chú: Hàm này tạo nhóm route notification routes cho backend.
 export const createNotificationRoutes = (getDb, writeDb) => {
   const app = new Hono();
 

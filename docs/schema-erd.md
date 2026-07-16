@@ -63,6 +63,8 @@ erDiagram
     VARCHAR distance
     VARCHAR surface
     VARCHAR raceClass
+    NUMERIC ratingMin
+    NUMERIC ratingMax
     NUMERIC handicapMin
     NUMERIC handicapMax
     NUMERIC totalPrize
@@ -74,6 +76,7 @@ erDiagram
     TIMESTAMPTZ registrationClosesAt
     VARCHAR resultStatus
     BOOLEAN awardsPublished
+    JSONB replayTimeline
     VARCHAR createdBy FK
     TIMESTAMPTZ createdAt
     TIMESTAMPTZ updatedAt

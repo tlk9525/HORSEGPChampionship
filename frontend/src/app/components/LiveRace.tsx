@@ -45,6 +45,7 @@ interface DisplayRunnerRow {
   liveRank?: number;
 }
 
+// Ghi chú: Hàm này phân tích nghiệp vụ liên quan đến parse finish time seconds.
 const parseFinishTimeSeconds = (value?: string) => {
   const raw = String(value || '').trim();
   if (!raw) return Number.NaN;
@@ -88,6 +89,7 @@ const parseFinishTimeSeconds = (value?: string) => {
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 };
 
+// Ghi chú: Hàm này render màn hình race đang chạy và cập nhật tiến độ realtime.
 export default function LiveRace() {
   const { raceId } = useParams();
   const routerNavigate = useNavigate();
@@ -358,6 +360,7 @@ export default function LiveRace() {
       .includes(currentUser.id);
   const showRefereeControl = currentUser?.role === 'referee';
 
+  // Ghi chú: Hàm này tải nghiệp vụ liên quan đến load race ops.
   const loadRaceOps = () => {
     const requestId = ++loadRequestIdRef.current;
 
@@ -431,6 +434,7 @@ export default function LiveRace() {
 
     let frameId = 0;
 
+    // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến tick.
     const tick = () => {
       setSimulationNowMs(Date.now());
       frameId = window.requestAnimationFrame(tick);
@@ -441,6 +445,7 @@ export default function LiveRace() {
     return () => window.cancelAnimationFrame(frameId);
   }, [selectedRace?.status, selectedRace?.updatedAt]);
 
+  // Ghi chú: Hàm này cập nhật bản nháp kết quả trọng tài cho từng race entry.
   const updateDraft = (
     entry: RaceEntryRecord,
     patch: Partial<{ position: string; finishTime: string; notes: string; violationNotes: string }>
@@ -461,6 +466,7 @@ export default function LiveRace() {
     });
   };
 
+  // Ghi chú: Hàm này gửi nghiệp vụ liên quan đến submit result.
   const submitResult = (entry: RaceEntryRecord) => {
     const existingDraft = resultDrafts[entry.id];
     const rawDraft = {
@@ -499,6 +505,7 @@ export default function LiveRace() {
       .finally(() => setRecordingEntryId(''));
   };
 
+  // Ghi chú: Hàm này đánh dấu nghiệp vụ liên quan đến mark readiness.
   const markReadiness = (entry: RaceEntryRecord, readiness: RaceEntryReadiness) => {
     const previousPreRaceStatus = entry.preRaceStatus;
     const previousDisqualified = entry.disqualified;
@@ -554,6 +561,7 @@ export default function LiveRace() {
       .finally(() => setReadinessEntryId(''));
   };
 
+  // Ghi chú: Hàm này gửi nghiệp vụ liên quan đến submit results.
   const submitResults = () => {
     if (!selectedRace) return;
 
@@ -601,6 +609,7 @@ export default function LiveRace() {
       .finally(() => setPublishingResults(false));
   };
 
+  // Ghi chú: Hàm này tải nghiệp vụ liên quan đến load simulation drafts.
   const loadSimulationDrafts = () => {
     if (!selectedRace) return;
     if (selectedRace.status !== 'finished' || selectedRace.resultStatus !== 'draft') {

@@ -31,6 +31,7 @@ const VERIFICATION_EMAIL_COOLDOWN_MS = 60 * 1000;
 const GENERIC_EMAIL_RESPONSE =
   'If that account exists and still needs verification, a new email has been sent.';
 
+// Ghi chú: Hàm này tạo nhóm route auth routes cho backend.
 export const createAuthRoutes = (
   getDb,
   writeDb,

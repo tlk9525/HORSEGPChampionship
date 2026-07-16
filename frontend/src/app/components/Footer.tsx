@@ -1,5 +1,6 @@
 import { Trophy } from 'lucide-react';
 
+// Ghi chú: Hàm này render phần chân trang của website.
 export default function Footer() {
   return (
     <footer className="border-t border-white/10 bg-[#071a2f] py-6">
