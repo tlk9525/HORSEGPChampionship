@@ -18,6 +18,7 @@ interface EditRacePageProps {
 const EDITABLE_RACE_STATUSES = ['registration-open', 'registration-closed'];
 const RESETTABLE_RACE_STATUSES = ['cancelled'];
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho raceDateWithinTournamentMessage.
 const raceDateWithinTournamentMessage = (
   tournament: TournamentRecord | null,
   raceDate: string

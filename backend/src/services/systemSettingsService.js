@@ -5,7 +5,7 @@ import {
   MIN_READIED_PARTICIPANTS,
 } from '../config/constants.js';
 
-export const DEFAULT_SYSTEM_SETTINGS = Object.freeze({
+const DEFAULT_SYSTEM_SETTINGS = Object.freeze({
   maxOwnerHorses: MAX_OWNER_HORSES,
   defaultDistanceMeters: 1600,
   maxHorsesPerRace: MAX_RACE_FIELD_SIZE,
@@ -45,6 +45,7 @@ const booleanSettingKeys = new Set(
   )
 );
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho parseSettingValue.
 const parseSettingValue = (key, value) => {
   if (numericSettingKeys.has(key)) {
     const parsed = Number(value);
@@ -58,6 +59,7 @@ const parseSettingValue = (key, value) => {
   return value;
 };
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho systemSettingsFromDb.
 export const systemSettingsFromDb = (db = {}) => {
   const persisted =
     Array.isArray(db.systemSettings)
@@ -79,6 +81,7 @@ export const systemSettingsFromDb = (db = {}) => {
   };
 };
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho sanitizeSystemSettings.
 export const sanitizeSystemSettings = (input = {}, current = DEFAULT_SYSTEM_SETTINGS) => {
   const next = { ...current };
 
@@ -112,6 +115,7 @@ export const sanitizeSystemSettings = (input = {}, current = DEFAULT_SYSTEM_SETT
   return next;
 };
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho settingsToRows.
 export const settingsToRows = (settings, updatedBy = null, updatedAt = new Date().toISOString()) =>
   Object.entries(settings).map(([key, value]) => ({
     key,

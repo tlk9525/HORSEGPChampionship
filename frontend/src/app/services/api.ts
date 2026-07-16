@@ -388,18 +388,22 @@ export const getBootstrap = async ({ force = false } = {}) => {
 export const getApprovals = async () =>
   request<{ approvals: ApprovalItem[] }>('/admin/approvals');
 
+// Ghi chú: Hàm này lấy và chuẩn hóa dữ liệu cho getUsers.
 export const getUsers = async () =>
   request<{ users: AuthUser[] }>('/admin/users');
 
+// Ghi chú: Hàm này lấy và chuẩn hóa dữ liệu cho getSystemSettings.
 export const getSystemSettings = async () =>
   request<{ settings: SystemSettings }>('/admin/settings');
 
+// Ghi chú: Hàm này xử lý thao tác updateSystemSettings trong luồng nghiệp vụ.
 export const updateSystemSettings = async (settings: Partial<SystemSettings>) =>
   request<{ settings: SystemSettings }>('/admin/settings', {
     method: 'PATCH',
     body: JSON.stringify(settings),
   });
 
+// Ghi chú: Hàm này xử lý thao tác updateUser trong luồng nghiệp vụ.
 export const updateUser = async (
   userId: string,
   user: {
@@ -412,6 +416,7 @@ export const updateUser = async (
     body: JSON.stringify(user),
   });
 
+// Ghi chú: Hàm này xử lý thao tác disableUser trong luồng nghiệp vụ.
 export const disableUser = async (userId: string) =>
   request<{ user: AuthUser; users: AuthUser[] }>(`/admin/users/${userId}`, {
     method: 'DELETE',

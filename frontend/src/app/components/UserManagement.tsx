@@ -27,6 +27,7 @@ const statusOptions: AuthUser['status'][] = [
   'locked',
 ];
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho statusBadgeClass.
 const statusBadgeClass = (status: AuthUser['status']) => {
   const classes: Record<AuthUser['status'], string> = {
     pending: 'bg-amber-500/15 text-amber-200 border-amber-500/30',
@@ -45,6 +46,7 @@ interface UserManagementProps {
   onNavigate: (page: string) => void;
 }
 
+// Ghi chú: Component này hiển thị và điều phối giao diện UserManagement.
 export default function UserManagement({ currentUser, onNavigate }: UserManagementProps) {
   const [users, setUsers] = useState<AuthUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +57,7 @@ export default function UserManagement({ currentUser, onNavigate }: UserManageme
   const [statusFilter, setStatusFilter] = useState<AuthUser['status'] | 'all'>('all');
   const [message, setMessage] = useState('');
 
+  // Ghi chú: Hàm này lấy và chuẩn hóa dữ liệu cho loadUsers.
   const loadUsers = () => {
     setLoading(true);
     setMessage('');
@@ -85,6 +88,7 @@ export default function UserManagement({ currentUser, onNavigate }: UserManageme
     });
   }, [roleFilter, searchTerm, statusFilter, users]);
 
+  // Ghi chú: Hàm này xử lý thao tác saveUser trong luồng nghiệp vụ.
   const saveUser = () => {
     if (!editingUser) return;
 
@@ -105,6 +109,7 @@ export default function UserManagement({ currentUser, onNavigate }: UserManageme
       .finally(() => setSavingUserId(''));
   };
 
+  // Ghi chú: Hàm này xử lý thao tác suspendUser trong luồng nghiệp vụ.
   const suspendUser = (user: AuthUser) => {
     const confirmed = window.confirm(`Disable ${user.name}?`);
     if (!confirmed) return;

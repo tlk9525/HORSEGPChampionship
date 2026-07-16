@@ -26,6 +26,7 @@ const RACE_CLASS_SETTINGS: Record<
   Open: { topWeightLb: '135', minWeightLb: '110', ratingMin: '0', ratingMax: '140' },
 };
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho raceDateWithinTournamentMessage.
 const raceDateWithinTournamentMessage = (
   tournament: TournamentRecord | undefined,
   raceDate: string
@@ -40,7 +41,9 @@ const raceDateWithinTournamentMessage = (
   return '';
 };
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho formatDatetimeLocal.
 const formatDatetimeLocal = (date: Date) => {
+  // Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho pad.
   const pad = (value: number) => String(value).padStart(2, '0');
 
   return [
@@ -49,6 +52,7 @@ const formatDatetimeLocal = (date: Date) => {
   ].join('T');
 };
 
+// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho suggestedRegistrationClose.
 const suggestedRegistrationClose = (
   raceDate: string,
   startTime: string,
