@@ -13,7 +13,6 @@ interface CreateRacePageProps {
   onNavigate: (page: string) => void;
 }
 
-const CUSTOM_RACE_CLASS = 'Custom';
 const RACE_CLASS_SETTINGS: Record<
   string,
   { minWeightLb: string; topWeightLb: string; ratingMin: string; ratingMax: string }
@@ -295,23 +294,14 @@ export default function CreateRacePage({
   // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle race class change.
   const handleRaceClassChange = (raceClass: string) => {
     const preset = RACE_CLASS_SETTINGS[raceClass];
-    const fallback = RACE_CLASS_SETTINGS.Open;
 
     setForm((current) => ({
       ...current,
       raceClass,
-      ratingMin:
-        preset?.ratingMin ||
-        (raceClass === CUSTOM_RACE_CLASS ? current.ratingMin || fallback.ratingMin : current.ratingMin),
-      ratingMax:
-        preset?.ratingMax ||
-        (raceClass === CUSTOM_RACE_CLASS ? current.ratingMax || fallback.ratingMax : current.ratingMax),
-      handicapMin:
-        preset?.minWeightLb ||
-        (raceClass === CUSTOM_RACE_CLASS ? current.handicapMin || fallback.minWeightLb : current.handicapMin),
-      handicapMax:
-        preset?.topWeightLb ||
-        (raceClass === CUSTOM_RACE_CLASS ? current.handicapMax || fallback.topWeightLb : current.handicapMax),
+      ratingMin: preset?.ratingMin || current.ratingMin,
+      ratingMax: preset?.ratingMax || current.ratingMax,
+      handicapMin: preset?.minWeightLb || current.handicapMin,
+      handicapMax: preset?.topWeightLb || current.handicapMax,
     }));
   };
 
@@ -585,7 +575,6 @@ export default function CreateRacePage({
                     <option value="Class 4">Class 4 (41-60)</option>
                     <option value="Class 5">Class 5 (0-40)</option>
                     <option value="Open">Open (0-140)</option>
-                    <option value={CUSTOM_RACE_CLASS}>Custom</option>
                   </select>
                 </div>
 
