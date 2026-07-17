@@ -16,14 +16,6 @@ export const MIN_CARRIED_WEIGHT_LB = 110;
 export const MAX_CARRIED_WEIGHT_LB = 135;
 const RATING_K_FACTOR = 10;
 const MIN_RATED_FIELD_SIZE = 4;
-const LEGACY_RACE_CLASS_RATING_RANGES = {
-  'Class 1': { min: 101, max: 140 },
-  'Class 2': { min: 81, max: 100 },
-  'Class 3': { min: 61, max: 80 },
-  'Class 4': { min: 41, max: 60 },
-  'Class 5': { min: 0, max: 40 },
-  Open: { min: 0, max: 140 },
-};
 
 // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến rating component.
 const ratingComponent = (value, fallback = 75) =>
@@ -68,12 +60,7 @@ export const raceEligibilityRange = (race = {}) => {
     };
   }
 
-  const legacyRange = LEGACY_RACE_CLASS_RATING_RANGES[race.raceClass];
-  if (legacyRange) {
-    return legacyRange;
-  }
-
-  return LEGACY_RACE_CLASS_RATING_RANGES.Open;
+  return { min: 0, max: 140 };
 };
 
 // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến compute race handicap.

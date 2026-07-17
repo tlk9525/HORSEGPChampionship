@@ -5,7 +5,7 @@ import {
   raceStartMs,
   refundRaceBets,
   settleRaceBets,
-} from './bettingService.js';
+} from '../src/services/bettingService.js';
 
 const buildSettlementDb = () => {
   const now = new Date().toISOString();

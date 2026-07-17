@@ -294,5 +294,3 @@ export const createSpectatorRoutes = (
 
   return app;
 };
-
-export { isBettingOpen, raceStartMs, bettableEntries };

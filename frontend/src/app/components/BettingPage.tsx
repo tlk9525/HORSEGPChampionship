@@ -151,11 +151,12 @@ export default function BettingPage({
   }, [bets]);
 
   const betStats = useMemo(() => {
-    const total = bets.length;
+    const countedBets = bets.filter((bet) => bet.status !== 'cancelled');
+    const total = countedBets.length;
     const won = bets.filter((b) => b.status === 'won').length;
     const lost = bets.filter((b) => b.status === 'lost').length;
     const pending = bets.filter((b) => b.status === 'pending').length;
-    const totalWagered = bets.reduce((s, b) => s + Number(b.amount || 0), 0);
+    const totalWagered = countedBets.reduce((s, b) => s + Number(b.amount || 0), 0);
     const totalWon = bets
       .filter((b) => b.status === 'won')
       .reduce((s, b) => s + Number(b.payout || 0), 0);

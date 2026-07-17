@@ -72,6 +72,27 @@ CREATE TABLE "horses" (
 CREATE INDEX "idx_horses_owner" ON "horses" ("ownerUserId");
 CREATE INDEX "idx_horses_status" ON "horses" ("status");
 
+CREATE TABLE "raceClasses" (
+  "id" VARCHAR(64) PRIMARY KEY,
+  "name" VARCHAR(128) NOT NULL,
+  "ratingMin" NUMERIC(6, 2) NOT NULL,
+  "ratingMax" NUMERIC(6, 2) NOT NULL,
+  "handicapMin" NUMERIC(6, 2) NOT NULL,
+  "handicapMax" NUMERIC(6, 2) NOT NULL,
+  "sortOrder" INTEGER NOT NULL DEFAULT 0,
+  "isActive" BOOLEAN NOT NULL DEFAULT TRUE,
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedBy" VARCHAR(64),
+  CONSTRAINT "chk_race_classes_rating"
+    CHECK ("ratingMin" >= 0 AND "ratingMax" <= 140 AND "ratingMin" <= "ratingMax"),
+  CONSTRAINT "chk_race_classes_weight"
+    CHECK ("handicapMin" >= 110 AND "handicapMax" <= 135 AND "handicapMin" <= "handicapMax")
+);
+
+CREATE UNIQUE INDEX "uq_race_classes_name_ci"
+  ON "raceClasses" (LOWER("name"));
+
 CREATE TABLE "races" (
   "id" VARCHAR(64) PRIMARY KEY,
   "tournamentId" VARCHAR(64) ,
