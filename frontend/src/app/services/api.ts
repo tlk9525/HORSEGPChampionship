@@ -445,7 +445,6 @@ export const updateSystemSettings = async (settings: Partial<SystemSettings>) =>
 export const updateUser = async (
   userId: string,
   user: {
-    role: UserRole;
     status: AuthUser['status'];
   }
 ) =>
