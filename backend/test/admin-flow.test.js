@@ -113,6 +113,38 @@ test('admin cannot create a tournament with end date before start date', async (
   assert.equal(db.tournaments.length, 1);
 });
 
+test('admin creates a tournament with row-level persistence when available', async () => {
+  const db = baseDb();
+  let persistedTournament;
+  let persistedNotifications;
+  const app = new Hono();
+  app.route('/', createAdminRoutes(
+    async () => db,
+    async () => {
+      throw new Error('writeDb should not be called');
+    },
+    undefined,
+    undefined,
+    async (tournament, notifications) => {
+      persistedTournament = tournament;
+      persistedNotifications = notifications;
+    }
+  ));
+
+  const result = await requestJson(app, '/tournaments', {
+    name: 'Fast Tournament',
+    startDate: '2099-03-01',
+    finalDate: '2099-03-10',
+    location: 'Fast Track',
+  });
+
+  assert.equal(result.status, 201);
+  assert.equal(persistedTournament.name, 'Fast Tournament');
+  assert.equal(persistedTournament.location, 'Fast Track');
+  assert.equal(persistedNotifications.length, 1);
+  assert.equal(persistedNotifications[0].title, 'Tournament created');
+});
+
 test('admin can delete a tournament with all dependent race data', async () => {
   const db = baseDb();
   db.tournaments.push({ id: 'other-tournament', name: 'Other', status: 'active' });

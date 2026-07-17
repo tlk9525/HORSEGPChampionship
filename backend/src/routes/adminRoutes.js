@@ -172,7 +172,13 @@ const addPairToRace = (db, race, pair, createdAt) => {
   return true;
 };
 // Ghi chú: Hàm này tạo nhóm route admin routes cho backend.
-export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persistSystemSettings) => {
+export const createAdminRoutes = (
+  getDb,
+  writeDb,
+  persistAdminRaceAction,
+  persistSystemSettings,
+  persistCreatedTournament
+) => {
   const app = new Hono();
 
   // Middleware xác thực — chỉ admin mới truy cập được
@@ -385,10 +391,21 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
     };
 
     db.tournaments.unshift(tournament);
+    const previousNotificationIds = new Set(
+      (db.notifications || []).map((notification) => notification.id)
+    );
     notifyAdmins(db, 'Tournament created',
       `${tournament.name} has been created. Race registration opens on each race schedule.`);
 
-    await writeDb(db);
+    const createdNotifications = (db.notifications || []).filter(
+      (notification) => !previousNotificationIds.has(notification.id)
+    );
+
+    if (persistCreatedTournament) {
+      await persistCreatedTournament(tournament, createdNotifications);
+    } else {
+      await writeDb(db);
+    }
     return c.json({ tournament, tournaments: db.tournaments, notifications: db.notifications || [] }, 201);
   });
 

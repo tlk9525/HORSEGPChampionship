@@ -1003,6 +1003,61 @@ export const writeDb = async (db) => {
   }
 };
 
+// Tạo tournament và các thông báo liên quan bằng transaction nhỏ, tránh đồng bộ lại toàn database.
+export const persistCreatedTournament = async (tournament, notifications = []) => {
+  await ensureRuntimeSchema();
+
+  const client = await getPool().connect();
+
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO "tournaments" (
+        "id", "name", "status", "startDate", "finalDate", "location",
+        "prizePool", "createdAt", "updatedAt"
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        tournament.id,
+        tournament.name,
+        tournament.status,
+        tournament.startDate || null,
+        tournament.finalDate || null,
+        tournament.location || null,
+        Number(tournament.prizePool || 0),
+        tournament.createdAt || nowIso(),
+        tournament.updatedAt || tournament.createdAt || nowIso(),
+      ]
+    );
+
+    for (const notification of notifications) {
+      await client.query(
+        `INSERT INTO "notifications" (
+          "id", "userId", "type", "title", "message", "isRead", "createdAt"
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT ("id") DO NOTHING`,
+        [
+          notification.id,
+          notification.userId,
+          notification.type || 'general',
+          notification.title || '',
+          notification.message || '',
+          Boolean(notification.read),
+          notification.createdAt || nowIso(),
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
 // Cập nhật một kết quả race entry bằng row-level update để tránh writeDb ghi lại toàn bộ database.
 export const persistRaceEntryResult = async (entry, report = null) => {
   await ensureRuntimeSchema();
