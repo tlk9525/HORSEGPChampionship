@@ -57,12 +57,3 @@ export const PUBLIC_RACE_STATUSES = [
   'finished',
   'completed',
 ];
-
-export const RACE_CLASS_WEIGHT_RANGES = {
-  'Class 1': { topWeightLb: 135, minWeightLb: 115 },
-  'Class 2': { topWeightLb: 135, minWeightLb: 115 },
-  'Class 3': { topWeightLb: 133, minWeightLb: 113 },
-  'Class 4': { topWeightLb: 132, minWeightLb: 112 },
-  'Class 5': { topWeightLb: 130, minWeightLb: 110 },
-  Open: { topWeightLb: 135, minWeightLb: 110 },
-};

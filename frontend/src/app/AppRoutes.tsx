@@ -19,6 +19,7 @@ const ResultsPage = lazy(() => import('./components/ResultsPage'));
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const CreateRacePage = lazy(() => import('./components/CreateRacePage'));
 const EditRacePage = lazy(() => import('./components/EditRacePage'));
+const RaceClassCatalog = lazy(() => import('./components/RaceClassCatalog'));
 const UserManagement = lazy(() => import('./components/UserManagement'));
 const LoginPage = lazy(() => import('./components/LoginPage'));
 const BettingPage = lazy(() => import('./components/BettingPage'));
@@ -94,6 +95,7 @@ export default function AppRoutes({
       />
       <Route path="/admin/races/new" element={<CreateRacePage onNavigate={onNavigate} />} />
       <Route path="/admin/races/:raceId/edit" element={<EditRacePage onNavigate={onNavigate} />} />
+      <Route path="/admin/race-classes" element={<RaceClassCatalog onNavigate={onNavigate} />} />
       <Route path="/login" element={<LoginPage onLogin={onLogin} />} />
       <Route path="/register" element={<LoginPage initialMode="register" onLogin={onLogin} />} />
       <Route

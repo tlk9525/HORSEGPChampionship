@@ -129,6 +129,19 @@ export interface RaceBuilderReferee {
   name: string;
 }
 
+export interface RaceClassRecord {
+  id: string;
+  name: string;
+  ratingMin: number;
+  ratingMax: number;
+  handicapMin: number;
+  handicapMax: number;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface RaceRecord {
   id: string;
   tournamentId: string | null;
@@ -663,10 +676,34 @@ export const getRaceBuilder = async () =>
     tournaments: TournamentRecord[];
     races: RaceRecord[];
     referees: RaceBuilderReferee[];
+    raceClasses: RaceClassRecord[];
     maxRacesPerTournament: number;
     defaultDistanceMeters: number;
     closeRegistrationHours: number;
   }>('/admin/race-builder');
+
+// Lấy danh mục race class để admin quản lý.
+export const getRaceClasses = async () =>
+  request<{ raceClasses: RaceClassRecord[] }>('/admin/race-classes');
+
+// Tạo một race class mới trong catalog.
+export const createRaceClass = async (
+  raceClass: Omit<RaceClassRecord, 'id' | 'createdAt' | 'updatedAt'>
+) =>
+  request<{ raceClass: RaceClassRecord; raceClasses: RaceClassRecord[] }>(
+    '/admin/race-classes',
+    { method: 'POST', body: JSON.stringify(raceClass) }
+  );
+
+// Sửa parameter hoặc trạng thái active của race class.
+export const updateRaceClass = async (
+  raceClassId: string,
+  raceClass: Partial<Omit<RaceClassRecord, 'id' | 'createdAt' | 'updatedAt'>>
+) =>
+  request<{ raceClass: RaceClassRecord; raceClasses: RaceClassRecord[] }>(
+    `/admin/race-classes/${raceClassId}`,
+    { method: 'PATCH', body: JSON.stringify(raceClass) }
+  );
 
 // Tạo một cuộc đua mới trong giải đấu (admin)
 export const createRace = async (race: {
@@ -678,13 +715,9 @@ export const createRace = async (race: {
   venue: string;
   distance: string | number;
   surface: string;
-  raceClass: string;
-  ratingMin: string | number;
-  ratingMax: string | number;
+  raceClassId: string;
   registrationOpensAt: string;
   registrationClosesAt: string;
-  handicapMin?: string | number;
-  handicapMax?: string | number;
   totalPrize?: string | number;
   refereeUserId: string;
   refereeUserIds?: string[];

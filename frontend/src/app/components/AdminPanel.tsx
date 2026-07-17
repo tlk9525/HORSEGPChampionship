@@ -17,6 +17,7 @@ import {
   Trash2,
   Coins,
   TrendingUp,
+  Layers3,
 } from 'lucide-react';
 import {
   AdminBettingRaceSummary,
@@ -1152,6 +1153,12 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                     icon: Calendar,
                     label: 'Race Builder',
                     onClick: () => canCreateRace && onNavigate('create-race'),
+                  },
+
+                  {
+                    icon: Layers3,
+                    label: 'Race Class Catalog',
+                    onClick: () => onNavigate('race-classes'),
                   },
 
                   {
