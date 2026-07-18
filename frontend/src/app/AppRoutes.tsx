@@ -23,6 +23,7 @@ const RaceClassCatalog = lazy(() => import('./components/RaceClassCatalog'));
 const UserManagement = lazy(() => import('./components/UserManagement'));
 const LoginPage = lazy(() => import('./components/LoginPage'));
 const BettingPage = lazy(() => import('./components/BettingPage'));
+const AdminBettingPage = lazy(() => import('./components/AdminBettingPage'));
 
 interface AppRoutesProps {
   currentUser: AuthUser | null;
@@ -88,6 +89,7 @@ export default function AppRoutes({
           />
         }
       />
+      <Route path="/admin/betting" element={<AdminBettingPage onNavigate={onNavigate} />} />
       <Route path="/admin" element={<AdminPanel onNavigate={onNavigate} />} />
       <Route
         path="/admin/users"

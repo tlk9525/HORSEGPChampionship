@@ -125,7 +125,8 @@ export const grantStarterCredits = (
   db,
   userId,
   amount = SPECTATOR_STARTING_CREDITS,
-  createdAt = new Date().toISOString()
+  createdAt = new Date().toISOString(),
+  { source = 'spectator_registration' } = {}
 ) => {
   const user = db.users.find((item) => item.id === userId);
   if (!user) return null;
@@ -138,9 +139,40 @@ export const grantStarterCredits = (
     type: CREDIT_TRANSACTION_TYPES.STARTER_BONUS,
     amount: Number(amount),
     balanceAfter: user.credits,
-    metadata: { source: 'spectator_registration' },
+    metadata: { source },
     createdAt,
   });
+};
+
+/**
+ * Grant starter credits when a user becomes a spectator (registration or role change).
+ * Idempotent: skips if a starter_bonus ledger entry already exists.
+ */
+export const ensureSpectatorStarterCredits = (
+  db,
+  userId,
+  amount = SPECTATOR_STARTING_CREDITS,
+  createdAt = new Date().toISOString(),
+  { source = 'spectator_role_change' } = {}
+) => {
+  const user = db.users.find((item) => item.id === userId);
+  if (!user) return null;
+
+  const alreadyGranted = (db.creditTransactions || []).some(
+    (transaction) =>
+      transaction.userId === userId &&
+      transaction.type === CREDIT_TRANSACTION_TYPES.STARTER_BONUS
+  );
+  if (alreadyGranted) {
+    if (user.credits == null) {
+      const wallet = (db.wallets || []).find((item) => item.userId === userId);
+      user.credits = wallet ? Number(wallet.credits ?? 0) : Number(amount);
+    }
+    syncWalletCredits(db, userId, user.credits, createdAt);
+    return null;
+  }
+
+  return grantStarterCredits(db, userId, amount, createdAt, { source });
 };
 
 export const debitCredits = (

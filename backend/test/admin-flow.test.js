@@ -332,6 +332,48 @@ test('admin can view and update a race bet limit', async () => {
   assert.equal(db.races[0].betLimit, null);
 });
 
+test('changing a user role to spectator grants starter credits', async () => {
+  const db = baseDb();
+  db.wallets = [];
+  db.creditTransactions = [];
+  let writes = 0;
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => {
+    writes += 1;
+  }));
+
+  const result = await requestJson(
+    app,
+    '/users/owner-1',
+    { role: 'spectator', status: 'active' },
+    'PATCH'
+  );
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.user.role, 'spectator');
+  assert.equal(result.body.user.credits, 100);
+  assert.equal(db.users.find((user) => user.id === 'owner-1').credits, 100);
+  assert.equal(db.wallets.find((wallet) => wallet.userId === 'owner-1')?.credits, 100);
+  assert.equal(
+    db.creditTransactions.filter((transaction) => transaction.type === 'starter_bonus').length,
+    1
+  );
+  assert.equal(writes, 1);
+
+  const again = await requestJson(
+    app,
+    '/users/owner-1',
+    { role: 'spectator', status: 'active' },
+    'PATCH'
+  );
+  assert.equal(again.status, 200);
+  assert.equal(
+    db.creditTransactions.filter((transaction) => transaction.type === 'starter_bonus').length,
+    1
+  );
+  assert.equal(db.users.find((user) => user.id === 'owner-1').credits, 100);
+});
+
 test('race creation rejects invalid registration timestamps', async () => {
   const db = baseDb();
   const app = new Hono();

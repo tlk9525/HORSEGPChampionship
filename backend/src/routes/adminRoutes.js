@@ -43,6 +43,8 @@ import {
   settleRaceBets,
   parseBetLimitInput,
 } from '../services/bettingService.js';
+import { ensureSpectatorStarterCredits } from '../services/creditService.js';
+import { USER_ROLES as ROLE } from '../config/constants.js';
 
 // Helpers nội bộ
 const nonRejectedEntry = (entry) => entry.status !== 'rejected';
@@ -478,9 +480,16 @@ export const createAdminRoutes = (
       return c.json({ message: 'At least one active admin is required' }, 400);
     }
 
+    const becomingSpectator =
+      role === ROLE.SPECTATOR && target.role !== ROLE.SPECTATOR;
+
     target.role = role;
     target.status = status;
     target.updatedAt = new Date().toISOString();
+
+    if (becomingSpectator) {
+      ensureSpectatorStarterCredits(db, target.id);
+    }
 
     await writeDb(db);
     return c.json({ user: publicUser(target), users: sortedPublicUsers(db) });

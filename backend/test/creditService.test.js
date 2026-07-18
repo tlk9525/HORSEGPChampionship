@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   CREDIT_TRANSACTION_TYPES,
   awardDailyLoginBonus,
+  ensureSpectatorStarterCredits,
   grantStarterCredits,
 } from '../src/services/creditService.js';
 
@@ -29,6 +30,35 @@ test('new spectator receives 100 starter credits with a ledger entry', () => {
   assert.equal(db.creditTransactions[0].type, CREDIT_TRANSACTION_TYPES.STARTER_BONUS);
   assert.equal(db.creditTransactions[0].amount, 100);
   assert.equal(db.creditTransactions[0].balanceAfter, 100);
+});
+
+test('ensureSpectatorStarterCredits grants once and is idempotent', () => {
+  const db = {
+    users: [{ id: 'owner-1', role: 'owner', credits: null }],
+    wallets: [],
+    creditTransactions: [],
+  };
+
+  const first = ensureSpectatorStarterCredits(
+    db,
+    'owner-1',
+    100,
+    '2026-07-16T02:00:00.000Z',
+    { source: 'spectator_role_change' }
+  );
+  const second = ensureSpectatorStarterCredits(
+    db,
+    'owner-1',
+    100,
+    '2026-07-16T03:00:00.000Z',
+    { source: 'spectator_role_change' }
+  );
+
+  assert.equal(first?.amount, 100);
+  assert.equal(first?.metadata?.source, 'spectator_role_change');
+  assert.equal(second, null);
+  assert.equal(db.users[0].credits, 100);
+  assert.equal(db.creditTransactions.length, 1);
 });
 
 test('daily login reward claims once per Vietnam calendar day', () => {

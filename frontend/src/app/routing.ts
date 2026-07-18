@@ -19,6 +19,7 @@ export type AppPage =
   | 'simulation-demo'
   | 'results'
   | 'betting'
+  | 'admin-betting'
   | 'admin'
   | 'create-race'
   | 'edit-race'
@@ -57,6 +58,7 @@ export const protectedPages: Record<AppPage, UserRole[] | undefined> = {
   'simulation-demo': ['admin', 'owner', 'jockey', 'referee', 'spectator'],
   results: ['admin', 'owner', 'jockey', 'referee', 'spectator'],
   betting: ['spectator'],
+  'admin-betting': ['admin'],
 };
 
 export interface RouteContext {
@@ -88,6 +90,7 @@ export const pageFromPath = (pathname: string): AppPage => {
   if (path === '/simulation-demo' || path.startsWith('/simulation-demo/')) return 'simulation-demo';
   if (path === '/results') return 'results';
   if (path === '/betting') return 'betting';
+  if (path === '/admin/betting') return 'admin-betting';
   if (path === '/admin') return 'admin';
   if (path === '/admin/users') return 'manage-users';
   if (path === '/admin/races/new') return 'create-race';
@@ -130,6 +133,7 @@ export const pathForPage = (
       : '/simulation-demo',
     results: '/results',
     betting: '/betting',
+    'admin-betting': '/admin/betting',
     admin: '/admin',
     'create-race': '/admin/races/new',
     'edit-race': context.selectedRaceId
