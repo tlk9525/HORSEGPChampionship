@@ -610,6 +610,13 @@ export const createAdminRoutes = (
       (log) => !raceIds.has(log.raceId)
     );
 
+    // Refund pending bets before races/entries are removed (CASCADE would
+    // otherwise delete bet rows and leave stakes deducted from wallets).
+    for (const raceId of raceIds) {
+      refundRaceBets(db, raceId, `${tournament.name} was deleted`);
+    }
+    db.bets = (db.bets || []).filter((bet) => !raceIds.has(bet.raceId));
+
     notifyAdmins(db, 'Tournament deleted', `${tournament.name} was deleted by ${user.name}.`);
 
     await writeDb(db);
@@ -1404,7 +1411,7 @@ export const createAdminRoutes = (
     });
 
     if (persistAdminRaceAction) {
-      await persistAdminRaceAction({
+      const persistResult = await persistAdminRaceAction({
         race,
         raceEntries: entries,
         horses: affectedHorses,
@@ -1421,6 +1428,24 @@ export const createAdminRoutes = (
           (log) => !existingActionLogIds.has(log.id)
         ),
       });
+
+      const walletBalances = persistResult?.walletBalances || {};
+      const syncedAt = new Date().toISOString();
+      for (const [userId, credits] of Object.entries(walletBalances)) {
+        const spectator = db.users.find((item) => item.id === userId);
+        if (spectator) {
+          spectator.credits = credits;
+          spectator.updatedAt = syncedAt;
+        }
+        db.wallets = db.wallets || [];
+        const wallet = db.wallets.find((item) => item.userId === userId);
+        if (wallet) {
+          wallet.credits = credits;
+          wallet.updatedAt = syncedAt;
+        } else {
+          db.wallets.push({ userId, credits, updatedAt: syncedAt });
+        }
+      }
     } else {
       await writeDb(db);
     }

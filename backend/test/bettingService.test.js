@@ -119,7 +119,7 @@ test('settleRaceBets splits the pot among winning horse bettors', () => {
   );
 });
 
-test('settleRaceBets marks all bets lost when nobody picked the winner', () => {
+test('settleRaceBets refunds the pot when nobody picked the winner', () => {
   const db = buildSettlementDb();
   db.bets = db.bets.map((bet) =>
     bet.raceEntryId === 'entry-winner'
@@ -127,7 +127,7 @@ test('settleRaceBets marks all bets lost when nobody picked the winner', () => {
       : bet
   );
 
-  settleRaceBets(db, 'race-1', [
+  const result = settleRaceBets(db, 'race-1', [
     {
       id: 'entry-winner',
       position: 1,
@@ -136,8 +136,32 @@ test('settleRaceBets marks all bets lost when nobody picked the winner', () => {
     },
   ]);
 
-  assert.ok(db.bets.every((bet) => bet.status === 'lost'));
-  assert.ok(db.bets.every((bet) => bet.payout === 0));
+  assert.equal(result.refunded, true);
+  assert.equal(result.noWinningBets, true);
+  assert.ok(db.bets.every((bet) => bet.status === 'refunded'));
+  assert.equal(db.users.find((user) => user.id === 'spectator-a').credits, 70);
+  assert.equal(db.users.find((user) => user.id === 'spectator-b').credits, 50);
+  assert.equal(db.users.find((user) => user.id === 'spectator-c').credits, 80);
+  assert.ok(
+    db.creditTransactions.every((transaction) => transaction.type === 'bet_refunded')
+  );
+});
+
+test('settleRaceBets refunds the pot when there is no valid 1st-place finisher', () => {
+  const db = buildSettlementDb();
+  const result = settleRaceBets(db, 'race-1', [
+    {
+      id: 'entry-winner',
+      position: 1,
+      disqualified: true,
+      preRaceStatus: 'ready',
+    },
+  ]);
+
+  assert.equal(result.refunded, true);
+  assert.equal(result.winnerEntryId, null);
+  assert.ok(db.bets.every((bet) => bet.status === 'refunded'));
+  assert.equal(db.users.find((user) => user.id === 'spectator-a').credits, 70);
 });
 
 test('raceStartMs parses date and time as Vietnam time (+07:00)', () => {

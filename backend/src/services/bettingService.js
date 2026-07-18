@@ -106,26 +106,43 @@ export const settleRaceBets = (db, raceId, entries = []) => {
     bet.settledAt = settledAt;
   };
 
+  // Void the pool (refund stakes) when there is no payable 1st place or nobody
+  // backed the winner — do not burn credits.
   if (!winner) {
-    pendingBets.forEach(markLost);
-    return { pot, settled: pendingBets.length, winnerEntryId: null, affectedUsers: [] };
+    const refund = refundRaceBets(
+      db,
+      raceId,
+      'No valid 1st-place finisher; pending bets were refunded'
+    );
+    return {
+      pot,
+      settled: refund.refunded,
+      winnerEntryId: null,
+      affectedUsers: refund.affectedUsers,
+      refunded: true,
+    };
   }
 
   const winningBets = pendingBets.filter((bet) => bet.raceEntryId === winner.id);
   const losingBets = pendingBets.filter((bet) => bet.raceEntryId !== winner.id);
 
-  losingBets.forEach(markLost);
-
   if (winningBets.length === 0) {
-    pendingBets.forEach(markLost);
+    const refund = refundRaceBets(
+      db,
+      raceId,
+      'No bets on the winning horse; the pot was refunded'
+    );
     return {
       pot,
-      settled: pendingBets.length,
+      settled: refund.refunded,
       winnerEntryId: winner.id,
-      affectedUsers: [],
+      affectedUsers: refund.affectedUsers,
       noWinningBets: true,
+      refunded: true,
     };
   }
+
+  losingBets.forEach(markLost);
 
   const totalWinningStake = winningBets.reduce(
     (sum, bet) => sum + Number(bet.amount || 0),

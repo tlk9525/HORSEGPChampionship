@@ -990,16 +990,41 @@ export const writeDb = async (db) => {
       });
     }
 
-    await writeRows(
-      'wallets',
-      ['userId', 'credits', 'updatedAt'],
-      [...walletByUserId.values()].map((wallet) => ({
-        userId: wallet.userId,
-        credits: Number(wallet.credits ?? 0),
-        updatedAt: wallet.updatedAt || nowIso(),
-      })),
-      'userId'
+    const walletRows = [...walletByUserId.values()].map((wallet) => ({
+      userId: wallet.userId,
+      credits: Number(wallet.credits ?? 0),
+      updatedAt: wallet.updatedAt || nowIso(),
+    }));
+    persistedRows.set('wallets', walletRows);
+
+    // Apply wallet changes as deltas from the readDb baseline so concurrent
+    // place/cancel/login bonus updates are not overwritten by a stale absolute balance.
+    const baselineWalletsByUserId = new Map(
+      (baseline.wallets || []).map((wallet) => [wallet.userId, wallet])
     );
+    for (const wallet of walletRows) {
+      const baselineWallet = baselineWalletsByUserId.get(wallet.userId);
+      if (!baselineWallet) {
+        await client.query(
+          `INSERT INTO "wallets" ("userId", "credits", "updatedAt")
+           VALUES ($1, $2, $3)
+           ON CONFLICT ("userId") DO NOTHING`,
+          [wallet.userId, wallet.credits, wallet.updatedAt]
+        );
+        continue;
+      }
+
+      const delta = wallet.credits - Number(baselineWallet.credits ?? 0);
+      if (delta === 0) continue;
+
+      await client.query(
+        `UPDATE "wallets"
+         SET "credits" = "credits" + $2,
+             "updatedAt" = $3
+         WHERE "userId" = $1`,
+        [wallet.userId, delta, wallet.updatedAt]
+      );
+    }
 
     await writeRows(
       'sessions',
@@ -1490,22 +1515,47 @@ export const persistAdminRaceAction = async ({
       );
     }
 
-    for (const user of users) {
+    // Apply credit deltas relative to the live wallet row (FOR UPDATE), never
+    // overwrite absolute balances from a stale readDb snapshot.
+    const walletBalances = {};
+    const creditTransactionsSorted = [...creditTransactions].sort((left, right) => {
+      const userCmp = String(left.userId).localeCompare(String(right.userId));
+      if (userCmp !== 0) return userCmp;
+      return String(left.id).localeCompare(String(right.id));
+    });
+
+    for (const transaction of creditTransactionsSorted) {
+      const amount = Number(transaction.amount);
+      const updatedAt = transaction.createdAt || nowIso();
+
       await client.query(
         `INSERT INTO "wallets" ("userId", "credits", "updatedAt")
-         VALUES ($1, $2, $3)
-         ON CONFLICT ("userId") DO UPDATE SET
-           "credits" = EXCLUDED."credits",
-           "updatedAt" = EXCLUDED."updatedAt"`,
-        [
-          user.id,
-          Number(user.credits ?? 0),
-          user.updatedAt || nowIso(),
-        ]
+         VALUES ($1, 0, $2)
+         ON CONFLICT ("userId") DO NOTHING`,
+        [transaction.userId, updatedAt]
       );
-    }
 
-    for (const transaction of creditTransactions) {
+      const { rows: walletRows } = await client.query(
+        `SELECT "credits" FROM "wallets" WHERE "userId" = $1 FOR UPDATE`,
+        [transaction.userId]
+      );
+      const nextCredits = Number(walletRows[0]?.credits ?? 0) + amount;
+      if (nextCredits < 0) {
+        throw new Error(
+          `Insufficient credits while applying ${transaction.type} for ${transaction.userId}`
+        );
+      }
+
+      await client.query(
+        `UPDATE "wallets"
+         SET "credits" = $2, "updatedAt" = $3
+         WHERE "userId" = $1`,
+        [transaction.userId, nextCredits, updatedAt]
+      );
+
+      transaction.balanceAfter = nextCredits;
+      walletBalances[transaction.userId] = nextCredits;
+
       await client.query(
         `INSERT INTO "creditTransactions" (
           "id", "userId", "type", "amount", "balanceAfter", "metadata", "createdAt"
@@ -1516,10 +1566,10 @@ export const persistAdminRaceAction = async ({
           transaction.id,
           transaction.userId,
           transaction.type,
-          Number(transaction.amount),
-          Number(transaction.balanceAfter),
+          amount,
+          nextCredits,
           transaction.metadata || null,
-          transaction.createdAt || nowIso(),
+          updatedAt,
         ]
       );
     }
@@ -1564,6 +1614,7 @@ export const persistAdminRaceAction = async ({
     }
 
     await client.query('COMMIT');
+    return { walletBalances };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

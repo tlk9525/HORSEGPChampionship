@@ -254,6 +254,49 @@ test('admin can delete a tournament with all dependent race data', async () => {
   assert.equal(writes, 1);
 });
 
+test('deleting a tournament refunds pending bets before removing races', async () => {
+  const db = baseDb();
+  db.users.push({
+    id: 'spectator-1',
+    name: 'Spectator',
+    role: 'spectator',
+    status: 'active',
+    credits: 40,
+  });
+  db.races = [
+    { id: 'race-1', tournamentId: 'tournament-1', name: 'Race 1', status: 'published' },
+  ];
+  db.raceEntries = [
+    { id: 'entry-1', raceId: 'race-1', horseId: 'horse-1', status: 'approved' },
+  ];
+  db.bets = [
+    {
+      id: 'bet-1',
+      userId: 'spectator-1',
+      raceId: 'race-1',
+      raceEntryId: 'entry-1',
+      amount: 25,
+      status: 'pending',
+    },
+  ];
+  db.wallets = [{ userId: 'spectator-1', credits: 40 }];
+  db.creditTransactions = [];
+  db.notifications = [];
+
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/tournaments/tournament-1', undefined, 'DELETE');
+
+  assert.equal(result.status, 200);
+  assert.equal(db.users.find((user) => user.id === 'spectator-1').credits, 65);
+  assert.equal(db.bets.some((bet) => bet.raceId === 'race-1'), false);
+  assert.equal(
+    db.creditTransactions.filter((transaction) => transaction.type === 'bet_refunded').length,
+    1
+  );
+});
+
 test('race creation rejects invalid registration timestamps', async () => {
   const db = baseDb();
   const app = new Hono();
