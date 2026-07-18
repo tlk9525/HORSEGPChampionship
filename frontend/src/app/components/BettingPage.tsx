@@ -36,6 +36,7 @@ const BETTING_CLOSE_MS = 60 * 1000;
 /** Match backend: race schedules are Vietnam wall-clock (+07:00). */
 const RACE_TIMEZONE_OFFSET = '+07:00';
 
+// Ghi chú: Hàm này chuyển lịch race theo giờ Việt Nam thành timestamp để tính thời gian đóng cược.
 const raceStartMs = (race: RaceRecord) => {
   const date = String(race.date || race.raceDate || '').slice(0, 10);
   const rawTime = String(race.time || race.raceTime || '');
@@ -49,11 +50,13 @@ const raceStartMs = (race: RaceRecord) => {
   return new Date(`${date}T${normalized}${RACE_TIMEZONE_OFFSET}`).getTime();
 };
 
+// Ghi chú: Hàm này kiểm tra race entry đã duyệt, không bị loại và không vắng mặt.
 const isBettableEntry = (entry: RaceEntryRecord) =>
   entry.status === 'approved' &&
   !entry.disqualified &&
   entry.preRaceStatus !== 'absent';
 
+// Ghi chú: Hàm này kiểm tra race đang publish và chưa đến mốc đóng cược.
 const isBettingOpen = (race: RaceRecord) => {
   if (race.status !== 'published') return false;
   const startMs = raceStartMs(race);
@@ -61,6 +64,7 @@ const isBettingOpen = (race: RaceRecord) => {
   return Date.now() < startMs - BETTING_CLOSE_MS;
 };
 
+// Ghi chú: Hàm này định dạng thời gian còn lại trước khi đóng cược để hiển thị trên giao diện.
 const formatCountdown = (race: RaceRecord) => {
   const startMs = raceStartMs(race);
   if (!Number.isFinite(startMs)) return 'Start time unavailable';
@@ -82,6 +86,7 @@ const formatCountdown = (race: RaceRecord) => {
   return `${minutes}m ${seconds}s until betting closes`;
 };
 
+// Ghi chú: Hàm này render trang betting và quản lý ví, pot cược cùng lịch sử cược của spectator.
 export default function BettingPage({
   currentUser,
   onNavigate,
@@ -104,6 +109,7 @@ export default function BettingPage({
   const [message, setMessage] = useState('');
   const [now, setNow] = useState(Date.now());
 
+  // Ghi chú: Hàm này tải đồng thời dữ liệu hệ thống, ví spectator và các pot cược mới nhất.
   const loadData = () => {
     Promise.all([getBootstrap(), getSpectatorWallet(), getRacePots()])
       .then(([bootstrap, wallet, { pots, entryTotals: apiEntryTotals }]) => {
@@ -186,6 +192,7 @@ export default function BettingPage({
     return map;
   }, [tournaments]);
 
+  // Ghi chú: Hàm này kiểm tra số credit rồi gửi yêu cầu đặt cược và cập nhật giao diện.
   const handlePlaceBet = (entry: RaceEntryRecord, race: RaceRecord) => {
     const amount = Number(betAmounts[entry.id] || 0);
     if (!Number.isInteger(amount) || amount <= 0) {
@@ -225,6 +232,7 @@ export default function BettingPage({
       .finally(() => setSubmittingEntryId(''));
   };
 
+  // Ghi chú: Hàm này hủy một cược đang chờ, hoàn credit và cập nhật lại pot trên giao diện.
   const handleCancelBet = (bet: BetRecord) => {
     setCancellingBetId(bet.id);
     setMessage('');

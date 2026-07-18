@@ -823,18 +823,22 @@ export const recordRaceResult = async (
     }
   );
 
+// Ghi chú: Hàm này lấy ví credit, thưởng đăng nhập và lịch sử cược của spectator hiện tại.
 export const getSpectatorWallet = () =>
   request<SpectatorWallet>('/spectator/wallet');
 
+// Ghi chú: Hàm này lấy tổng pot theo race và tổng tiền cược theo từng race entry.
 export const getRacePots = () =>
   request<{ pots: RacePot[]; entryTotals: Record<string, number> }>('/spectator/pots');
 
+// Ghi chú: Hàm này gửi yêu cầu đặt một lượng credit vào race entry đã chọn.
 export const placeBet = (raceEntryId: string, amount: number) =>
   request<{ bet: BetRecord; credits: number }>('/spectator/bets', {
     method: 'POST',
     body: JSON.stringify({ raceEntryId, amount }),
   });
 
+// Ghi chú: Hàm này hủy một cược đang chờ và nhận lại số dư credit sau khi hoàn tiền.
 export const cancelBet = (betId: string) =>
   request<{ ok: boolean; credits: number }>(`/spectator/bets/${betId}/cancel`, {
     method: 'POST',
@@ -864,6 +868,7 @@ export interface AdminBettingSpectator {
   totalWon: number;
 }
 
+// Ghi chú: Hàm này lấy thống kê betting theo race và spectator để admin theo dõi.
 export const getAdminBetting = () =>
   request<{
     raceSummaries: AdminBettingRaceSummary[];

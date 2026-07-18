@@ -23,6 +23,7 @@ interface RaceClassForm {
   isActive: boolean;
 }
 
+// Ghi chú: Hàm này tạo dữ liệu form rỗng với giá trị mặc định để thêm race class mới.
 const emptyForm = (): RaceClassForm => ({
   name: '',
   ratingMin: '',
