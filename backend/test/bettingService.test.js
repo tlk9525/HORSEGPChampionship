@@ -135,6 +135,13 @@ test('settleRaceBets splits the pot among winning horse bettors', () => {
     db.creditTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
     100
   );
+  assert.ok(
+    db.creditTransactions
+      .filter((transaction) => transaction.type === 'bet_payout')
+      .every(
+        (transaction) => transaction.id === `bet_payout:${transaction.metadata.betId}`
+      )
+  );
 });
 
 test('settleRaceBets refunds the pot when nobody picked the winner', () => {
@@ -203,5 +210,10 @@ test('refundRaceBets returns credits when a race is cancelled', () => {
   assert.equal(
     db.creditTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
     100
+  );
+  assert.ok(
+    db.creditTransactions.every(
+      (transaction) => transaction.id === `bet_refunded:${transaction.metadata.betId}`
+    )
   );
 });

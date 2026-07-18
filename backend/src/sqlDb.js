@@ -551,8 +551,99 @@ const derivedRefereeAssignmentId = (raceId, refereeUserId) => {
     .update(`${raceId}:${refereeUserId}`)
     .digest('hex')
     .slice(0, 24);
-
   return `rra_${digest}`;
+};
+
+export class RaceStateConflictError extends Error {
+  constructor(message = 'Race state changed by another request') {
+    super(message);
+    this.name = 'RaceStateConflictError';
+    this.code = 'RACE_STATE_CONFLICT';
+  }
+}
+
+/**
+ * Insert ledger rows first (ON CONFLICT DO NOTHING RETURNING).
+ * Only credit/debit the wallet when the ledger insert actually lands.
+ * balanceAfter is written from the live wallet RETURNING value.
+ */
+const applyCreditTransactionsIdempotent = async (client, creditTransactions = []) => {
+  const walletBalances = {};
+  const appliedDeltaByUser = {};
+  const sorted = [...creditTransactions].sort((left, right) => {
+    const userCmp = String(left.userId).localeCompare(String(right.userId));
+    if (userCmp !== 0) return userCmp;
+    return String(left.id).localeCompare(String(right.id));
+  });
+
+  for (const transaction of sorted) {
+    const amount = Number(transaction.amount);
+    const updatedAt = transaction.createdAt || nowIso();
+    if (!Number.isFinite(amount) || amount === 0) continue;
+
+    await client.query(
+      `INSERT INTO "wallets" ("userId", "credits", "updatedAt")
+       VALUES ($1, 0, $2)
+       ON CONFLICT ("userId") DO NOTHING`,
+      [transaction.userId, updatedAt]
+    );
+
+    await client.query(
+      `SELECT "credits" FROM "wallets" WHERE "userId" = $1 FOR UPDATE`,
+      [transaction.userId]
+    );
+
+    const { rows: insertedRows } = await client.query(
+      `INSERT INTO "creditTransactions" (
+        "id", "userId", "type", "amount", "balanceAfter", "metadata", "createdAt"
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT ("id") DO NOTHING
+      RETURNING "id"`,
+      [
+        transaction.id,
+        transaction.userId,
+        transaction.type,
+        amount,
+        0,
+        transaction.metadata || null,
+        updatedAt,
+      ]
+    );
+
+    if (!insertedRows.length) {
+      continue;
+    }
+
+    const { rows: walletRows } = await client.query(
+      `UPDATE "wallets"
+       SET "credits" = "credits" + $2,
+           "updatedAt" = $3
+       WHERE "userId" = $1
+       RETURNING "credits"`,
+      [transaction.userId, amount, updatedAt]
+    );
+    const nextCredits = Number(walletRows[0]?.credits ?? 0);
+    if (nextCredits < 0) {
+      throw new Error(
+        `Insufficient credits while applying ${transaction.type} for ${transaction.userId}`
+      );
+    }
+
+    await client.query(
+      `UPDATE "creditTransactions"
+       SET "balanceAfter" = $2
+       WHERE "id" = $1`,
+      [transaction.id, nextCredits]
+    );
+
+    transaction.balanceAfter = nextCredits;
+    walletBalances[transaction.userId] = nextCredits;
+    appliedDeltaByUser[transaction.userId] =
+      (appliedDeltaByUser[transaction.userId] || 0) + amount;
+  }
+
+  return { walletBalances, appliedDeltaByUser };
 };
 
 const tableDeleteOrder = [
@@ -970,17 +1061,40 @@ export const writeDb = async (db) => {
       }))
     );
 
+    const baselineCreditById = new Map(
+      (baseline.creditTransactions || []).map((transaction) => [transaction.id, transaction])
+    );
+    const allCreditTransactions = (db.creditTransactions || []).map((transaction) => ({
+      ...transaction,
+      amount: Number(transaction.amount),
+      balanceAfter: Number(transaction.balanceAfter),
+      metadata: transaction.metadata || null,
+      createdAt: transaction.createdAt || nowIso(),
+    }));
+    const existingCreditTransactions = allCreditTransactions.filter((transaction) =>
+      baselineCreditById.has(transaction.id)
+    );
+    const newCreditTransactions = allCreditTransactions.filter(
+      (transaction) => !baselineCreditById.has(transaction.id)
+    );
+
+    // Existing ledger rows may change metadata/balanceAfter in memory; upsert without
+    // touching wallets. New rows are applied idempotently below so balanceAfter matches
+    // the live wallet.
     await writeRows(
       'creditTransactions',
       ['id', 'userId', 'type', 'amount', 'balanceAfter', 'metadata', 'createdAt'],
-      (db.creditTransactions || []).map((transaction) => ({
-        ...transaction,
-        amount: Number(transaction.amount),
-        balanceAfter: Number(transaction.balanceAfter),
-        metadata: transaction.metadata || null,
-        createdAt: transaction.createdAt || nowIso(),
-      }))
+      existingCreditTransactions
     );
+
+    const { appliedDeltaByUser } = await applyCreditTransactionsIdempotent(
+      client,
+      newCreditTransactions
+    );
+    persistedRows.set('creditTransactions', [
+      ...existingCreditTransactions,
+      ...newCreditTransactions,
+    ]);
 
     const walletsFromUsers = (db.users || [])
       .filter((user) => user.role === 'spectator')
@@ -1006,8 +1120,9 @@ export const writeDb = async (db) => {
     }));
     persistedRows.set('wallets', walletRows);
 
-    // Apply wallet changes as deltas from the readDb baseline so concurrent
-    // place/cancel/login bonus updates are not overwritten by a stale absolute balance.
+    // Apply remaining wallet deltas after ledger-driven updates so concurrent
+    // place/cancel/login bonus credits are preserved and we do not double-apply
+    // amounts already written via new creditTransactions.
     const baselineWalletsByUserId = new Map(
       (baseline.wallets || []).map((wallet) => [wallet.userId, wallet])
     );
@@ -1023,15 +1138,16 @@ export const writeDb = async (db) => {
         continue;
       }
 
-      const delta = wallet.credits - Number(baselineWallet.credits ?? 0);
-      if (delta === 0) continue;
+      const fullDelta = wallet.credits - Number(baselineWallet.credits ?? 0);
+      const remainingDelta = fullDelta - Number(appliedDeltaByUser[wallet.userId] || 0);
+      if (remainingDelta === 0) continue;
 
       await client.query(
         `UPDATE "wallets"
          SET "credits" = "credits" + $2,
              "updatedAt" = $3
          WHERE "userId" = $1`,
-        [wallet.userId, delta, wallet.updatedAt]
+        [wallet.userId, remainingDelta, wallet.updatedAt]
       );
     }
 
@@ -1401,6 +1517,8 @@ export const persistRefereeRaceAction = async ({
 // Lưu thao tác Admin trên race bằng row-level update để tránh rewrite toàn DB.
 export const persistAdminRaceAction = async ({
   race,
+  expectedFromStatus = null,
+  expectedFromResultStatus = null,
   raceEntries = [],
   horses = [],
   tournament = null,
@@ -1416,6 +1534,32 @@ export const persistAdminRaceAction = async ({
 
   try {
     await client.query('BEGIN');
+
+    const { rows: lockedRaceRows } = await client.query(
+      `SELECT "id", "status", "resultStatus"
+       FROM "races"
+       WHERE "id" = $1
+       FOR UPDATE`,
+      [race.id]
+    );
+    const lockedRace = lockedRaceRows[0];
+    if (!lockedRace) {
+      throw new Error(`Race ${race.id} not found`);
+    }
+    if (expectedFromStatus != null && lockedRace.status !== expectedFromStatus) {
+      throw new RaceStateConflictError(
+        `Race status is "${lockedRace.status}", expected "${expectedFromStatus}".`
+      );
+    }
+    if (
+      expectedFromResultStatus != null &&
+      lockedRace.resultStatus !== expectedFromResultStatus
+    ) {
+      throw new RaceStateConflictError(
+        `Race result status is "${lockedRace.resultStatus}", expected "${expectedFromResultStatus}".`
+      );
+    }
+
     await client.query(
       `UPDATE "races"
        SET "status" = $2,
@@ -1509,12 +1653,14 @@ export const persistAdminRaceAction = async ({
     }
 
     for (const bet of bets) {
+      // Only transition pending bets so a retried settlement cannot rewrite history.
       await client.query(
         `UPDATE "bets"
          SET "status" = $2,
              "payout" = $3,
              "settledAt" = $4
-         WHERE "id" = $1`,
+         WHERE "id" = $1
+           AND "status" = 'pending'`,
         [
           bet.id,
           bet.status || 'pending',
@@ -1524,64 +1670,10 @@ export const persistAdminRaceAction = async ({
       );
     }
 
-    // Apply credit deltas relative to the live wallet row (FOR UPDATE), never
-    // overwrite absolute balances from a stale readDb snapshot.
-    const walletBalances = {};
-    const creditTransactionsSorted = [...creditTransactions].sort((left, right) => {
-      const userCmp = String(left.userId).localeCompare(String(right.userId));
-      if (userCmp !== 0) return userCmp;
-      return String(left.id).localeCompare(String(right.id));
-    });
-
-    for (const transaction of creditTransactionsSorted) {
-      const amount = Number(transaction.amount);
-      const updatedAt = transaction.createdAt || nowIso();
-
-      await client.query(
-        `INSERT INTO "wallets" ("userId", "credits", "updatedAt")
-         VALUES ($1, 0, $2)
-         ON CONFLICT ("userId") DO NOTHING`,
-        [transaction.userId, updatedAt]
-      );
-
-      const { rows: walletRows } = await client.query(
-        `SELECT "credits" FROM "wallets" WHERE "userId" = $1 FOR UPDATE`,
-        [transaction.userId]
-      );
-      const nextCredits = Number(walletRows[0]?.credits ?? 0) + amount;
-      if (nextCredits < 0) {
-        throw new Error(
-          `Insufficient credits while applying ${transaction.type} for ${transaction.userId}`
-        );
-      }
-
-      await client.query(
-        `UPDATE "wallets"
-         SET "credits" = $2, "updatedAt" = $3
-         WHERE "userId" = $1`,
-        [transaction.userId, nextCredits, updatedAt]
-      );
-
-      transaction.balanceAfter = nextCredits;
-      walletBalances[transaction.userId] = nextCredits;
-
-      await client.query(
-        `INSERT INTO "creditTransactions" (
-          "id", "userId", "type", "amount", "balanceAfter", "metadata", "createdAt"
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT ("id") DO NOTHING`,
-        [
-          transaction.id,
-          transaction.userId,
-          transaction.type,
-          amount,
-          nextCredits,
-          transaction.metadata || null,
-          updatedAt,
-        ]
-      );
-    }
+    const { walletBalances } = await applyCreditTransactionsIdempotent(
+      client,
+      creditTransactions
+    );
 
     for (const notification of notifications) {
       await client.query(
@@ -1623,7 +1715,7 @@ export const persistAdminRaceAction = async ({
     }
 
     await client.query('COMMIT');
-    return { walletBalances };
+    return { ok: true, walletBalances };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;

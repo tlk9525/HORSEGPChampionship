@@ -3,6 +3,7 @@ import { RACE_TIMEZONE_OFFSET } from '../config/constants.js';
 import {
   CREDIT_TRANSACTION_TYPES,
   creditCredits,
+  creditTransactionIdForBet,
 } from './creditService.js';
 
 const winningEntry = (entries = []) =>
@@ -92,6 +93,7 @@ export const refundRaceBets = (db, raceId, reason = 'Race cancelled') => {
     bet.settledAt = settledAt;
 
     const credited = creditCredits(db, bet.userId, amount, {
+      id: creditTransactionIdForBet(CREDIT_TRANSACTION_TYPES.BET_REFUNDED, bet.id),
       type: CREDIT_TRANSACTION_TYPES.BET_REFUNDED,
       metadata: { betId: bet.id, raceId, reason },
       createdAt: settledAt,
@@ -192,6 +194,7 @@ export const settleRaceBets = (db, raceId, entries = []) => {
     bet.settledAt = settledAt;
 
     const credited = creditCredits(db, bet.userId, payout, {
+      id: creditTransactionIdForBet(CREDIT_TRANSACTION_TYPES.BET_PAYOUT, bet.id),
       type: CREDIT_TRANSACTION_TYPES.BET_PAYOUT,
       metadata: { betId: bet.id, raceId, pot, winningEntryId: winner.id },
       createdAt: settledAt,

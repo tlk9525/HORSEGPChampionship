@@ -95,11 +95,19 @@ const syncWalletCredits = (
 
 const recordCreditTransaction = (
   db,
-  { userId, type, amount, balanceAfter, metadata = null, createdAt = new Date().toISOString() }
+  {
+    id = randomUUID(),
+    userId,
+    type,
+    amount,
+    balanceAfter,
+    metadata = null,
+    createdAt = new Date().toISOString(),
+  }
 ) => {
   db.creditTransactions = db.creditTransactions || [];
   const transaction = {
-    id: randomUUID(),
+    id,
     userId,
     type,
     amount: Number(amount),
@@ -110,6 +118,8 @@ const recordCreditTransaction = (
   db.creditTransactions.push(transaction);
   return transaction;
 };
+
+export const creditTransactionIdForBet = (type, betId) => `${type}:${betId}`;
 
 export const grantStarterCredits = (
   db,
@@ -137,7 +147,7 @@ export const debitCredits = (
   db,
   userId,
   amount,
-  { type, metadata = null, createdAt = new Date().toISOString() }
+  { type, metadata = null, createdAt = new Date().toISOString(), id } = {}
 ) => {
   const parsedAmount = Number(amount);
   const user = db.users.find((item) => item.id === userId);
@@ -149,6 +159,7 @@ export const debitCredits = (
   user.updatedAt = createdAt;
   syncWalletCredits(db, userId, user.credits, createdAt);
   const transaction = recordCreditTransaction(db, {
+    id,
     userId,
     type,
     amount: -parsedAmount,
@@ -163,7 +174,7 @@ export const creditCredits = (
   db,
   userId,
   amount,
-  { type, metadata = null, createdAt = new Date().toISOString() }
+  { type, metadata = null, createdAt = new Date().toISOString(), id } = {}
 ) => {
   const parsedAmount = Number(amount);
   const user = db.users.find((item) => item.id === userId);
@@ -173,6 +184,7 @@ export const creditCredits = (
   user.updatedAt = createdAt;
   syncWalletCredits(db, userId, user.credits, createdAt);
   const transaction = recordCreditTransaction(db, {
+    id,
     userId,
     type,
     amount: parsedAmount,

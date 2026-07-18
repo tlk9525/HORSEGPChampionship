@@ -1013,6 +1013,7 @@ export const createAdminRoutes = (
       approvedJockeyCount
     );
     const fromStatus = race.status;
+    const fromResultStatus = race.resultStatus || 'draft';
     const existingNotificationIds = new Set(
       (db.notifications || []).map((notification) => notification.id)
     );
@@ -1482,23 +1483,40 @@ export const createAdminRoutes = (
     });
 
     if (persistAdminRaceAction) {
-      const persistResult = await persistAdminRaceAction({
-        race,
-        raceEntries: entries,
-        horses: affectedHorses,
-        tournament: affectedTournament,
-        bets: settledBets,
-        users: affectedSpectators,
-        creditTransactions: (db.creditTransactions || []).filter(
-          (transaction) => !existingCreditTransactionIds.has(transaction.id)
-        ),
-        notifications: (db.notifications || []).filter(
-          (notification) => !existingNotificationIds.has(notification.id)
-        ),
-        actionLogs: (db.raceActionLogs || []).filter(
-          (log) => !existingActionLogIds.has(log.id)
-        ),
-      });
+      let persistResult;
+      try {
+        persistResult = await persistAdminRaceAction({
+          race,
+          expectedFromStatus: fromStatus,
+          expectedFromResultStatus: fromResultStatus,
+          raceEntries: entries,
+          horses: affectedHorses,
+          tournament: affectedTournament,
+          bets: settledBets,
+          users: affectedSpectators,
+          creditTransactions: (db.creditTransactions || []).filter(
+            (transaction) => !existingCreditTransactionIds.has(transaction.id)
+          ),
+          notifications: (db.notifications || []).filter(
+            (notification) => !existingNotificationIds.has(notification.id)
+          ),
+          actionLogs: (db.raceActionLogs || []).filter(
+            (log) => !existingActionLogIds.has(log.id)
+          ),
+        });
+      } catch (error) {
+        if (error?.code === 'RACE_STATE_CONFLICT') {
+          return c.json(
+            {
+              message:
+                error.message ||
+                'This race was updated by another request. Refresh and try again.',
+            },
+            409
+          );
+        }
+        throw error;
+      }
 
       const walletBalances = persistResult?.walletBalances || {};
       const syncedAt = new Date().toISOString();
