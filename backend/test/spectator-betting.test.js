@@ -190,6 +190,49 @@ test('spectator cannot place a bet without enough credits', async () => {
   assert.equal(db.creditTransactions.length, 0);
 });
 
+test('spectator cannot place a bet above the race bet limit', async () => {
+  const db = buildDb();
+  db.races[0].betLimit = 20;
+  const app = new Hono();
+  app.route('/api/spectator', createSpectatorRoutes(async () => db, async () => undefined));
+
+  const response = await app.request('/api/spectator/bets', {
+    method: 'POST',
+    headers: {
+      Cookie: 'horse-racing-session=session-token',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ raceEntryId: 'entry-1', amount: 25 }),
+  });
+
+  assert.equal(response.status, 400);
+  const body = await response.json();
+  assert.match(body.message, /limit of 20 credits/i);
+  assert.equal(body.betLimit, 20);
+  assert.equal(db.bets.length, 0);
+  assert.equal(db.users[0].credits, 100);
+});
+
+test('spectator can place a bet at the race bet limit', async () => {
+  const db = buildDb();
+  db.races[0].betLimit = 20;
+  const app = new Hono();
+  app.route('/api/spectator', createSpectatorRoutes(async () => db, async () => undefined));
+
+  const response = await app.request('/api/spectator/bets', {
+    method: 'POST',
+    headers: {
+      Cookie: 'horse-racing-session=session-token',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ raceEntryId: 'entry-1', amount: 20 }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).bet.amount, 20);
+  assert.equal(db.users[0].credits, 80);
+});
+
 test('spectator cannot bet within one minute of race start', async () => {
   const db = buildDb();
   const start = vietnamWallClock(new Date(Date.now() + 30 * 1000));

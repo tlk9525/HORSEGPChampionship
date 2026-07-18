@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  parseBetLimitInput,
+  raceBetLimit,
   racePotTotal,
   raceStartMs,
   refundRaceBets,
@@ -69,6 +71,22 @@ const buildSettlementDb = () => {
 test('racePotTotal sums pending bets for a race', () => {
   const db = buildSettlementDb();
   assert.equal(racePotTotal(db, 'race-1'), 100);
+});
+
+test('raceBetLimit treats missing or non-positive values as unlimited', () => {
+  assert.equal(raceBetLimit({}), null);
+  assert.equal(raceBetLimit({ betLimit: null }), null);
+  assert.equal(raceBetLimit({ betLimit: 0 }), null);
+  assert.equal(raceBetLimit({ betLimit: 25.9 }), 25);
+  assert.equal(raceBetLimit({ betLimit: 50 }), 50);
+});
+
+test('parseBetLimitInput accepts null or positive whole numbers', () => {
+  assert.deepEqual(parseBetLimitInput(''), { ok: true, betLimit: null });
+  assert.deepEqual(parseBetLimitInput(null), { ok: true, betLimit: null });
+  assert.deepEqual(parseBetLimitInput(40), { ok: true, betLimit: 40 });
+  assert.equal(parseBetLimitInput(0).ok, false);
+  assert.equal(parseBetLimitInput(12.5).ok, false);
 });
 
 test('settleRaceBets splits the pot among winning horse bettors', () => {

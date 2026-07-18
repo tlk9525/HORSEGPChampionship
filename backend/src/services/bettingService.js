@@ -38,6 +38,36 @@ export const isBettableEntry = (entry) =>
       entry.preRaceStatus !== 'absent'
   );
 
+/**
+ * Max credits allowed for a single bet on this race.
+ * Returns null when unlimited (unset, zero, or invalid stored value).
+ */
+export const raceBetLimit = (race) => {
+  const limit = Number(race?.betLimit);
+  if (!Number.isFinite(limit) || limit <= 0) return null;
+  return Math.floor(limit);
+};
+
+/**
+ * Parse an admin-supplied bet limit.
+ * Empty / null → unlimited (null). Otherwise must be a positive whole number.
+ */
+export const parseBetLimitInput = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return { ok: true, betLimit: null };
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return { ok: false, message: 'Bet limit must be a positive number of credits, or empty for unlimited.' };
+  }
+  if (!Number.isInteger(parsed)) {
+    return { ok: false, message: 'Bet limit must be a whole number of credits.' };
+  }
+
+  return { ok: true, betLimit: parsed };
+};
+
 export const racePotTotal = (db, raceId) =>
   (db.bets || [])
     .filter((bet) => bet.raceId === raceId && bet.status === 'pending')

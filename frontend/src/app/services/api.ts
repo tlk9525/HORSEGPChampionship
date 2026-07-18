@@ -161,6 +161,8 @@ export interface RaceRecord {
   handicapMin?: number;
   handicapMax?: number;
   totalPrize?: number;
+  /** Max credits per single bet; null/undefined means unlimited. */
+  betLimit?: number | null;
   refereeUserId?: string;
   refereeUserIds?: string;
   referee?: string;
@@ -719,6 +721,7 @@ export const createRace = async (race: {
   registrationOpensAt: string;
   registrationClosesAt: string;
   totalPrize?: string | number;
+  betLimit?: string | number | null;
   refereeUserId: string;
   refereeUserIds?: string[];
   tournamentId?: string;
@@ -844,6 +847,7 @@ export interface AdminBettingRaceSummary {
   raceId: string;
   raceName: string;
   raceStatus: string;
+  betLimit: number | null;
   totalBets: number;
   uniqueBettors: number;
   poolTotal: number;
@@ -869,3 +873,9 @@ export const getAdminBetting = () =>
     raceSummaries: AdminBettingRaceSummary[];
     spectators: AdminBettingSpectator[];
   }>('/admin/betting');
+
+export const updateRaceBetLimit = (raceId: string, betLimit: number | null) =>
+  request<{ race: RaceRecord; betLimit: number | null }>(`/admin/races/${raceId}/bet-limit`, {
+    method: 'PATCH',
+    body: JSON.stringify({ betLimit }),
+  });

@@ -61,6 +61,12 @@ const isBettingOpen = (race: RaceRecord) => {
   return Date.now() < startMs - BETTING_CLOSE_MS;
 };
 
+const raceMaxBet = (race: RaceRecord) => {
+  const limit = Number(race.betLimit);
+  if (!Number.isFinite(limit) || limit <= 0) return null;
+  return Math.floor(limit);
+};
+
 const formatCountdown = (race: RaceRecord) => {
   const startMs = raceStartMs(race);
   if (!Number.isFinite(startMs)) return 'Start time unavailable';
@@ -195,6 +201,12 @@ export default function BettingPage({
 
     if (amount > credits) {
       setMessage('You do not have enough credits for this bet.');
+      return;
+    }
+
+    const maxBet = raceMaxBet(race);
+    if (maxBet !== null && amount > maxBet) {
+      setMessage(`This race limits bets to ${maxBet} credits each.`);
       return;
     }
 
@@ -334,6 +346,8 @@ export default function BettingPage({
               const open = isBettingOpen(race);
               const tournamentName = tournamentNameById.get(race.tournamentId || '') || 'Tournament';
               const potTotal = potsByRaceId[race.id] || 0;
+              const maxBet = raceMaxBet(race);
+              const maxStake = maxBet === null ? credits : Math.min(credits, maxBet);
 
               return (
                 <article
@@ -410,6 +424,10 @@ export default function BettingPage({
                       <div className="flex items-center gap-3 text-sm text-[#f6d77a]">
                         <Coins className="h-4 w-4 text-[#d4af37]" />
                         Pot {potTotal} credits
+                      </div>
+                      <div className="flex items-center gap-3 text-sm text-gray-300 sm:col-span-2 xl:col-span-1">
+                        <Coins className="h-4 w-4 text-[#d4af37]" />
+                        Max bet {maxBet === null ? 'Unlimited' : `${maxBet} credits`}
                       </div>
                     </div>
                   </div>
@@ -502,7 +520,7 @@ export default function BettingPage({
                                         <input
                                           type="number"
                                           min={1}
-                                          max={credits}
+                                          max={maxStake}
                                           step={1}
                                           value={betAmounts[entry.id] || ''}
                                           onChange={(event) =>
@@ -511,7 +529,11 @@ export default function BettingPage({
                                               [entry.id]: event.target.value,
                                             }))
                                           }
-                                          placeholder="Amount"
+                                          placeholder={
+                                            maxBet === null
+                                              ? 'Amount'
+                                              : `Max ${maxBet}`
+                                          }
                                           className="w-full rounded-lg border border-white/10 bg-[#0b223d] px-4 py-2 text-white outline-none focus:border-[#d4af37]"
                                         />
                                         <button
@@ -529,10 +551,12 @@ export default function BettingPage({
                                             onClick={() =>
                                               setBetAmounts((current) => ({
                                                 ...current,
-                                                [entry.id]: String(Math.min(preset, credits)),
+                                                [entry.id]: String(
+                                                  Math.min(preset, maxStake || 0)
+                                                ),
                                               }))
                                             }
-                                            disabled={credits < 1}
+                                            disabled={maxStake < 1}
                                             className="flex-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-semibold text-gray-300 hover:bg-[#d4af37]/20 hover:text-[#d4af37] hover:border-[#d4af37]/30 transition-all disabled:opacity-40"
                                           >
                                             {preset}
@@ -542,13 +566,13 @@ export default function BettingPage({
                                           onClick={() =>
                                             setBetAmounts((current) => ({
                                               ...current,
-                                              [entry.id]: String(credits),
+                                              [entry.id]: String(maxStake),
                                             }))
                                           }
-                                          disabled={credits < 1}
+                                          disabled={maxStake < 1}
                                           className="flex-1 rounded-lg border border-[#d4af37]/30 bg-[#d4af37]/10 px-2 py-1.5 text-xs font-bold text-[#d4af37] hover:bg-[#d4af37]/30 transition-all disabled:opacity-40"
                                         >
-                                          All In
+                                          {maxBet !== null && maxBet < credits ? 'Max' : 'All In'}
                                         </button>
                                       </div>
                                       {(() => {

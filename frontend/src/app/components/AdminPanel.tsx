@@ -35,6 +35,7 @@ import {
   getApprovals,
   getBootstrap,
   getSystemSettings,
+  updateRaceBetLimit,
   updateTournament,
   updateSystemSettings,
 } from '../services/api';
@@ -173,6 +174,9 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   const [bettingRaces, setBettingRaces] = useState<AdminBettingRaceSummary[]>([]);
   const [bettingSpectators, setBettingSpectators] = useState<AdminBettingSpectator[]>([]);
   const [showBettingModal, setShowBettingModal] = useState(false);
+  const [betLimitDrafts, setBetLimitDrafts] = useState<Record<string, string>>({});
+  const [savingBetLimitRaceId, setSavingBetLimitRaceId] = useState('');
+  const [bettingMessage, setBettingMessage] = useState('');
 
   const [expandedTournaments, setExpandedTournaments] = useState<Record<string, boolean>>({});
   // Ghi chú: Hàm này bật/tắt nghiệp vụ liên quan đến toggle tournament.
@@ -233,11 +237,80 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
       .catch(() => undefined);
     getAdminBetting()
       .then((data) => {
-        setBettingRaces(data.raceSummaries || []);
+        const summaries = data.raceSummaries || [];
+        setBettingRaces(summaries);
         setBettingSpectators(data.spectators || []);
+        setBetLimitDrafts(
+          Object.fromEntries(
+            summaries.map((race) => [
+              race.raceId,
+              race.betLimit == null ? '' : String(race.betLimit),
+            ])
+          )
+        );
       })
       .catch(() => undefined);
   }, []);
+
+  const refreshBettingOverview = () => {
+    getAdminBetting()
+      .then((data) => {
+        const summaries = data.raceSummaries || [];
+        setBettingRaces(summaries);
+        setBettingSpectators(data.spectators || []);
+        setBetLimitDrafts(
+          Object.fromEntries(
+            summaries.map((race) => [
+              race.raceId,
+              race.betLimit == null ? '' : String(race.betLimit),
+            ])
+          )
+        );
+      })
+      .catch(() => undefined);
+  };
+
+  const handleSaveBetLimit = (raceId: string) => {
+    const raw = betLimitDrafts[raceId] ?? '';
+    const betLimit = raw.trim() === '' ? null : Number(raw);
+    if (betLimit !== null && (!Number.isInteger(betLimit) || betLimit <= 0)) {
+      setBettingMessage('Bet limit must be a positive whole number, or empty for unlimited.');
+      return;
+    }
+
+    setSavingBetLimitRaceId(raceId);
+    setBettingMessage('');
+    updateRaceBetLimit(raceId, betLimit)
+      .then(({ race }) => {
+        setBettingRaces((current) =>
+          current.map((item) =>
+            item.raceId === raceId
+              ? { ...item, betLimit: race.betLimit ?? null }
+              : item
+          )
+        );
+        setRaces((current) =>
+          current.map((item) =>
+            item.id === raceId ? { ...item, betLimit: race.betLimit ?? null } : item
+          )
+        );
+        setBetLimitDrafts((current) => ({
+          ...current,
+          [raceId]: race.betLimit == null ? '' : String(race.betLimit),
+        }));
+        setBettingMessage(
+          race.betLimit == null
+            ? `${race.name}: bet limit cleared (unlimited).`
+            : `${race.name}: bet limit set to ${race.betLimit} credits.`
+        );
+      })
+      .catch((error) =>
+        setBettingMessage(
+          error instanceof Error ? error.message : 'Unable to update bet limit'
+        )
+      )
+      .finally(() => setSavingBetLimitRaceId(''));
+  };
 
   // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle decision.
   const handleDecision = (
@@ -1203,7 +1276,10 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                   Betting Activity
                 </h2>
                 <button
-                  onClick={() => setShowBettingModal(true)}
+                  onClick={() => {
+                    refreshBettingOverview();
+                    setShowBettingModal(true);
+                  }}
                   className="px-4 py-2 bg-[#d4af37]/20 border border-[#d4af37] rounded-xl text-[#d4af37] font-bold text-sm hover:bg-[#d4af37] hover:text-white transition-all"
                 >
                   View All
@@ -1233,6 +1309,12 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                           <span className="text-gray-500">Pool</span>
                           <span className="block text-[#d4af37] font-bold">
                             {race.poolTotal.toFixed(0)} credits
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Max Bet</span>
+                          <span className="block text-white font-bold">
+                            {race.betLimit == null ? 'Unlimited' : `${race.betLimit} credits`}
                           </span>
                         </div>
                         <div>
@@ -1810,6 +1892,12 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                 </button>
               </div>
 
+              {bettingMessage && (
+                <div className={`mb-6 rounded-xl border px-4 py-3 font-semibold ${messageToneClasses(bettingMessage)}`}>
+                  {bettingMessage}
+                </div>
+              )}
+
               {/* Summary stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                 {[
@@ -1827,9 +1915,12 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
               {/* Race pools table */}
               <div className="mb-8">
-                <h3 className="text-xl font-bold text-white mb-4">Race Pools</h3>
+                <h3 className="text-xl font-bold text-white mb-2">Race Pools & Bet Limits</h3>
+                <p className="text-sm text-gray-400 mb-4">
+                  Set a max stake per bet for each race. Leave blank for unlimited.
+                </p>
                 {bettingRaces.length === 0 ? (
-                  <p className="text-gray-400">No bets placed yet.</p>
+                  <p className="text-gray-400">No races available for betting configuration yet.</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -1837,6 +1928,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                         <tr className="text-left text-gray-500 border-b border-white/10">
                           <th className="pb-3 pr-4">Race</th>
                           <th className="pb-3 pr-4">Status</th>
+                          <th className="pb-3 pr-4">Bet Limit</th>
                           <th className="pb-3 pr-4 text-right">Pool</th>
                           <th className="pb-3 pr-4 text-right">Bettors</th>
                           <th className="pb-3 pr-4 text-right">Pending</th>
@@ -1847,23 +1939,54 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                         </tr>
                       </thead>
                       <tbody className="text-white">
-                        {bettingRaces.map((race) => (
-                          <tr key={race.raceId} className="border-b border-white/5 hover:bg-white/5">
-                            <td className="py-3 pr-4 font-semibold">{race.raceName}</td>
-                            <td className="py-3 pr-4">
-                              <span className={`px-2 py-1 rounded-lg text-xs font-bold ${raceStatusBadgeClass(race.raceStatus)}`}>
-                                {statusLabel(race.raceStatus)}
-                              </span>
-                            </td>
-                            <td className="py-3 pr-4 text-right text-[#d4af37] font-bold">{race.poolTotal.toFixed(0)}</td>
-                            <td className="py-3 pr-4 text-right">{race.uniqueBettors}</td>
-                            <td className="py-3 pr-4 text-right text-yellow-400">{race.counts.pending}</td>
-                            <td className="py-3 pr-4 text-right text-emerald-400">{race.counts.won}</td>
-                            <td className="py-3 pr-4 text-right text-red-400">{race.counts.lost}</td>
-                            <td className="py-3 pr-4 text-right text-sky-400">{race.counts.refunded}</td>
-                            <td className="py-3 text-right text-emerald-400 font-semibold">{race.totalPaidOut.toFixed(0)}</td>
-                          </tr>
-                        ))}
+                        {bettingRaces.map((race) => {
+                          const canEditLimit = !['completed', 'cancelled'].includes(race.raceStatus);
+                          const isSaving = savingBetLimitRaceId === race.raceId;
+                          return (
+                            <tr key={race.raceId} className="border-b border-white/5 hover:bg-white/5">
+                              <td className="py-3 pr-4 font-semibold">{race.raceName}</td>
+                              <td className="py-3 pr-4">
+                                <span className={`px-2 py-1 rounded-lg text-xs font-bold ${raceStatusBadgeClass(race.raceStatus)}`}>
+                                  {statusLabel(race.raceStatus)}
+                                </span>
+                              </td>
+                              <td className="py-3 pr-4">
+                                <div className="flex items-center gap-2 min-w-[180px]">
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    disabled={!canEditLimit || isSaving}
+                                    value={betLimitDrafts[race.raceId] ?? ''}
+                                    onChange={(event) =>
+                                      setBetLimitDrafts((current) => ({
+                                        ...current,
+                                        [race.raceId]: event.target.value,
+                                      }))
+                                    }
+                                    placeholder="Unlimited"
+                                    className="w-24 rounded-lg border border-white/10 bg-[#0b223d] px-2 py-1.5 text-white outline-none focus:border-[#d4af37] disabled:opacity-50"
+                                  />
+                                  <button
+                                    type="button"
+                                    disabled={!canEditLimit || isSaving}
+                                    onClick={() => handleSaveBetLimit(race.raceId)}
+                                    className="rounded-lg bg-[#d4af37]/20 border border-[#d4af37]/40 px-3 py-1.5 text-xs font-bold text-[#d4af37] hover:bg-[#d4af37] hover:text-white transition-all disabled:opacity-50"
+                                  >
+                                    {isSaving ? '...' : 'Save'}
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="py-3 pr-4 text-right text-[#d4af37] font-bold">{race.poolTotal.toFixed(0)}</td>
+                              <td className="py-3 pr-4 text-right">{race.uniqueBettors}</td>
+                              <td className="py-3 pr-4 text-right text-yellow-400">{race.counts.pending}</td>
+                              <td className="py-3 pr-4 text-right text-emerald-400">{race.counts.won}</td>
+                              <td className="py-3 pr-4 text-right text-red-400">{race.counts.lost}</td>
+                              <td className="py-3 pr-4 text-right text-sky-400">{race.counts.refunded}</td>
+                              <td className="py-3 text-right text-emerald-400 font-semibold">{race.totalPaidOut.toFixed(0)}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>

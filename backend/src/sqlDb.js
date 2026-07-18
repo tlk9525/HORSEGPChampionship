@@ -178,6 +178,10 @@ const ensureRuntimeSchema = async () => {
         'ALTER TABLE "races" ADD COLUMN IF NOT EXISTS "replayTimeline" JSONB'
       );
       await getPool().query(
+        `ALTER TABLE "races"
+         ADD COLUMN IF NOT EXISTS "betLimit" NUMERIC(12, 2)`
+      );
+      await getPool().query(
         'ALTER TABLE "raceEntries" ADD COLUMN IF NOT EXISTS "resultOutcome" VARCHAR(32) NOT NULL DEFAULT \'finished\''
       );
       await getPool().query(
@@ -708,6 +712,7 @@ export const writeDb = async (db) => {
         'handicapMin',
         'handicapMax',
         'totalPrize',
+        'betLimit',
         'status',
         'participants',
         'ownerConfirmed',
@@ -734,6 +739,10 @@ export const writeDb = async (db) => {
         ratingMax: race.ratingMax ?? 140,
         handicapMin: race.handicapMin ?? 115,
         handicapMax: race.handicapMax ?? 135,
+        betLimit:
+          race.betLimit === null || race.betLimit === undefined || race.betLimit === ''
+            ? null
+            : Number(race.betLimit),
         raceNumber: race.raceNumber || '',
         createdAt: race.createdAt || null,
         updatedAt: race.updatedAt || race.createdAt || null,

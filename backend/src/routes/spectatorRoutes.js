@@ -8,6 +8,7 @@ import { requireRole } from '../services/authService.js';
 import { publicRaceEntries } from '../services/domainService.js';
 import {
   isBettableEntry,
+  raceBetLimit,
   racePotTotal,
   raceStartMs,
 } from '../services/bettingService.js';
@@ -135,6 +136,17 @@ export const createSpectatorRoutes = (
           message: closed
             ? 'Betting closed. Bets must be placed at least 1 minute before the race starts.'
             : 'Betting is not open for this race yet.',
+        },
+        400
+      );
+    }
+
+    const maxBet = raceBetLimit(race);
+    if (maxBet !== null && parsedAmount > maxBet) {
+      return c.json(
+        {
+          message: `Bet amount exceeds this race's limit of ${maxBet} credits per bet.`,
+          betLimit: maxBet,
         },
         400
       );
