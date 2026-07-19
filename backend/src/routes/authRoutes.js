@@ -124,11 +124,11 @@ export const createAuthRoutes = (
     }
     if (String(password).length < 8) {
       return c.json({ message: 'Password must contain at least 8 characters' }, 400);
-    }else if (/^[A-Za-z].*$/.test(password) === false) {
+    }else if (!/[A-Za-z]{1,}.*$/.test(password)) {
       return c.json({ message: 'Password must contain at least 1 letter' }, 400);
-    }else if (/^(?=.*\d{1,}).*$/.test(password) === false) {
+    }else if (!/(?=.*\d{1,}).*$/.test(password)) {
       return c.json({ message: 'Password must contain at least 1 number' }, 400);
-    }else if (/^(?=.*\W{1,}).*$/.test(password) === false) {
+    }else if (!/[!@#$%^&*()_+\-={}\[\]:;"'<>,.?\/\\|`~]/.test(password)) {
       return c.json({ message: 'Password must contain at least 1 special character' }, 400);
     }else if(/\s/.test(password) === true){
       return c.json({ message: 'Password must not contain a whitespace character' }, 400);

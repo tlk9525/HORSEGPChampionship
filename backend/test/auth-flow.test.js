@@ -60,6 +60,7 @@ test('auth uses an HttpOnly cookie and upgrades a legacy plaintext password', as
 });
 
 test('registration hashes passwords before persistence', async () => {
+  const validPassword = 'password123!';
   const db = { users: [], sessions: [], notifications: [] };
   let persistedUser;
   const app = new Hono();
@@ -79,12 +80,47 @@ test('registration hashes passwords before persistence', async () => {
     body: JSON.stringify({
       name: 'New Spectator',
       email: 'new@example.com',
-      password: 'password123',
+      password: validPassword,
       role: 'spectator',
     }),
   });
 
   assert.equal(response.status, 201);
-  assert.equal(await bcrypt.compare('password123', persistedUser.password), true);
+  assert.equal(await bcrypt.compare(validPassword, persistedUser.password), true);
   assert.equal(JSON.stringify(await response.json()).includes('password'), false);
+});
+
+test('registration enforces every password requirement', async () => {
+  const invalidPasswords = [
+    'Short1!',
+    '12345678!',
+    'password!',
+    'password123',
+    'password 123!',
+  ];
+
+  for (const [index, password] of invalidPasswords.entries()) {
+    const db = { users: [], sessions: [], notifications: [] };
+    const app = new Hono();
+    app.route('/api', createAuthRoutes(
+      async () => db,
+      async () => undefined,
+      async () => undefined,
+      async () => undefined,
+      async () => undefined
+    ));
+
+    const response = await app.request('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'New Spectator',
+        email: `new-${index}@example.com`,
+        password,
+        role: 'spectator',
+      }),
+    });
+
+    assert.equal(response.status, 400, `Expected ${password} to be rejected`);
+  }
 });
