@@ -11,8 +11,8 @@ export const CREDIT_TRANSACTION_TYPES = Object.freeze({
   ADMIN_ADJUSTMENT: 'admin_adjustment',
 });
 
-export const CREDIT_TIME_ZONE = 'Asia/Ho_Chi_Minh';
-export const DAILY_LOGIN_REWARD_CAP = 50;
+const CREDIT_TIME_ZONE = 'Asia/Ho_Chi_Minh';
+const DAILY_LOGIN_REWARD_CAP = 50;
 
 export const vietnamDateKey = (value = new Date()) => {
   const parts = Object.fromEntries(
@@ -36,15 +36,29 @@ const previousDateKey = (dateKey) => {
   return date.toISOString().slice(0, 10);
 };
 
+// PostgreSQL DATE values can arrive as Date objects representing midnight in
+// the database timezone. Convert those objects back through Vietnam time;
+// slicing String(date) would produce values such as "Thu Jul 16" and award the
+// same daily bonus again on every login.
+const storedRewardDateKey = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return vietnamDateKey(value);
+
+  const text = String(value);
+  const dateOnlyMatch = text.match(/^\d{4}-\d{2}-\d{2}/);
+  if (dateOnlyMatch) return dateOnlyMatch[0];
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : vietnamDateKey(parsed);
+};
+
 export const calculateDailyLoginReward = (
   user,
   now = new Date(),
   cap = DAILY_LOGIN_REWARD_CAP
 ) => {
   const rewardDate = vietnamDateKey(now);
-  const lastRewardDate = user?.lastLoginRewardDate
-    ? String(user.lastLoginRewardDate).slice(0, 10)
-    : null;
+  const lastRewardDate = storedRewardDateKey(user?.lastLoginRewardDate);
   const currentStreak = Number(user?.loginStreak || 0);
 
   if (lastRewardDate === rewardDate) {
@@ -58,7 +72,7 @@ export const calculateDailyLoginReward = (
   return { claimed: true, amount, streak, rewardDate };
 };
 
-export const syncWalletCredits = (
+const syncWalletCredits = (
   db,
   userId,
   credits,
@@ -79,7 +93,7 @@ export const syncWalletCredits = (
   return created;
 };
 
-export const recordCreditTransaction = (
+const recordCreditTransaction = (
   db,
   { userId, type, amount, balanceAfter, metadata = null, createdAt = new Date().toISOString() }
 ) => {

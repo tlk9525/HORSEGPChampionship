@@ -174,40 +174,16 @@ INSERT INTO "races" ("id", "tournamentId", "raceNumber", "name", "raceDate", "ra
   ('r_29', 't_upcoming', 'R1', 'Race 1 - Class 4', CURRENT_DATE + 30, '14:00', 'Track 2', '1200m', 'Turf', 'Class 4', 115, 135, 'draft', NOW() + INTERVAL '20 days', NOW() + INTERVAL '25 days', NOW()),
   ('r_30', 't_upcoming', 'R2', 'Race 2 - Class 3', CURRENT_DATE + 31, '14:00', 'Track 3', '1400m', 'Turf', 'Class 3', 115, 135, 'draft', NOW() + INTERVAL '20 days', NOW() + INTERVAL '25 days', NOW());
 
-UPDATE "races"
+-- Seeded races take the same snapshots as races created through the Admin UI.
+-- Keep the editable catalog as the only source of class parameters.
+UPDATE "races" AS "race"
 SET
-  "ratingMin" = CASE "raceClass"
-    WHEN 'Class 1' THEN 101
-    WHEN 'Class 2' THEN 81
-    WHEN 'Class 3' THEN 61
-    WHEN 'Class 4' THEN 41
-    WHEN 'Class 5' THEN 0
-    ELSE 0
-  END,
-  "ratingMax" = CASE "raceClass"
-    WHEN 'Class 1' THEN 140
-    WHEN 'Class 2' THEN 100
-    WHEN 'Class 3' THEN 80
-    WHEN 'Class 4' THEN 60
-    WHEN 'Class 5' THEN 40
-    ELSE 140
-  END,
-  "handicapMin" = CASE "raceClass"
-    WHEN 'Class 1' THEN 115
-    WHEN 'Class 2' THEN 115
-    WHEN 'Class 3' THEN 113
-    WHEN 'Class 4' THEN 112
-    WHEN 'Class 5' THEN 110
-    ELSE 110
-  END,
-  "handicapMax" = CASE "raceClass"
-    WHEN 'Class 1' THEN 135
-    WHEN 'Class 2' THEN 135
-    WHEN 'Class 3' THEN 133
-    WHEN 'Class 4' THEN 132
-    WHEN 'Class 5' THEN 130
-    ELSE 135
-  END;
+  "ratingMin" = "class"."ratingMin",
+  "ratingMax" = "class"."ratingMax",
+  "handicapMin" = "class"."handicapMin",
+  "handicapMax" = "class"."handicapMax"
+FROM "raceClasses" AS "class"
+WHERE "race"."raceClass" = "class"."name";
 
 INSERT INTO "raceEntries" ("id", "raceId", "horseId", "jockeyUserId", "status", "lane", "handicap", "ratingSnapshot", "ratingChange", "postRaceRating", "resultStatus", "position", "finishTime", "createdAt") VALUES
   ('re_1', 'r_1', 'h_033', 'u_jockey_15', 'approved', 1, 115, 72, 5, 77, 'official', 1, '02:06.00', '2024-11-11 15:00:00'),

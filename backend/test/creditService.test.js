@@ -4,7 +4,7 @@ import {
   CREDIT_TRANSACTION_TYPES,
   awardDailyLoginBonus,
   grantStarterCredits,
-} from './creditService.js';
+} from '../src/services/creditService.js';
 
 const buildDb = () => ({
   users: [
@@ -57,6 +57,28 @@ test('daily login reward claims once per Vietnam calendar day', () => {
     ).length,
     1
   );
+});
+
+test('PostgreSQL DATE object does not grant the same daily bonus twice', () => {
+  const db = buildDb();
+  db.users[0].credits = 110;
+  db.users[0].loginStreak = 1;
+  db.users[0].lastLoginRewardDate = new Date('2026-07-16T17:00:00.000Z');
+
+  const repeated = awardDailyLoginBonus(
+    db,
+    'spectator-1',
+    new Date('2026-07-17T06:00:00.000Z')
+  );
+
+  assert.deepEqual(repeated, {
+    claimed: false,
+    amount: 0,
+    streak: 1,
+    rewardDate: '2026-07-17',
+  });
+  assert.equal(db.users[0].credits, 110);
+  assert.equal(db.creditTransactions.length, 0);
 });
 
 test('consecutive login increases reward and a missed day resets the streak', () => {

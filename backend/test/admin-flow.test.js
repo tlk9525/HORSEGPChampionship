@@ -24,6 +24,16 @@ const baseDb = () => ({
   ],
   sessions: [{ token: 'admin-token', userId: 'admin-1' }],
   tournaments: [{ id: 'tournament-1', name: 'Tournament', status: 'active' }],
+  raceClasses: [{
+    id: 'race-class-open',
+    name: 'Open',
+    ratingMin: 0,
+    ratingMax: 140,
+    handicapMin: 110,
+    handicapMax: 135,
+    sortOrder: 10,
+    isActive: true,
+  }],
   races: [],
   horses: [{ id: 'horse-1', name: 'Horse', ownerUserId: 'owner-1', overallRating: 50 }],
   jockeyProfiles: [],
@@ -72,6 +82,46 @@ test('admin can update tournament name and schedule dates', async () => {
   assert.equal(result.body.tournament.location, 'Old Track');
   assert.equal(db.tournaments[0].name, 'Updated Tournament');
   assert.equal(writes, 1);
+});
+
+test('admin can edit race class parameters in the catalog', async () => {
+  const db = baseDb();
+  let writes = 0;
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => {
+    writes += 1;
+  }));
+
+  const result = await requestJson(app, '/race-classes/race-class-open', {
+    name: 'Open',
+    ratingMin: 5,
+    ratingMax: 130,
+    handicapMin: 112,
+    handicapMax: 134,
+    sortOrder: 20,
+    isActive: true,
+  }, 'PATCH');
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.raceClass.ratingMin, 5);
+  assert.equal(result.body.raceClass.handicapMax, 134);
+  assert.equal(db.raceClasses[0].ratingMax, 130);
+  assert.equal(writes, 1);
+});
+
+test('admin cannot save an invalid race class range', async () => {
+  const db = baseDb();
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/race-classes/race-class-open', {
+    ratingMin: 100,
+    ratingMax: 50,
+  }, 'PATCH');
+
+  assert.equal(result.status, 400);
+  assert.match(result.body.message, /Rating range/i);
+  assert.equal(db.raceClasses[0].ratingMin, 0);
 });
 
 test('admin cannot set tournament end date before start date', async () => {
@@ -250,6 +300,10 @@ test('creating a race does not copy approved pairs from another race', async () 
 
   assert.equal(result.status, 201);
   assert.equal(db.raceEntries.length, 0);
+  assert.equal(result.body.race.ratingMin, 0);
+  assert.equal(result.body.race.ratingMax, 140);
+  assert.equal(result.body.race.handicapMin, 110);
+  assert.equal(result.body.race.handicapMax, 135);
 });
 
 test('admin cannot create a race after the tournament end date', async () => {

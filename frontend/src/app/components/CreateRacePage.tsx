@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Bell, CalendarClock } from 'lucide-react';
 import {
   RaceBuilderReferee,
+  RaceClassRecord,
   RaceRecord,
   TournamentRecord,
   createRace,
@@ -12,18 +13,6 @@ import { messageToneClasses } from '../utils/messageTone';
 interface CreateRacePageProps {
   onNavigate: (page: string) => void;
 }
-
-const RACE_CLASS_SETTINGS: Record<
-  string,
-  { minWeightLb: string; topWeightLb: string; ratingMin: string; ratingMax: string }
-> = {
-  'Class 1': { topWeightLb: '135', minWeightLb: '115', ratingMin: '101', ratingMax: '140' },
-  'Class 2': { topWeightLb: '135', minWeightLb: '115', ratingMin: '81', ratingMax: '100' },
-  'Class 3': { topWeightLb: '133', minWeightLb: '113', ratingMin: '61', ratingMax: '80' },
-  'Class 4': { topWeightLb: '132', minWeightLb: '112', ratingMin: '41', ratingMax: '60' },
-  'Class 5': { topWeightLb: '130', minWeightLb: '110', ratingMin: '0', ratingMax: '40' },
-  Open: { topWeightLb: '135', minWeightLb: '110', ratingMin: '0', ratingMax: '140' },
-};
 
 // Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho raceDateWithinTournamentMessage.
 const raceDateWithinTournamentMessage = (
@@ -77,6 +66,7 @@ export default function CreateRacePage({
   const [tournaments, setTournaments] = useState<TournamentRecord[]>([]);
   const [races, setRaces] = useState<RaceRecord[]>([]);
   const [referees, setReferees] = useState<RaceBuilderReferee[]>([]);
+  const [raceClasses, setRaceClasses] = useState<RaceClassRecord[]>([]);
   const [maxRacesPerTournament, setMaxRacesPerTournament] = useState(0);
   const [closeRegistrationHours, setCloseRegistrationHours] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -96,7 +86,7 @@ export default function CreateRacePage({
     venue: '',
     distance: '',
     surfaceType: '',
-    raceClass: '',
+    raceClassId: '',
     ratingMin: '',
     ratingMax: '',
     handicapMin: '',
@@ -132,6 +122,7 @@ export default function CreateRacePage({
         setTournaments(data.tournaments);
         setRaces(data.races || []);
         setReferees(data.referees);
+        setRaceClasses(data.raceClasses || []);
         const nextMaxRacesPerTournament = data.maxRacesPerTournament ?? 0;
         const nextDefaultDistanceMeters = data.defaultDistanceMeters ?? 0;
         const nextCloseRegistrationHours = data.closeRegistrationHours ?? 0;
@@ -193,6 +184,7 @@ export default function CreateRacePage({
       !form.venue && 'Venue',
       !form.distance && 'Distance',
       !form.surfaceType && 'Surface',
+      !form.raceClassId && 'Race class',
       form.handicapMin === '' && 'Minimum weight',
       form.handicapMax === '' && 'Top weight',
       form.refereeUserIds.length === 0 && 'Assigned referees',
@@ -259,11 +251,7 @@ export default function CreateRacePage({
       venue: form.venue,
       distance: form.distance,
       surface: form.surfaceType,
-      raceClass: form.raceClass,
-      ratingMin: form.ratingMin,
-      ratingMax: form.ratingMax,
-      handicapMin: form.handicapMin,
-      handicapMax: form.handicapMax,
+      raceClassId: form.raceClassId,
       totalPrize: form.totalPrize,
       refereeUserIds: form.refereeUserIds,
       refereeUserId: form.refereeUserIds[0],
@@ -292,16 +280,16 @@ export default function CreateRacePage({
   };
 
   // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle race class change.
-  const handleRaceClassChange = (raceClass: string) => {
-    const preset = RACE_CLASS_SETTINGS[raceClass];
+  const handleRaceClassChange = (raceClassId: string) => {
+    const selectedRaceClass = raceClasses.find((item) => item.id === raceClassId);
 
     setForm((current) => ({
       ...current,
-      raceClass,
-      ratingMin: preset?.ratingMin || current.ratingMin,
-      ratingMax: preset?.ratingMax || current.ratingMax,
-      handicapMin: preset?.minWeightLb || current.handicapMin,
-      handicapMax: preset?.topWeightLb || current.handicapMax,
+      raceClassId,
+      ratingMin: selectedRaceClass ? String(selectedRaceClass.ratingMin) : '',
+      ratingMax: selectedRaceClass ? String(selectedRaceClass.ratingMax) : '',
+      handicapMin: selectedRaceClass ? String(selectedRaceClass.handicapMin) : '',
+      handicapMax: selectedRaceClass ? String(selectedRaceClass.handicapMax) : '',
     }));
   };
 
@@ -565,17 +553,21 @@ export default function CreateRacePage({
                   <label className="block text-gray-300 mb-2">Race Class</label>
                   <select
                     className={fieldClass}
-                    value={form.raceClass}
+                    value={form.raceClassId}
                     onChange={(event) => handleRaceClassChange(event.target.value)}
                   >
                     <option value="">Select class</option>
-                    <option value="Class 1">Class 1 (101-140)</option>
-                    <option value="Class 2">Class 2 (81-100)</option>
-                    <option value="Class 3">Class 3 (61-80)</option>
-                    <option value="Class 4">Class 4 (41-60)</option>
-                    <option value="Class 5">Class 5 (0-40)</option>
-                    <option value="Open">Open (0-140)</option>
+                    {raceClasses.map((raceClass) => (
+                      <option key={raceClass.id} value={raceClass.id}>
+                        {raceClass.name} ({raceClass.ratingMin}-{raceClass.ratingMax})
+                      </option>
+                    ))}
                   </select>
+                  {raceClasses.length === 0 && (
+                    <p className="mt-2 text-sm font-semibold text-amber-200">
+                      No active race class. Add or activate one in Race Class Catalog.
+                    </p>
+                  )}
                 </div>
 
                 <div className="min-w-0">
@@ -585,14 +577,9 @@ export default function CreateRacePage({
                     min="0"
                     max="140"
                     step="1"
-                    className={fieldClass}
+                    readOnly
+                    className={`${fieldClass} cursor-not-allowed opacity-70`}
                     value={form.ratingMin}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-                        ratingMin: event.target.value,
-                      })
-                    }
                   />
                 </div>
 
@@ -603,14 +590,9 @@ export default function CreateRacePage({
                     min="0"
                     max="140"
                     step="1"
-                    className={fieldClass}
+                    readOnly
+                    className={`${fieldClass} cursor-not-allowed opacity-70`}
                     value={form.ratingMax}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-                        ratingMax: event.target.value,
-                      })
-                    }
                   />
                 </div>
 
@@ -621,14 +603,9 @@ export default function CreateRacePage({
                     min="110"
                     max="135"
                     step="1"
-                    className={fieldClass}
+                    readOnly
+                    className={`${fieldClass} cursor-not-allowed opacity-70`}
                     value={form.handicapMin}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-                        handicapMin: event.target.value,
-                      })
-                    }
                   />
                 </div>
 
@@ -639,14 +616,9 @@ export default function CreateRacePage({
                     min="110"
                     max="135"
                     step="1"
-                    className={fieldClass}
+                    readOnly
+                    className={`${fieldClass} cursor-not-allowed opacity-70`}
                     value={form.handicapMax}
-                    onChange={(event) =>
-                      setForm({
-                        ...form,
-                        handicapMax: event.target.value,
-                      })
-                    }
                   />
                 </div>
 
