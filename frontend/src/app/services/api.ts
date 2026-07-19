@@ -342,13 +342,26 @@ const API_URL = import.meta.env.PROD
   : import.meta.env.VITE_API_URL || 'http://127.0.0.1:4000/api';
 
 const BOOTSTRAP_CACHE_TTL_MS = 10_000;
-let bootstrapCache: { data: BootstrapPayload; fetchedAt: number } | null = null;
-let bootstrapRequest: Promise<BootstrapPayload> | null = null;
+export type BootstrapScope =
+  | 'full'
+  | 'tournaments'
+  | 'race'
+  | 'horses'
+  | 'jockeys'
+  | 'live'
+  | 'results'
+  | 'betting'
+  | 'admin';
+const bootstrapCache = new Map<
+  BootstrapScope,
+  { data: BootstrapPayload; fetchedAt: number }
+>();
+const bootstrapRequests = new Map<BootstrapScope, Promise<BootstrapPayload>>();
 
 // Ghi chú: Hàm này xóa cache bootstrap để lần đọc tiếp theo lấy dữ liệu mới.
 function invalidateBootstrapCache() {
-  bootstrapCache = null;
-  bootstrapRequest = null;
+  bootstrapCache.clear();
+  bootstrapRequests.clear();
 }
 
 // Tạo URL kết nối Server-Sent Events (SSE) để theo dõi cập nhật trực tiếp của một cuộc đua
@@ -413,27 +426,34 @@ export const logout = async () => {
 // Lấy thông tin user đang đăng nhập từ server
 export const getMe = async () => request<{ user: AuthUser }>('/me');
 
-// Lấy toàn bộ dữ liệu khởi động. Cache ngắn hạn để đổi trang không gọi lại endpoint nặng liên tục.
-export const getBootstrap = async ({ force = false } = {}) => {
+// Lấy read model theo màn hình; mỗi scope chỉ đọc các bảng cần thiết.
+export const getBootstrap = async ({
+  force = false,
+  scope = 'full',
+}: { force?: boolean; scope?: BootstrapScope } = {}) => {
   const now = Date.now();
+  const cached = bootstrapCache.get(scope);
 
-  if (!force && bootstrapCache && now - bootstrapCache.fetchedAt < BOOTSTRAP_CACHE_TTL_MS) {
-    return bootstrapCache.data;
+  if (!force && cached && now - cached.fetchedAt < BOOTSTRAP_CACHE_TTL_MS) {
+    return cached.data;
   }
 
-  if (!force && bootstrapRequest) {
-    return bootstrapRequest;
+  const pendingRequest = bootstrapRequests.get(scope);
+  if (!force && pendingRequest) {
+    return pendingRequest;
   }
 
-  bootstrapRequest = request<BootstrapPayload>('/bootstrap')
+  const path = scope === 'full' ? '/bootstrap' : `/bootstrap/${scope}`;
+  const bootstrapRequest = request<BootstrapPayload>(path)
     .then((data) => {
-      bootstrapCache = { data, fetchedAt: Date.now() };
+      bootstrapCache.set(scope, { data, fetchedAt: Date.now() });
       return data;
     })
     .finally(() => {
-      bootstrapRequest = null;
+      bootstrapRequests.delete(scope);
     });
 
+  bootstrapRequests.set(scope, bootstrapRequest);
   return bootstrapRequest;
 };
 

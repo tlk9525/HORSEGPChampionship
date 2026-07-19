@@ -212,7 +212,7 @@ export default function RaceSimulationDemo() {
     : replayEntries.length;
 
   useEffect(() => {
-    getBootstrap()
+    getBootstrap({ scope: 'race' })
       .then((data) => {
         const sortedRaces = [...(data.races || [])].sort(
           (a, b) => raceSortValue(a) - raceSortValue(b)

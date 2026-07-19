@@ -26,6 +26,7 @@ import {
   HorseRaceRegistration,
   RaceEntryRecord,
   RaceRecord,
+  SystemSettings,
   TournamentRecord,
   adminRaceAction,
   createTournament,
@@ -40,6 +41,11 @@ import {
 } from '../services/api';
 import { statusLabel } from '../utils/domain';
 import { messageToneClasses } from '../utils/messageTone';
+import { raceStatusBadgeClass } from '../utils/raceDisplay';
+import AdminBettingModal from './admin/AdminBettingModal';
+import SystemSettingsModal, {
+  SystemSettingsTab,
+} from './admin/SystemSettingsModal';
 
 interface AdminPanelProps {
   onNavigate: (page: string) => void;
@@ -74,55 +80,6 @@ const dateInputToIso = (value: string) => {
   return isValidDate ? `${year}-${month}-${day}` : '';
 };
 
-// Ghi chú: Hàm này chọn class màu badge theo trạng thái race.
-const raceStatusBadgeClass = (status: string) => {
-  const classes: Record<string, string> = {
-    draft: 'bg-gray-600/20 border border-gray-600/30 text-gray-300',
-    'registration-open': 'bg-emerald-600/20 border border-emerald-600/30 text-emerald-400',
-    'registration-closed': 'bg-yellow-600/20 border border-yellow-600/30 text-yellow-500',
-    published: 'bg-sky-600/20 border border-sky-600/30 text-sky-400',
-    'in-progress': 'bg-[#d4af37]/20 border border-[#d4af37]/30 text-[#f6d77a]',
-    finished: 'bg-violet-600/20 border border-violet-600/30 text-violet-400',
-    completed: 'bg-white/10 border border-white/20 text-white',
-    cancelled: 'bg-red-600/20 border border-red-600/30 text-red-400',
-  };
-
-  return classes[status] || classes.draft;
-};
-
-type SystemSettingsTab = 'race' | 'approval' | 'notifications' | 'system';
-
-interface SystemSettingsState {
-  maxOwnerHorses: number;
-  defaultDistanceMeters: number;
-  maxHorsesPerRace: number;
-  minReadiedParticipants: number;
-  maxRacesPerTournament: number;
-  closeRegistrationHours: number;
-  autoPublishResults: boolean;
-  requireOwnerApproval: boolean;
-  requireJockeyApproval: boolean;
-  requireRefereeApproval: boolean;
-  allowSelfRegistration: boolean;
-  notifyHorseRegistration: boolean;
-  notifyJockeyRegistration: boolean;
-  notifyRaceResults: boolean;
-  notifyAdmins: boolean;
-  notifyReferees: boolean;
-  notifyOwners: boolean;
-  notifyJockeys: boolean;
-  maintenanceMode: boolean;
-  auditSettingsChanges: boolean;
-  archiveCompletedAfterDays: number;
-}
-
-const settingTabLabels: Record<SystemSettingsTab, string> = {
-  race: 'Race Rules',
-  approval: 'Approvals',
-  notifications: 'Notifications',
-  system: 'System',
-};
-
 // Ghi chú: Hàm này render dashboard admin để duyệt hồ sơ, quản lý tournament và điều phối race.
 export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
@@ -146,7 +103,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   const [showSystemSettings, setShowSystemSettings] = useState(false);
   const [systemSettingsTab, setSystemSettingsTab] = useState<SystemSettingsTab>('race');
   const [systemSettingsMessage, setSystemSettingsMessage] = useState('');
-  const [systemSettings, setSystemSettings] = useState<SystemSettingsState>({
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>({
     maxOwnerHorses: 0,
     defaultDistanceMeters: 1600,
     maxHorsesPerRace: 0,
@@ -204,7 +161,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   useEffect(() => {
     loadApprovals();
-    getBootstrap()
+    getBootstrap({ scope: 'admin' })
       .then((data) => {
         setRaces(data.races || []);
         setPairings(data.horseRaceRegistrations || []);
@@ -334,9 +291,9 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   );
 
   // Ghi chú: Hàm này xử lý thao tác updateSystemSetting trong luồng nghiệp vụ.
-  const updateSystemSetting = <Key extends keyof SystemSettingsState>(
+  const updateSystemSetting = <Key extends keyof SystemSettings>(
     key: Key,
-    value: SystemSettingsState[Key]
+    value: SystemSettings[Key]
   ) => {
     setSystemSettings((current) => ({
       ...current,
@@ -361,65 +318,6 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
         )
       );
   };
-
-  // Ghi chú: Hàm này xử lý logic renderNumberSetting.
-  const renderNumberSetting = (
-    label: string,
-    description: string,
-    key: keyof SystemSettingsState,
-    min = 0
-  ) => (
-    <label className="block min-h-[118px] rounded-2xl border border-white/10 bg-[#071a2f] p-5">
-      <span className="block text-white font-bold">{label}</span>
-      <span className="block text-sm text-gray-400 mt-1">{description}</span>
-      <input
-        type="number"
-        min={min}
-        value={Number(systemSettings[key])}
-        onChange={(event) =>
-          updateSystemSetting(
-            key,
-            Number(event.target.value) as SystemSettingsState[typeof key]
-          )
-        }
-        className="mt-4 w-full bg-[#102945] border border-white/10 rounded-xl px-4 py-3 text-white"
-      />
-    </label>
-  );
-
-  // Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho renderToggleSetting.
-  const renderToggleSetting = (
-    label: string,
-    description: string,
-    key: keyof SystemSettingsState
-  ) => (
-    <button
-      type="button"
-      onClick={() =>
-        updateSystemSetting(
-          key,
-          !systemSettings[key] as SystemSettingsState[typeof key]
-        )
-      }
-      className="w-full min-h-[96px] flex items-start justify-between gap-4 rounded-2xl border border-white/10 bg-[#071a2f] p-5 text-left hover:border-[#d4af37]/50 transition-all"
-    >
-      <span className="min-w-0">
-        <span className="block text-white font-bold">{label}</span>
-        <span className="block text-sm text-gray-400 mt-1">{description}</span>
-      </span>
-      <span
-        className={`mt-1 h-7 w-12 shrink-0 rounded-full p-1 transition-all ${
-          systemSettings[key] ? 'bg-[#d4af37]' : 'bg-white/15'
-        }`}
-      >
-        <span
-          className={`block h-5 w-5 rounded-full bg-white transition-all ${
-            systemSettings[key] ? 'translate-x-5' : ''
-          }`}
-        />
-      </span>
-    </button>
-  );
 
   // Ghi chú: Đồng bộ race và entry trả về sau mọi thao tác Admin trên race.
   const applyRaceActionResult = (
@@ -1299,201 +1197,21 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
         </div>
 
         {showSystemSettings && (
-          <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-[60] p-4 overflow-y-auto">
-            <div className="bg-[#12304f] p-6 sm:p-8 rounded-3xl w-full max-w-[920px] h-auto lg:h-[560px] max-h-[calc(100vh-2rem)] border border-white/10 flex flex-col overflow-hidden">
-              <div className="flex shrink-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
-                <div>
-                  <h2 className="text-3xl font-black text-white">
-                    System Settings
-                  </h2>
-                  <p className="text-gray-400 mt-2">
-                    Cấu hình vận hành hệ thống. Lưu xong sẽ áp dụng cho các race tiếp theo.
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => {
-                    setShowSystemSettings(false);
-                    setSystemSettingsMessage('');
-                  }}
-                  className="px-5 py-3 bg-white/10 rounded-2xl text-white font-semibold"
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="grid min-h-0 flex-1 lg:grid-cols-[180px,minmax(0,1fr)] gap-5">
-                <div className="space-y-3">
-                  {(Object.keys(settingTabLabels) as SystemSettingsTab[]).map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => {
-                        setSystemSettingsTab(tab);
-                        setSystemSettingsMessage('');
-                      }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-left font-bold transition-all ${
-                        systemSettingsTab === tab
-                          ? 'bg-[#d4af37] border-[#d4af37] text-[#071a2f]'
-                          : 'bg-[#071a2f] border-white/10 text-white hover:border-[#d4af37]/50'
-                      }`}
-                    >
-                      <Settings className="w-5 h-5" />
-                      {settingTabLabels[tab]}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="min-w-0 min-h-0 flex flex-col gap-5">
-                  {systemSettingsMessage && (
-                    <div className={`shrink-0 rounded-xl border px-4 py-3 font-semibold ${messageToneClasses(systemSettingsMessage)}`}>
-                      {systemSettingsMessage}
-                    </div>
-                  )}
-
-                  <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-                    {systemSettingsTab === 'race' && (
-                      <div className="grid md:grid-cols-2 gap-4">
-                        {renderNumberSetting(
-                          'Default race distance',
-                          'Distance tự động đề xuất khi admin tạo race mới.',
-                          'defaultDistanceMeters',
-                          400
-                        )}
-                        {renderNumberSetting(
-                          'Max horses per race',
-                          'Giới hạn số horse-jockey pair được publish trong một race.',
-                          'maxHorsesPerRace',
-                          2
-                        )}
-                        {renderNumberSetting(
-                          'Minimum ready horses per race',
-                          'Số horse tối thiểu phải được referee đánh dấu Ready trước khi start race.',
-                          'minReadiedParticipants',
-                          1
-                        )}
-                        {renderNumberSetting(
-                          'Max races per tournament',
-                          'Giới hạn số race tối đa trong một tournament.',
-                          'maxRacesPerTournament',
-                          1
-                        )}
-                        {renderNumberSetting(
-                          'Close registration before race',
-                          'Số giờ khóa đăng ký trước giờ race bắt đầu.',
-                          'closeRegistrationHours',
-                          0
-                        )}
-                        <div className="md:col-span-2">
-                          {renderToggleSetting(
-                            'Auto publish results',
-                            'Tự publish kết quả sau khi referee hoàn tất race report.',
-                            'autoPublishResults'
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {systemSettingsTab === 'approval' && (
-                      <div className="grid md:grid-cols-2 gap-4">
-                        {renderToggleSetting(
-                          'Allow self-registration',
-                          'Cho phép owner, jockey, referee tự tạo tài khoản.',
-                          'allowSelfRegistration'
-                        )}
-                        {renderToggleSetting(
-                          'Owner requires admin approval',
-                          'Owner mới phải chờ admin duyệt trước khi dùng hệ thống.',
-                          'requireOwnerApproval'
-                        )}
-                        {renderToggleSetting(
-                          'Jockey requires admin approval',
-                          'Jockey mới phải chờ admin duyệt trước khi nhận lời mời hoặc đăng ký race.',
-                          'requireJockeyApproval'
-                        )}
-                        {renderToggleSetting(
-                          'Referee requires admin approval',
-                          'Referee mới phải được duyệt trước khi được assign race.',
-                          'requireRefereeApproval'
-                        )}
-                      </div>
-                    )}
-
-                    {systemSettingsTab === 'notifications' && (
-                      <div className="space-y-5">
-                        <div className="grid md:grid-cols-3 gap-4">
-                          {renderToggleSetting(
-                            'Horse registration',
-                            'Gửi thông báo khi owner đăng ký horse mới.',
-                            'notifyHorseRegistration'
-                          )}
-                          {renderToggleSetting(
-                            'Jockey registration',
-                            'Gửi thông báo khi jockey đăng ký hoặc phản hồi lời mời.',
-                            'notifyJockeyRegistration'
-                          )}
-                          {renderToggleSetting(
-                            'Race result',
-                            'Gửi thông báo khi race có kết quả hoặc award được publish.',
-                            'notifyRaceResults'
-                          )}
-                        </div>
-
-                        <div className="rounded-2xl border border-white/10 bg-[#071a2f]/70 p-5">
-                          <h3 className="text-white font-black mb-4">Recipient roles</h3>
-                          <div className="grid sm:grid-cols-2 gap-4">
-                            {renderToggleSetting('Admins', 'Nhận cảnh báo duyệt hồ sơ.', 'notifyAdmins')}
-                            {renderToggleSetting('Referees', 'Nhận race assignment.', 'notifyReferees')}
-                            {renderToggleSetting('Owners', 'Nhận trạng thái horse/race.', 'notifyOwners')}
-                            {renderToggleSetting('Jockeys', 'Nhận lời mời và kết quả race.', 'notifyJockeys')}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {systemSettingsTab === 'system' && (
-                      <div className="grid md:grid-cols-2 gap-4">
-                        {renderToggleSetting(
-                          'Maintenance mode',
-                          'Khóa người dùng thường, chỉ admin vào được hệ thống.',
-                          'maintenanceMode'
-                        )}
-                        {renderToggleSetting(
-                          'Audit settings changes',
-                          'Ghi lại admin nào đổi setting nào và thời điểm thay đổi.',
-                          'auditSettingsChanges'
-                        )}
-                        {renderNumberSetting(
-                          'Archive completed tournaments',
-                          'Số ngày sau khi completed thì tournament được đưa vào archive.',
-                          'archiveCompletedAfterDays',
-                          1
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="shrink-0 flex flex-col sm:flex-row gap-4 pt-2">
-                    <button
-                      onClick={() => {
-                        setShowSystemSettings(false);
-                        setSystemSettingsMessage('');
-                      }}
-                      className="flex-1 py-4 bg-white/10 rounded-2xl text-white"
-                    >
-                      Cancel
-                    </button>
-
-                    <button
-                      onClick={saveSystemSettingsDraft}
-                      className="flex-1 py-4 bg-[#d4af37] rounded-2xl text-white font-bold"
-                    >
-                      Save Settings
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <SystemSettingsModal
+            settings={systemSettings}
+            tab={systemSettingsTab}
+            message={systemSettingsMessage}
+            onTabChange={(tab) => {
+              setSystemSettingsTab(tab);
+              setSystemSettingsMessage('');
+            }}
+            onSettingChange={updateSystemSetting}
+            onSave={saveSystemSettingsDraft}
+            onClose={() => {
+              setShowSystemSettings(false);
+              setSystemSettingsMessage('');
+            }}
+          />
         )}
 
         {deleteTournamentTarget && (
@@ -1787,126 +1505,14 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
         )}
 
 
-        {/* BETTING MODAL */}
-
         {showBettingModal && (
-          <div className="fixed inset-0 bg-[#071a2f]/80 flex items-center justify-center z-50 p-4">
-            <div className="bg-[#12304f] p-8 rounded-3xl w-full max-w-5xl border border-white/10 max-h-[85vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-3xl font-black text-white flex items-center gap-3">
-                  <Coins className="w-8 h-8 text-[#d4af37]" />
-                  Betting Overview
-                </h2>
-                <button
-                  onClick={() => setShowBettingModal(false)}
-                  className="px-4 py-2 bg-white/10 rounded-xl text-white hover:bg-white/20 transition-all"
-                >
-                  Close
-                </button>
-              </div>
-
-              {/* Summary stats */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                {[
-                  { label: 'Total Wagered', value: bettingRaces.reduce((s, r) => s + r.totalWagered, 0).toFixed(0), color: 'text-[#d4af37]' },
-                  { label: 'Active Pool', value: totalPoolCredits.toFixed(0), color: 'text-yellow-400' },
-                  { label: 'Total Paid Out', value: bettingRaces.reduce((s, r) => s + r.totalPaidOut, 0).toFixed(0), color: 'text-emerald-400' },
-                  { label: 'Total Refunded', value: bettingRaces.reduce((s, r) => s + r.totalRefunded, 0).toFixed(0), color: 'text-sky-400' },
-                ].map((stat) => (
-                  <div key={stat.label} className="bg-[#071a2f] border border-white/10 rounded-2xl p-4 text-center">
-                    <div className={`text-2xl font-black ${stat.color}`}>{stat.value}</div>
-                    <div className="text-gray-400 text-sm mt-1">{stat.label}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Race pools table */}
-              <div className="mb-8">
-                <h3 className="text-xl font-bold text-white mb-4">Race Pools</h3>
-                {bettingRaces.length === 0 ? (
-                  <p className="text-gray-400">No bets placed yet.</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-gray-500 border-b border-white/10">
-                          <th className="pb-3 pr-4">Race</th>
-                          <th className="pb-3 pr-4">Status</th>
-                          <th className="pb-3 pr-4 text-right">Pool</th>
-                          <th className="pb-3 pr-4 text-right">Bettors</th>
-                          <th className="pb-3 pr-4 text-right">Pending</th>
-                          <th className="pb-3 pr-4 text-right">Won</th>
-                          <th className="pb-3 pr-4 text-right">Lost</th>
-                          <th className="pb-3 pr-4 text-right">Refunded</th>
-                          <th className="pb-3 text-right">Paid Out</th>
-                        </tr>
-                      </thead>
-                      <tbody className="text-white">
-                        {bettingRaces.map((race) => (
-                          <tr key={race.raceId} className="border-b border-white/5 hover:bg-white/5">
-                            <td className="py-3 pr-4 font-semibold">{race.raceName}</td>
-                            <td className="py-3 pr-4">
-                              <span className={`px-2 py-1 rounded-lg text-xs font-bold ${raceStatusBadgeClass(race.raceStatus)}`}>
-                                {statusLabel(race.raceStatus)}
-                              </span>
-                            </td>
-                            <td className="py-3 pr-4 text-right text-[#d4af37] font-bold">{race.poolTotal.toFixed(0)}</td>
-                            <td className="py-3 pr-4 text-right">{race.uniqueBettors}</td>
-                            <td className="py-3 pr-4 text-right text-yellow-400">{race.counts.pending}</td>
-                            <td className="py-3 pr-4 text-right text-emerald-400">{race.counts.won}</td>
-                            <td className="py-3 pr-4 text-right text-red-400">{race.counts.lost}</td>
-                            <td className="py-3 pr-4 text-right text-sky-400">{race.counts.refunded}</td>
-                            <td className="py-3 text-right text-emerald-400 font-semibold">{race.totalPaidOut.toFixed(0)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              {/* Spectator leaderboard */}
-              <div>
-                <h3 className="text-xl font-bold text-white mb-4">Spectator Leaderboard</h3>
-                {bettingSpectators.length === 0 ? (
-                  <p className="text-gray-400">No spectators registered.</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-gray-500 border-b border-white/10">
-                          <th className="pb-3 pr-4">#</th>
-                          <th className="pb-3 pr-4">Spectator</th>
-                          <th className="pb-3 pr-4 text-right">Credits</th>
-                          <th className="pb-3 pr-4 text-right">Login Streak</th>
-                          <th className="pb-3 pr-4">Last Reward</th>
-                          <th className="pb-3 pr-4 text-right">Total Bets</th>
-                          <th className="pb-3 pr-4 text-right">Total Wagered</th>
-                          <th className="pb-3 text-right">Total Won</th>
-                        </tr>
-                      </thead>
-                      <tbody className="text-white">
-                        {bettingSpectators.map((spectator, idx) => (
-                          <tr key={spectator.id} className="border-b border-white/5 hover:bg-white/5">
-                            <td className="py-3 pr-4 text-gray-500">{idx + 1}</td>
-                            <td className="py-3 pr-4 font-semibold">{spectator.name}</td>
-                            <td className="py-3 pr-4 text-right text-[#d4af37] font-bold">{spectator.credits.toFixed(0)}</td>
-                            <td className="py-3 pr-4 text-right">Day {spectator.loginStreak}</td>
-                            <td className="py-3 pr-4 text-gray-300">{spectator.lastLoginRewardDate || '-'}</td>
-                            <td className="py-3 pr-4 text-right">{spectator.totalBets}</td>
-                            <td className="py-3 pr-4 text-right">{spectator.totalWagered.toFixed(0)}</td>
-                            <td className="py-3 text-right text-emerald-400 font-semibold">{spectator.totalWon.toFixed(0)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          <AdminBettingModal
+            races={bettingRaces}
+            spectators={bettingSpectators}
+            activePoolCredits={totalPoolCredits}
+            onClose={() => setShowBettingModal(false)}
+          />
         )}
-
       </div>
     </div>
   );

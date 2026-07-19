@@ -32,7 +32,7 @@ export default function HorseDirectoryPage() {
   const [historyExpanded, setHistoryExpanded] = useState(false);
 
   useEffect(() => {
-    getBootstrap()
+    getBootstrap({ scope: 'horses' })
       .then((data) => {
         const visibleHorses = data.horses || [];
         setHorses(visibleHorses);
