@@ -94,7 +94,12 @@ Horse Racing Tournament Website/
 │           │   ├── admin/                  # Modal settings và betting của Admin.
 │           │   ├── liveRace/               # Track, leaderboard và helper hiển thị live.
 │           │   └── *.tsx                   # Các trang tournament, race, horse, jockey...
-│           ├── services/api.ts             # Type, request API và bootstrap cache theo scope.
+│           ├── services/
+│           │   ├── api.ts                  # Barrel giữ tương thích import cho frontend.
+│           │   └── api/
+│           │       ├── types.ts            # Type dùng chung của API/read model.
+│           │       ├── client.ts           # HTTP client và bootstrap cache theo scope.
+│           │       └── *Api.ts             # API theo auth, admin, owner, jockey, referee...
 │           └── utils/                      # Rating, lịch race, simulation và helper UI.
 │
 ├── backend/
