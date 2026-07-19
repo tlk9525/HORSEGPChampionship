@@ -15,29 +15,11 @@ import {
   getBootstrap,
 } from '../services/api';
 import { statusLabel } from '../utils/domain';
+import { raceNumberValue, raceRegistrationOpen } from '../utils/raceSchedule';
 
 interface TournamentDetailsProps {
   onNavigate: (page: string) => void;
 }
-
-// Ghi chú: Hàm này chuẩn hóa số thứ tự race để sắp xếp trong tournament.
-const raceNumberValue = (raceNumber?: string) =>
-  Number(String(raceNumber || '').replace(/\D/g, '')) || 999;
-
-// Ghi chú: Hàm này kiểm tra race còn mở đăng ký theo status và hạn đăng ký hay không.
-const raceRegistrationOpen = (race: RaceRecord) => {
-  if (race.status !== 'registration-open') return false;
-
-  const now = Date.now();
-  const opensAt = race.registrationOpensAt
-    ? new Date(race.registrationOpensAt).getTime()
-    : Number.NEGATIVE_INFINITY;
-  const closesAt = race.registrationClosesAt
-    ? new Date(race.registrationClosesAt).getTime()
-    : Number.POSITIVE_INFINITY;
-
-  return now >= opensAt && now < closesAt;
-};
 
 // Ghi chú: Hàm này render chi tiết tournament cùng danh sách race thuộc tournament.
 export default function TournamentDetails({ onNavigate }: TournamentDetailsProps) {
@@ -54,7 +36,7 @@ export default function TournamentDetails({ onNavigate }: TournamentDetailsProps
   const [error, setError] = useState('');
 
   useEffect(() => {
-    getBootstrap()
+    getBootstrap({ scope: 'tournaments' })
       .then((data) => {
         setTournaments(data.tournaments || []);
         setRaces(data.races || []);

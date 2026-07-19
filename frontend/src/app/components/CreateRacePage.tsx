@@ -9,35 +9,20 @@ import {
   getRaceBuilder,
 } from '../services/api';
 import { messageToneClasses } from '../utils/messageTone';
+import { formatDatetimeLocal, parseRaceSchedule } from '../utils/raceSchedule';
 
 interface CreateRacePageProps {
   onNavigate: (page: string) => void;
 }
 
-// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho raceDateWithinTournamentMessage.
-const raceDateWithinTournamentMessage = (
-  tournament: TournamentRecord | undefined,
-  raceDate: string
-) => {
-  if (!tournament) return '';
-  if (tournament.startDate && raceDate < tournament.startDate) {
-    return 'Race date must be on or after tournament start date.';
-  }
-  if (tournament.finalDate && raceDate > tournament.finalDate) {
-    return 'Race date must be on or before tournament end date.';
-  }
-  return '';
-};
+// Ghi chú: Tính race number kế tiếp từ danh sách race hiện có của tournament.
+const nextRaceNumber = (races: RaceRecord[], tournamentId: string) => {
+  const usedNumbers = races
+    .filter((race) => race.tournamentId === tournamentId)
+    .map((race) => Number(String(race.raceNumber || '').replace(/^R/i, '')))
+    .filter((number) => Number.isFinite(number));
 
-// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho formatDatetimeLocal.
-const formatDatetimeLocal = (date: Date) => {
-  // Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho pad.
-  const pad = (value: number) => String(value).padStart(2, '0');
-
-  return [
-    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
-    `${pad(date.getHours())}:${pad(date.getMinutes())}`,
-  ].join('T');
+  return `R${usedNumbers.length > 0 ? Math.max(...usedNumbers) + 1 : 1}`;
 };
 
 // Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho suggestedRegistrationClose.
@@ -87,10 +72,6 @@ export default function CreateRacePage({
     distance: '',
     surfaceType: '',
     raceClassId: '',
-    ratingMin: '',
-    ratingMax: '',
-    handicapMin: '',
-    handicapMax: '',
     totalPrize: '',
     betLimit: '50',
     refereeUserIds: [] as string[],
@@ -101,18 +82,14 @@ export default function CreateRacePage({
     [form.tournamentId, tournaments]
   );
 
-  const tournamentOptions = useMemo(() => tournaments, [tournaments]);
+  const selectedRaceClass = useMemo(
+    () => raceClasses.find((raceClass) => raceClass.id === form.raceClassId),
+    [form.raceClassId, raceClasses]
+  );
 
   // Ghi chú: Hàm này lấy nghiệp vụ liên quan đến get next race number.
   const getNextRaceNumber = (tournamentId: string) => {
-    const usedNumbers = races
-      .filter((race) => race.tournamentId === tournamentId)
-      .map((race) => Number(String(race.raceNumber || '').replace(/^R/i, '')))
-      .filter((number) => Number.isFinite(number));
-
-    const nextNumber = usedNumbers.length > 0 ? Math.max(...usedNumbers) + 1 : 1;
-
-    return `R${nextNumber}`;
+    return nextRaceNumber(races, tournamentId);
   };
 
   useEffect(() => {
@@ -137,20 +114,14 @@ export default function CreateRacePage({
             existingRaces.filter((race) => race.tournamentId === tournament.id).length <
             nextMaxRacesPerTournament
         );
-        const usedNumbers = firstTournament
-          ? existingRaces
-            .filter((race) => race.tournamentId === firstTournament.id)
-            .map((race) => Number(String(race.raceNumber || '').replace(/^R/i, '')))
-            .filter((number) => Number.isFinite(number))
-          : [];
-        const nextRaceNumber = firstTournament
-          ? `R${usedNumbers.length > 0 ? Math.max(...usedNumbers) + 1 : 1}`
+        const nextRaceNumberValue = firstTournament
+          ? nextRaceNumber(existingRaces, firstTournament.id)
           : '';
 
         setForm((current) => ({
           ...current,
           tournamentId: firstTournament?.id || '',
-          raceNumber: current.raceNumber || nextRaceNumber,
+          raceNumber: current.raceNumber || nextRaceNumberValue,
           venue: current.venue || firstTournament?.location || '',
           distance: current.distance || String(nextDefaultDistanceMeters || ''),
           refereeUserIds: data.referees[0] ? [data.referees[0].id] : [],
@@ -186,8 +157,6 @@ export default function CreateRacePage({
       !form.distance && 'Distance',
       !form.surfaceType && 'Surface',
       !form.raceClassId && 'Race class',
-      form.handicapMin === '' && 'Minimum weight',
-      form.handicapMax === '' && 'Top weight',
       form.refereeUserIds.length === 0 && 'Assigned referees',
     ].filter(Boolean);
 
@@ -200,46 +169,21 @@ export default function CreateRacePage({
       setMessage('Registration open and close times are required.');
       return;
     }
-    const regOpens = new Date(form.registrationOpensAt);
-    const regCloses = new Date(form.registrationClosesAt);
-    const raceStartsAt = new Date(`${form.raceDate}T${form.startTime}`);
-    if (
-      !Number.isFinite(regOpens.getTime()) ||
-      !Number.isFinite(regCloses.getTime()) ||
-      !Number.isFinite(raceStartsAt.getTime())
-    ) {
-      setMessage('Race and registration times must be valid.');
-      return;
-    }
-    if (regOpens >= regCloses) {
-      setMessage('Registration close time must be after open time.');
-      return;
-    }
-    if (regCloses > raceStartsAt) {
-      setMessage('Registration must close before the race starts.');
-      return;
-    }
-    const raceDateError = raceDateWithinTournamentMessage(selectedTournament, form.raceDate);
-    if (raceDateError) {
-      setMessage(raceDateError);
+    const schedule = parseRaceSchedule({
+      tournament: selectedTournament,
+      raceDate: form.raceDate,
+      startTime: form.startTime,
+      registrationOpensAt: form.registrationOpensAt,
+      registrationClosesAt: form.registrationClosesAt,
+    });
+    if (schedule.error) {
+      setMessage(schedule.error);
       return;
     }
     if (Number(form.distance) < 400 || Number(form.distance) > 10000) {
       setMessage('Race distance must be between 400m and 10,000m.');
       return;
     }
-    if (
-      Number(form.ratingMin) < 0 ||
-      Number(form.ratingMax) > 140 ||
-      Number(form.ratingMin) > Number(form.ratingMax) ||
-      Number(form.handicapMin) < 110 ||
-      Number(form.handicapMax) > 135 ||
-      Number(form.handicapMin) > Number(form.handicapMax)
-    ) {
-      setMessage('Assigned weight must stay between 110 lb and 135 lb.');
-      return;
-    }
-
     setIsSubmitting(true);
     createRace({
       tournamentId: form.tournamentId,
@@ -247,8 +191,8 @@ export default function CreateRacePage({
       name: form.raceName,
       date: form.raceDate,
       time: form.startTime,
-      registrationOpensAt: new Date(form.registrationOpensAt).toISOString(),
-      registrationClosesAt: new Date(form.registrationClosesAt).toISOString(),
+      registrationOpensAt: schedule.regOpens.toISOString(),
+      registrationClosesAt: schedule.regCloses.toISOString(),
       venue: form.venue,
       distance: form.distance,
       surface: form.surfaceType,
@@ -283,15 +227,9 @@ export default function CreateRacePage({
 
   // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle race class change.
   const handleRaceClassChange = (raceClassId: string) => {
-    const selectedRaceClass = raceClasses.find((item) => item.id === raceClassId);
-
     setForm((current) => ({
       ...current,
       raceClassId,
-      ratingMin: selectedRaceClass ? String(selectedRaceClass.ratingMin) : '',
-      ratingMax: selectedRaceClass ? String(selectedRaceClass.ratingMax) : '',
-      handicapMin: selectedRaceClass ? String(selectedRaceClass.handicapMin) : '',
-      handicapMax: selectedRaceClass ? String(selectedRaceClass.handicapMax) : '',
     }));
   };
 
@@ -363,7 +301,7 @@ export default function CreateRacePage({
                     value={form.tournamentId}
                     onChange={(event) => handleTournamentChange(event.target.value)}
                   >
-                    {tournamentOptions.map((tournament) => (
+                    {tournaments.map((tournament) => (
                       <option
                         key={tournament.id}
                         value={tournament.id}
@@ -594,12 +532,10 @@ export default function CreateRacePage({
                   <label className="block text-gray-300 mb-2">Minimum Rating</label>
                   <input
                     type="number"
-                    min="0"
-                    max="140"
                     step="1"
                     readOnly
                     className={`${fieldClass} cursor-not-allowed opacity-70`}
-                    value={form.ratingMin}
+                    value={selectedRaceClass?.ratingMin ?? ''}
                   />
                 </div>
 
@@ -607,12 +543,10 @@ export default function CreateRacePage({
                   <label className="block text-gray-300 mb-2">Maximum Rating</label>
                   <input
                     type="number"
-                    min="0"
-                    max="140"
                     step="1"
                     readOnly
                     className={`${fieldClass} cursor-not-allowed opacity-70`}
-                    value={form.ratingMax}
+                    value={selectedRaceClass?.ratingMax ?? ''}
                   />
                 </div>
 
@@ -620,12 +554,10 @@ export default function CreateRacePage({
                   <label className="block text-gray-300 mb-2">Minimum Weight (lb)</label>
                   <input
                     type="number"
-                    min="110"
-                    max="135"
                     step="1"
                     readOnly
                     className={`${fieldClass} cursor-not-allowed opacity-70`}
-                    value={form.handicapMin}
+                    value={selectedRaceClass?.handicapMin ?? ''}
                   />
                 </div>
 
@@ -633,12 +565,10 @@ export default function CreateRacePage({
                   <label className="block text-gray-300 mb-2">Top Weight (lb)</label>
                   <input
                     type="number"
-                    min="110"
-                    max="135"
                     step="1"
                     readOnly
                     className={`${fieldClass} cursor-not-allowed opacity-70`}
-                    value={form.handicapMax}
+                    value={selectedRaceClass?.handicapMax ?? ''}
                   />
                 </div>
 

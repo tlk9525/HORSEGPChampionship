@@ -3,7 +3,7 @@ import {
   useNavigate,
   useParams,
 } from 'react-router-dom';
-import { Circle, ShieldCheck, Timer, Trophy } from 'lucide-react';
+import { Circle, ShieldCheck, Timer } from 'lucide-react';
 import {
   AuthUser,
   HorseRecord,
@@ -28,106 +28,19 @@ import {
   normalizeOfficialReplayRunners,
   parseRaceDistanceMeters,
   progressForRunner,
-  raceSimulationOutcomeLabel,
   sortRaceDisplayRunners,
 } from '../utils/raceSimulation';
-
-interface DisplayRunnerRow {
-  keyId: string;
-  lane: number | null;
-  horseName: string;
-  jockeyName: string;
-  silkColor: string;
-  rating: number;
-  carriedWeight: number;
-  progress: number;
-  position?: number;
-  finishTime?: string;
-  liveRank?: number;
-  simulationOutcome?: ResultOutcome;
-  incidentReason?: string;
-  nonFinishRisk?: number;
-}
-
-type ResultOutcome = 'finished' | 'dnf' | 'fell' | 'injured' | 'disqualified';
-
-const resultOutcomeOptions: Array<{ value: ResultOutcome; label: string }> = [
-  { value: 'finished', label: 'Finished normally' },
-  { value: 'dnf', label: 'DNF' },
-  { value: 'fell', label: 'Fell / Nhao' },
-  { value: 'injured', label: 'Injured' },
-  { value: 'disqualified', label: 'Disqualified' },
-];
-
-// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho resultOutcomeLabel.
-const resultOutcomeLabel = (value?: string) =>
-  resultOutcomeOptions.find((option) => option.value === value)?.label || 'Finished normally';
-
-const leaderboardLaneColors = [
-  '#22c55e',
-  '#38bdf8',
-  '#6366f1',
-  '#ef4444',
-  '#f4c542',
-  '#cbd5e1',
-  '#a855f7',
-  '#14b8a6',
-];
-
-// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho silkPaletteByLane.
-const silkPaletteByLane = (lane?: number | null) =>
-  leaderboardLaneColors[Math.max(0, Number(lane || 1) - 1) % leaderboardLaneColors.length];
-
-// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho finishTimeSortValue.
-const finishTimeSortValue = (value?: string) => {
-  const parsed = parseFinishTimeSeconds(value);
-
-  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
-};
-
-// Ghi chú: Hàm này phân tích nghiệp vụ liên quan đến parse finish time seconds.
-const parseFinishTimeSeconds = (value?: string) => {
-  const raw = String(value || '').trim();
-  if (!raw) return Number.NaN;
-
-  const parts = raw.split(':');
-  if (parts.length === 2) {
-    const [minutes, secondsAndMs] = parts;
-    const [seconds, fraction = '0'] = String(secondsAndMs).split('.');
-    const parsedMinutes = Number(minutes);
-    const parsedSeconds = Number(seconds);
-    const parsedFraction = Number(fraction.padEnd(3, '0').slice(0, 3));
-
-    if (
-      Number.isFinite(parsedMinutes) &&
-      Number.isFinite(parsedSeconds) &&
-      Number.isFinite(parsedFraction)
-    ) {
-      return parsedMinutes * 60 + parsedSeconds + parsedFraction / 1000;
-    }
-  }
-
-  if (parts.length === 3) {
-    const [hours, minutes, secondsAndMs] = parts;
-    const [seconds, fraction = '0'] = String(secondsAndMs).split('.');
-    const parsedHours = Number(hours);
-    const parsedMinutes = Number(minutes);
-    const parsedSeconds = Number(seconds);
-    const parsedFraction = Number(fraction.padEnd(3, '0').slice(0, 3));
-
-    if (
-      Number.isFinite(parsedHours) &&
-      Number.isFinite(parsedMinutes) &&
-      Number.isFinite(parsedSeconds) &&
-      Number.isFinite(parsedFraction)
-    ) {
-      return parsedHours * 3600 + parsedMinutes * 60 + parsedSeconds + parsedFraction / 1000;
-    }
-  }
-
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : Number.NaN;
-};
+import LiveRaceTrack from './liveRace/LiveRaceTrack';
+import OfficialLeaderboard from './liveRace/OfficialLeaderboard';
+import {
+  DisplayRunnerRow,
+  ResultOutcome,
+  finishTimeSortValue,
+  parseFinishTimeSeconds,
+  resultOutcomeLabel,
+  resultOutcomeOptions,
+  silkPaletteByLane,
+} from './liveRace/liveRaceDisplay';
 
 // Ghi chú: Hàm này render màn hình race đang chạy và cập nhật tiến độ realtime.
 export default function LiveRace() {
@@ -445,7 +358,10 @@ export default function LiveRace() {
   const loadRaceOps = () => {
     const requestId = ++loadRequestIdRef.current;
 
-    Promise.all([getMe().catch(() => ({ user: null as AuthUser | null })), getBootstrap()])
+    Promise.all([
+      getMe().catch(() => ({ user: null as AuthUser | null })),
+      getBootstrap({ scope: 'live' }),
+    ])
       .then(([me, data]) => {
         if (requestId !== loadRequestIdRef.current) return;
 
@@ -828,145 +744,18 @@ export default function LiveRace() {
                 </div>
               </div>
 
-              <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#12304f]">
-                <div className="border-b border-white/10 bg-[#0b223d] p-5">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div>
-                      <div className="flex items-center gap-2 text-[#d4af37] font-black uppercase tracking-[0.16em] text-sm">
-                        <Trophy className="w-5 h-5" />
-                        {officialReplayMode ? 'Official Replay' : 'Live Simulation'}
-                      </div>
-                      <p className="mt-2 text-sm text-gray-400">
-                        {officialReplayMode
-                          ? 'Uses recorded positions and finish times from the official result set.'
-                          : 'Uses this race&apos;s distance, surface, gates, rating snapshots and assigned weights. Visual only until Referee records results.'}
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-                      {[
-                        ['Distance', displayDistance],
-                        ['Surface', displaySurface],
-                        ['Elapsed', displayElapsed],
-                        ['Projected', displayProjected],
-                      ].map(([label, value]) => (
-                        <div key={label} className="rounded-xl border border-white/10 bg-[#071a2f] px-4 py-3">
-                          <div className="text-xs text-gray-500">{label}</div>
-                          <div className="font-black text-white">{value}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="mt-5 h-2 overflow-hidden rounded-full bg-black/30">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-cyan-400 via-[#d4af37] to-orange-400"
-                      style={{ width: `${simulationProgressPercent}%` }}
-                    />
-                  </div>
-
-                  {selectedRace.status === 'in-progress' && simulationFinishedVisually && (
-                    <div className="mt-4 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-sm font-semibold text-amber-100">
-                      Visual race is complete. Waiting for Admin to finish the race before Referee can enter results.
-                    </div>
-                  )}
-                </div>
-
-                <div className="space-y-2 p-3 sm:p-5">
-                  {displayEntries.length === 0 && (
-                    <div className="rounded-xl border border-dashed border-white/15 bg-[#071a2f] p-5 text-center text-gray-500">
-                      {officialReplayMode
-                        ? 'This race has no official results yet.'
-                        : 'Mark at least one approved participant Ready before the race can be simulated.'}
-                    </div>
-                  )}
-
-                  {displayEntries.map((runner) => {
-                    const rank = displayRankByEntryId.get(runner.keyId);
-
-                    return (
-                      <div
-                        key={runner.keyId}
-                        className="grid grid-cols-[38px,minmax(0,1fr),44px] items-center gap-2 rounded-2xl border border-white/[0.07] bg-[#071a2f] p-2 sm:grid-cols-[44px,180px,minmax(0,1fr),54px] sm:gap-3 sm:p-3"
-                      >
-                        <div
-                          className="flex h-9 w-9 items-center justify-center rounded-xl text-sm font-black text-[#071a2f]"
-                          style={{ backgroundColor: officialReplayMode ? '#d4af37' : runner.silkColor }}
-                        >
-                          {runner.lane || '-'}
-                        </div>
-
-                        <div className="hidden min-w-0 sm:block">
-                          <div className="truncate font-black text-white">
-                            {runner.horseName}
-                          </div>
-                          <div className="truncate text-xs text-gray-400">
-                            {officialReplayMode
-                              ? `Jockey ${runner.jockeyName} • Official P${runner.position || '-'} • ${runner.finishTime || ''}`
-                              : `${runner.jockeyName} • R${runner.rating} • ${runner.carriedWeight}lb • ${raceSimulationOutcomeLabel(runner.simulationOutcome)}`}
-                          </div>
-                          {!officialReplayMode && runner.simulationOutcome && runner.simulationOutcome !== 'finished' && (
-                            <div className="mt-1 truncate text-[11px] font-bold text-orange-300">
-                              {runner.incidentReason || raceSimulationOutcomeLabel(runner.simulationOutcome)}
-                            </div>
-                          )}
-                        </div>
-
-                        <div
-                          className="relative h-12 overflow-hidden rounded-xl border border-white/10 bg-[#102f31]"
-                          style={{
-                            backgroundImage:
-                              'linear-gradient(90deg, transparent 24.7%, rgba(255,255,255,.12) 25%, transparent 25.3%, transparent 49.7%, rgba(255,255,255,.12) 50%, transparent 50.3%, transparent 74.7%, rgba(255,255,255,.12) 75%, transparent 75.3%)',
-                          }}
-                        >
-                          <div className="absolute inset-y-0 left-[18px] right-[18px]">
-                            <div className="absolute inset-y-0 right-0 z-20 w-1 translate-x-1/2 bg-[repeating-linear-gradient(0deg,#fff_0_4px,#111_4px_8px)] opacity-80" />
-                            {officialReplayMode ? (
-                              <div
-                                className="absolute top-1/2 z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-lg"
-                                style={{
-                                  left: `${runner.progress * 100}%`,
-                                  backgroundColor: '#d4af37',
-                                  boxShadow: '0 0 18px rgba(212,175,55,0.5)',
-                                }}
-                                title={`${runner.horseName}: P${rank || '-'}`}
-                              >
-                                <span className="text-base">♞</span>
-                              </div>
-                            ) : (
-                              <div
-                                className="absolute top-1/2 z-10 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white shadow-lg"
-                                style={{
-                                  left: `${runner.progress * 100}%`,
-                                  backgroundColor: runner.silkColor,
-                                  boxShadow: `0 0 18px ${runner.silkColor}80`,
-                                }}
-                                title={`${runner.horseName}: ${Math.round(runner.progress * 100)}%`}
-                              >
-                                <span className="text-base">♞</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="text-center">
-                          <div
-                            className={`text-xl font-black ${rank === 1 ? 'text-[#f6d77a]' : 'text-white'
-                              }`}
-                          >
-                            P{rank}
-                          </div>
-                          <div className="text-[10px] uppercase text-gray-500">
-                            {runner.simulationOutcome && runner.simulationOutcome !== 'finished'
-                              ? raceSimulationOutcomeLabel(runner.simulationOutcome)
-                              : `${Math.round(runner.progress * 100)}%`}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+              <LiveRaceTrack
+                officialReplayMode={officialReplayMode}
+                distance={String(displayDistance)}
+                surface={String(displaySurface)}
+                elapsed={displayElapsed}
+                projected={displayProjected}
+                progressPercent={simulationProgressPercent}
+                raceStatus={selectedRace.status}
+                simulationFinishedVisually={simulationFinishedVisually}
+                runners={displayEntries}
+                rankByEntryId={displayRankByEntryId}
+              />
 
               <div className="bg-[#12304f] border border-white/10 rounded-2xl p-6">
                 <h2 className="text-2xl font-black text-white mb-5">
@@ -1249,66 +1038,7 @@ export default function LiveRace() {
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-[#12304f] p-6">
-                  <div className="mb-5 flex items-center gap-3">
-                    <Trophy className="h-6 w-6 text-[#d4af37]" />
-                    <div>
-                      <h2 className="text-2xl font-black text-white">
-                        Official leaderboard
-                      </h2>
-                      <p className="mt-1 text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                        Recorded draft order
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    {officialLeaderboardRows.length === 0 && (
-                      <div className="rounded-xl border border-dashed border-white/15 bg-[#071a2f] p-4 text-sm text-gray-500">
-                        No recorded runners yet.
-                      </div>
-                    )}
-
-                    {officialLeaderboardRows.map((row, index) => {
-                      const isFinished = row.outcome === 'finished';
-                      const resultLabel = isFinished && row.position
-                        ? `Official P${row.position}`
-                        : resultOutcomeLabel(row.outcome);
-                      const detail = isFinished
-                        ? row.finishTime || 'Time pending'
-                        : row.incidentReason || 'Incident reason pending';
-
-                      return (
-                        <div
-                          key={row.id}
-                          className={`grid grid-cols-[32px,18px,minmax(0,1fr)] items-center gap-3 rounded-xl border p-3 ${
-                            index === 0 && isFinished
-                              ? 'border-[#d4af37]/45 bg-[#d4af37]/10'
-                              : 'border-white/[0.07] bg-[#071a2f]'
-                          }`}
-                        >
-                          <div className="text-lg font-black text-white">
-                            {isFinished && row.position ? row.position : '-'}
-                          </div>
-                          <div
-                            className="h-3.5 w-3.5 rounded-full"
-                            style={{ backgroundColor: row.silkColor }}
-                          />
-                          <div className="min-w-0">
-                            <div className="truncate text-sm font-black text-white">
-                              {row.horseName}
-                            </div>
-                            <div className={`truncate text-xs font-semibold ${
-                              isFinished ? 'text-gray-300' : 'text-orange-300'
-                            }`}>
-                              {resultLabel} • {detail}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                <OfficialLeaderboard rows={officialLeaderboardRows} />
               </div>
             )}
           </div>

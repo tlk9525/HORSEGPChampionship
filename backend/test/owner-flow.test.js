@@ -94,6 +94,35 @@ test('owner profile update preserves an official Class 5 rating of zero', async 
   assert.equal(db.horses[0].overallRating, 0);
 });
 
+test('owner horse limit follows persisted system settings', async () => {
+  const db = makeDb({
+    id: 'race-1',
+    tournamentId: 'tournament-1',
+    status: 'registration-open',
+    raceClass: 'Open',
+  });
+  db.systemSettings = [{ key: 'maxOwnerHorses', value: '1' }];
+  const app = new Hono();
+  app.route('/', createOwnerRoutes(async () => db, async () => undefined));
+
+  const portalResponse = await app.request('/portal', {
+    headers: { Authorization: 'Bearer owner-token' },
+  });
+  assert.equal(portalResponse.status, 200);
+  assert.equal((await portalResponse.json()).limits.maxOwnerHorses, 1);
+
+  const createResponse = await app.request('/horses', {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer owner-token',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ name: 'Second Horse', breed: 'Arabian', age: 3 }),
+  });
+  assert.equal(createResponse.status, 400);
+  assert.match((await createResponse.json()).message, /up to 1 horses/i);
+});
+
 test('owner cannot change performance rating attributes after horse registration', async () => {
   const db = makeDb({
     id: 'race-1',

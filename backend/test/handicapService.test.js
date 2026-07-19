@@ -36,6 +36,26 @@ test('assigned weight uses one pound per rating point below the top horse', () =
   );
 });
 
+test('assigned weight honors the race class snapshot outside the former global limits', () => {
+  const race = { handicapMin: 105, handicapMax: 142 };
+
+  assert.deepEqual(
+    computeRaceHandicap({ overallRating: 90 }, race, 90),
+    { rating: 90, handicap: 142 }
+  );
+  assert.deepEqual(
+    computeRaceHandicap({ overallRating: 40 }, race, 90),
+    { rating: 40, handicap: 105 }
+  );
+});
+
+test('assigned weight rejects a race without a valid catalog snapshot', () => {
+  assert.throws(
+    () => computeRaceHandicap({ overallRating: 90 }, {}, 90),
+    /assigned-weight range/i
+  );
+});
+
 test('official rating zero is preserved instead of recalculating from attributes', () => {
   assert.equal(
     officialHorseRating({

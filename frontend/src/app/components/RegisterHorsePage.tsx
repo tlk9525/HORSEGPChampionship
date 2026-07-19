@@ -55,7 +55,9 @@ export default function RegisterHorsePage({
   const [veterinaryCertificateUrl, setVeterinaryCertificateUrl] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const activeHorse = horse || loadedHorse;
+  const activeHorse =
+    (horse?.id === horseId ? horse : null) ||
+    (loadedHorse?.id === horseId ? loadedHorse : null);
   const isEdit = mode === 'edit' && Boolean(activeHorse);
   const fieldClass =
     'w-full h-12 px-4 bg-[#071a2f] border border-white/10 rounded-xl text-white focus:outline-none focus:border-[#d4af37]';
@@ -107,12 +109,12 @@ export default function RegisterHorsePage({
   useEffect(() => {
     if (mode !== 'edit') return;
 
-    getBootstrap()
+    getBootstrap({ scope: 'horses' })
       .then((data) => {
         setRaceEntries(data.raceEntries || []);
         setRaces(data.races || []);
 
-        if (!horse && horseId) {
+        if (horse?.id !== horseId && horseId) {
           const foundHorse = data.horses.find((item) => item.id === horseId) || null;
           setLoadedHorse(foundHorse);
 
