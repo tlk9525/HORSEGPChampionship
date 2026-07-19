@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import {
+  BETTING_CLOSE_BEFORE_RACE_MS,
   PUBLIC_RACE_STATUSES,
+  RACE_TIMEZONE_OFFSET,
   USER_ROLES,
   FRONTEND_URL,
 } from '../config/constants.js';
@@ -151,6 +153,8 @@ export const createPublicRoutes = (getDb) => {
         maxRacesPerTournament: settings.maxRacesPerTournament,
         defaultDistanceMeters: settings.defaultDistanceMeters,
         closeRegistrationHours: settings.closeRegistrationHours,
+        bettingCloseBeforeRaceMs: BETTING_CLOSE_BEFORE_RACE_MS,
+        raceTimezoneOffset: RACE_TIMEZONE_OFFSET,
       },
       systemSettings: settings,
     });

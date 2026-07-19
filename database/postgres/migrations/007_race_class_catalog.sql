@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS "raceClasses" (
   CONSTRAINT "chk_race_classes_rating"
     CHECK ("ratingMin" >= 0 AND "ratingMax" <= 140 AND "ratingMin" <= "ratingMax"),
   CONSTRAINT "chk_race_classes_weight"
-    CHECK ("handicapMin" >= 110 AND "handicapMax" <= 135 AND "handicapMin" <= "handicapMax")
+    CHECK ("handicapMin" > 0 AND "handicapMin" <= "handicapMax")
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "uq_race_classes_name_ci"

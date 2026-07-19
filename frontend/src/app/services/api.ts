@@ -196,6 +196,8 @@ export interface SystemLimits {
   maxRacesPerTournament: number;
   defaultDistanceMeters: number;
   closeRegistrationHours: number;
+  bettingCloseBeforeRaceMs: number;
+  raceTimezoneOffset: string;
 }
 
 export interface SystemSettings {

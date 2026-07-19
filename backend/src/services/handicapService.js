@@ -12,8 +12,6 @@ const clamp = (value, min, max) => {
   return Math.max(min, value);
 };
 
-export const MIN_CARRIED_WEIGHT_LB = 110;
-export const MAX_CARRIED_WEIGHT_LB = 135;
 const RATING_K_FACTOR = 10;
 const MIN_RATED_FIELD_SIZE = 4;
 
@@ -63,19 +61,27 @@ export const raceEligibilityRange = (race = {}) => {
   return { min: 0, max: 140 };
 };
 
+// Lấy khoảng cân đã được chụp từ Race Class Catalog vào race.
+export const raceCarriedWeightRange = (race = {}) => {
+  const min = Number(race.handicapMin);
+  const max = Number(race.handicapMax);
+
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0 || max < min) {
+    return null;
+  }
+
+  return { min, max };
+};
+
 // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến compute race handicap.
 export const computeRaceHandicap = (horse, race, highestFieldRating) => {
   const rating = officialHorseRating(horse);
-  const min = clamp(
-    numeric(race?.handicapMin, MIN_CARRIED_WEIGHT_LB),
-    MIN_CARRIED_WEIGHT_LB,
-    MAX_CARRIED_WEIGHT_LB
-  );
-  const max = clamp(
-    numeric(race?.handicapMax, MAX_CARRIED_WEIGHT_LB),
-    min,
-    MAX_CARRIED_WEIGHT_LB
-  );
+  const weightRange = raceCarriedWeightRange(race);
+  if (!weightRange) {
+    throw new RangeError('Race assigned-weight range is missing or invalid');
+  }
+
+  const { min, max } = weightRange;
   const topRating = Math.max(rating, numeric(highestFieldRating, rating));
   const assignedWeightLb = max - (topRating - rating);
 

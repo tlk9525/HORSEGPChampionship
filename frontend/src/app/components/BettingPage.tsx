@@ -32,12 +32,8 @@ interface BettingPageProps {
   onUserUpdate?: (user: AuthUser) => void;
 }
 
-const BETTING_CLOSE_MS = 60 * 1000;
-/** Match backend: race schedules are Vietnam wall-clock (+07:00). */
-const RACE_TIMEZONE_OFFSET = '+07:00';
-
 // Ghi chú: Hàm này chuyển lịch race theo giờ Việt Nam thành timestamp để tính thời gian đóng cược.
-const raceStartMs = (race: RaceRecord) => {
+const raceStartMs = (race: RaceRecord, raceTimezoneOffset: string) => {
   const date = String(race.date || race.raceDate || '').slice(0, 10);
   const rawTime = String(race.time || race.raceTime || '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !rawTime) return Number.NaN;
@@ -47,7 +43,7 @@ const raceStartMs = (race: RaceRecord) => {
     .padStart(2, '0')
     .slice(0, 2)}`;
 
-  return new Date(`${date}T${normalized}${RACE_TIMEZONE_OFFSET}`).getTime();
+  return new Date(`${date}T${normalized}${raceTimezoneOffset}`).getTime();
 };
 
 // Ghi chú: Hàm này kiểm tra race entry đã duyệt, không bị loại và không vắng mặt.
@@ -57,19 +53,27 @@ const isBettableEntry = (entry: RaceEntryRecord) =>
   entry.preRaceStatus !== 'absent';
 
 // Ghi chú: Hàm này kiểm tra race đang publish và chưa đến mốc đóng cược.
-const isBettingOpen = (race: RaceRecord) => {
+const isBettingOpen = (
+  race: RaceRecord,
+  bettingCloseBeforeRaceMs: number,
+  raceTimezoneOffset: string
+) => {
   if (race.status !== 'published') return false;
-  const startMs = raceStartMs(race);
+  const startMs = raceStartMs(race, raceTimezoneOffset);
   if (!Number.isFinite(startMs)) return false;
-  return Date.now() < startMs - BETTING_CLOSE_MS;
+  return Date.now() < startMs - bettingCloseBeforeRaceMs;
 };
 
 // Ghi chú: Hàm này định dạng thời gian còn lại trước khi đóng cược để hiển thị trên giao diện.
-const formatCountdown = (race: RaceRecord) => {
-  const startMs = raceStartMs(race);
+const formatCountdown = (
+  race: RaceRecord,
+  bettingCloseBeforeRaceMs: number,
+  raceTimezoneOffset: string
+) => {
+  const startMs = raceStartMs(race, raceTimezoneOffset);
   if (!Number.isFinite(startMs)) return 'Start time unavailable';
 
-  const closeMs = startMs - BETTING_CLOSE_MS;
+  const closeMs = startMs - bettingCloseBeforeRaceMs;
   const remaining = closeMs - Date.now();
 
   if (remaining <= 0) return 'Betting closed';
@@ -107,7 +111,9 @@ export default function BettingPage({
   const [submittingEntryId, setSubmittingEntryId] = useState('');
   const [cancellingBetId, setCancellingBetId] = useState('');
   const [message, setMessage] = useState('');
-  const [now, setNow] = useState(Date.now());
+  const [, setNow] = useState(Date.now());
+  const [bettingCloseBeforeRaceMs, setBettingCloseBeforeRaceMs] = useState(0);
+  const [raceTimezoneOffset, setRaceTimezoneOffset] = useState('');
 
   // Ghi chú: Hàm này tải đồng thời dữ liệu hệ thống, ví spectator và các pot cược mới nhất.
   const loadData = () => {
@@ -116,6 +122,8 @@ export default function BettingPage({
         setTournaments(bootstrap.tournaments);
         setRaces(bootstrap.races);
         setRaceEntries(bootstrap.raceEntries || []);
+        setBettingCloseBeforeRaceMs(bootstrap.limits.bettingCloseBeforeRaceMs);
+        setRaceTimezoneOffset(bootstrap.limits.raceTimezoneOffset);
         setCredits(wallet.credits);
         setLoginStreak(wallet.loginStreak);
         setDailyReward(wallet.dailyReward);
@@ -178,12 +186,12 @@ export default function BettingPage({
       races
         .filter((race) => race.status === 'published' || bets.some((bet) => bet.raceId === race.id))
         .sort((a, b) => {
-          const startA = raceStartMs(a);
-          const startB = raceStartMs(b);
+          const startA = raceStartMs(a, raceTimezoneOffset);
+          const startB = raceStartMs(b, raceTimezoneOffset);
           return (Number.isFinite(startA) ? startA : Infinity) -
             (Number.isFinite(startB) ? startB : Infinity);
         }),
-    [bets, races, now]
+    [bets, races, raceTimezoneOffset]
   );
 
   const tournamentNameById = useMemo(() => {
@@ -339,7 +347,11 @@ export default function BettingPage({
               const entries = raceEntries
                 .filter((entry) => entry.raceId === race.id && isBettableEntry(entry))
                 .sort((a, b) => (a.lane || 999) - (b.lane || 999));
-              const open = isBettingOpen(race);
+              const open = isBettingOpen(
+                race,
+                bettingCloseBeforeRaceMs,
+                raceTimezoneOffset
+              );
               const tournamentName = tournamentNameById.get(race.tournamentId || '') || 'Tournament';
               const potTotal = potsByRaceId[race.id] || 0;
 
@@ -367,7 +379,13 @@ export default function BettingPage({
                             : 'border border-red-400/30 bg-red-500/10 text-red-300'
                         }`}
                       >
-                        {open ? formatCountdown(race) : 'Betting closed'}
+                        {open
+                          ? formatCountdown(
+                              race,
+                              bettingCloseBeforeRaceMs,
+                              raceTimezoneOffset
+                            )
+                          : 'Betting closed'}
                       </div>
                     </div>
 
@@ -614,7 +632,14 @@ export default function BettingPage({
                 <tbody>
                   {bets.map((bet) => {
                     const betRace = races.find((r) => r.id === bet.raceId);
-                    const canCancel = bet.status === 'pending' && betRace && isBettingOpen(betRace);
+                    const canCancel =
+                      bet.status === 'pending' &&
+                      betRace &&
+                      isBettingOpen(
+                        betRace,
+                        bettingCloseBeforeRaceMs,
+                        raceTimezoneOffset
+                      );
                     return (
                       <tr key={bet.id} className="border-b border-white/5 text-gray-200">
                         <td className="px-3 py-4">{bet.raceName || bet.raceId}</td>

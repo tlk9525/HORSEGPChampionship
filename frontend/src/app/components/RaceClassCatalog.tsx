@@ -219,8 +219,7 @@ export default function RaceClassCatalog({ onNavigate }: RaceClassCatalogProps) 
               <input
                 required
                 type="number"
-                min="110"
-                max="135"
+                min="0.01"
                 step="1"
                 className={`${fieldClass} mt-2`}
                 value={form.handicapMin}
@@ -232,8 +231,7 @@ export default function RaceClassCatalog({ onNavigate }: RaceClassCatalogProps) 
               <input
                 required
                 type="number"
-                min="110"
-                max="135"
+                min="0.01"
                 step="1"
                 className={`${fieldClass} mt-2`}
                 value={form.handicapMax}

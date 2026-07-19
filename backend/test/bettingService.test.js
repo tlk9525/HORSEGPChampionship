@@ -1,5 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Hono } from 'hono';
+import {
+  BETTING_CLOSE_BEFORE_RACE_MS,
+  RACE_TIMEZONE_OFFSET,
+} from '../src/config/constants.js';
+import { createPublicRoutes } from '../src/routes/publicRoutes.js';
 import {
   racePotTotal,
   raceStartMs,
@@ -65,6 +71,31 @@ const buildSettlementDb = () => {
     horses: [],
   };
 };
+
+test('bootstrap exposes backend betting cutoff and race timezone', async () => {
+  const db = {
+    users: [],
+    sessions: [],
+    tournaments: [],
+    horses: [],
+    races: [],
+    jockeyProfiles: [],
+    jockeyRaceRegistrations: [],
+    jockeyInvitations: [],
+    horseRaceRegistrations: [],
+    raceEntries: [],
+    notifications: [],
+  };
+  const app = new Hono();
+  app.route('/', createPublicRoutes(async () => db));
+
+  const response = await app.request('/bootstrap');
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.limits.bettingCloseBeforeRaceMs, BETTING_CLOSE_BEFORE_RACE_MS);
+  assert.equal(payload.limits.raceTimezoneOffset, RACE_TIMEZONE_OFFSET);
+});
 
 test('racePotTotal sums pending bets for a race', () => {
   const db = buildSettlementDb();
