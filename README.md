@@ -144,7 +144,12 @@ Horse Racing Tournament Website/
 └── vercel.json
 ```
 
-Các file `*SnapshotPersistence.js` phục vụ fallback `writeDb`, chỉ upsert row thay đổi và xóa row bị loại khỏi snapshot. Các hàm trong `*Persistence.js` dùng transaction nhỏ cho luồng quan trọng, tránh ghi lại toàn database sau mỗi thao tác.
+> **Lưu ý về persistence:** các file này không đại diện cho database riêng và cũng không ghi dữ liệu hai lần.
+>
+> - `*Persistence.js` xử lý một nghiệp vụ cụ thể bằng transaction nhỏ, ví dụ đăng nhập, đặt/hủy cược hoặc hoàn tất kết quả race.
+> - `*SnapshotPersistence.js` chỉ chuẩn hóa dữ liệu theo từng domain cho fallback `writeDb`; `writeDb` vẫn là nơi mở transaction, so sánh snapshot, gọi ba nhóm writer và commit/rollback.
+> - Không gom toàn bộ mapping trở lại `sqlDb.js` vì file này sẽ lại chứa danh sách cột và giá trị mặc định của hơn 20 bảng. Việc tách theo `race`, `user`, `betting` giúp sửa một domain mà không phải chạm vào domain khác.
+> - Chưa thể xóa nhóm snapshot vì một số route cũ vẫn gọi `writeDb`. Khi tất cả route đã chuyển sang row-level persistence, có thể loại bỏ fallback `writeDb` và các file `*SnapshotPersistence.js`.
 
 ## Vai trò người dùng
 
