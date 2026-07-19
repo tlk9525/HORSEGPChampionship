@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
-import { ACTIVE_TOURNAMENT_STATUSES } from '../config/constants.js';
+import { ACTIVE_TOURNAMENT_STATUSES, USER_ROLES } from '../config/constants.js';
 import { publicUser, requireRole } from '../services/authService.js';
 import {
   approvedRaceEntries,
@@ -14,11 +14,10 @@ import {
   tournamentRaces,
 } from '../services/domainService.js';
 import {
-  MAX_CARRIED_WEIGHT_LB,
-  MIN_CARRIED_WEIGHT_LB,
   computePostRaceRating,
   computeRaceHandicap,
   officialHorseRating,
+  raceCarriedWeightRange,
   raceEligibilityRange,
 } from '../services/handicapService.js';
 import { broadcastRaceUpdate } from '../services/liveRaceEvents.js';
@@ -41,7 +40,7 @@ import { racePotTotal, refundRaceBets, settleRaceBets } from '../services/bettin
 // Helpers nội bộ
 const nonRejectedEntry = (entry) => entry.status !== 'rejected';
 
-const USER_ROLES = ['admin', 'owner', 'jockey', 'referee', 'spectator'];
+const USER_ROLE_VALUES = Object.values(USER_ROLES);
 const USER_STATUSES = ['pending', 'active', 'rejected', 'suspended', 'locked'];
 
 // Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho sortedPublicUsers.
@@ -62,9 +61,6 @@ const activeAdminCount = (db) =>
 const raceFieldSize = (db) => systemSettingsFromDb(db).maxHorsesPerRace;
 // Ghi chú: Hàm này lấy và chuẩn hóa dữ liệu cho minReadiedParticipants.
 const minReadiedParticipants = (db) => systemSettingsFromDb(db).minReadiedParticipants;
-// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho maxTournamentRaces.
-const maxTournamentRaces = (db) => systemSettingsFromDb(db).maxRacesPerTournament;
-
 // Ghi chú: Hàm này sắp xếp danh mục race class theo thứ tự admin cấu hình.
 const sortedRaceClasses = (db, { activeOnly = false } = {}) =>
   [...(db.raceClasses || [])]
@@ -101,16 +97,8 @@ const sanitizeRaceClass = (input, current = {}) => {
   ) {
     return { message: 'Rating range must be between 0 and 140' };
   }
-  if (
-    !Number.isFinite(raceClass.handicapMin) ||
-    !Number.isFinite(raceClass.handicapMax) ||
-    raceClass.handicapMin < MIN_CARRIED_WEIGHT_LB ||
-    raceClass.handicapMax > MAX_CARRIED_WEIGHT_LB ||
-    raceClass.handicapMin > raceClass.handicapMax
-  ) {
-    return {
-      message: `Assigned weight must be between ${MIN_CARRIED_WEIGHT_LB}lb and ${MAX_CARRIED_WEIGHT_LB}lb`,
-    };
+  if (!raceCarriedWeightRange(raceClass)) {
+    return { message: 'Assigned weights must be positive and minimum cannot exceed top weight' };
   }
   if (!Number.isInteger(raceClass.sortOrder) || raceClass.sortOrder < 0) {
     return { message: 'Display order must be a non-negative whole number' };
@@ -157,6 +145,69 @@ const validateRaceDateInTournament = (tournament, raceDate) => {
     return 'Race date must be on or before tournament end date';
   }
   return null;
+};
+
+// Ghi chú: Dùng chung validation lịch race cho create, edit và reset.
+const validateRaceSchedule = ({
+  tournament,
+  raceDate,
+  raceStartsAt,
+  registrationOpensAt,
+  registrationClosesAt,
+}) => {
+  if (
+    !Number.isFinite(raceStartsAt.getTime()) ||
+    !Number.isFinite(registrationOpensAt.getTime()) ||
+    !Number.isFinite(registrationClosesAt.getTime())
+  ) {
+    return 'Race and registration times must be valid';
+  }
+
+  const raceDateError = validateRaceDateInTournament(tournament, raceDate);
+  if (raceDateError) return raceDateError;
+  if (registrationOpensAt >= registrationClosesAt) {
+    return 'Registration close time must be after open time';
+  }
+  if (registrationClosesAt > raceStartsAt) {
+    return 'Registration must close before the race starts';
+  }
+
+  return null;
+};
+
+// Ghi chú: Gom danh sách người cần nhận thông báo khi race bị hủy.
+const raceCancellationRecipientIds = (db, race, entries) => {
+  const recipientIds = new Set();
+
+  entries.forEach((entry) => {
+    const horse = db.horses.find((item) => item.id === entry.horseId);
+    if (horse?.ownerUserId) recipientIds.add(horse.ownerUserId);
+    if (entry.jockeyUserId) recipientIds.add(entry.jockeyUserId);
+  });
+  raceRefereeIds(db, race).forEach((refereeId) => recipientIds.add(refereeId));
+  db.users
+    .filter((user) => [USER_ROLES.ADMIN, USER_ROLES.SPECTATOR].includes(user.role))
+    .forEach((user) => recipientIds.add(user.id));
+
+  return recipientIds;
+};
+
+// Ghi chú: Hủy race, hoàn cược và gửi thông báo bằng một luồng thống nhất.
+const cancelRace = (db, race, entries, { refundReason, notificationMessage }) => {
+  race.status = 'cancelled';
+  race.updatedAt = new Date().toISOString();
+  const refund = refundRaceBets(db, race.id, refundReason);
+
+  raceCancellationRecipientIds(db, race, entries).forEach((userId) =>
+    createNotification(db, userId, 'Race cancelled', notificationMessage)
+  );
+
+  return {
+    settledBets: (db.bets || []).filter(
+      (bet) => bet.raceId === race.id && bet.settledAt
+    ),
+    affectedSpectators: refund.affectedUsers || [],
+  };
 };
 
 // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến registration pair.
@@ -403,7 +454,7 @@ export const createAdminRoutes = (
     const target = (db.users || []).find((user) => user.id === id);
 
     if (!target) return c.json({ message: 'User not found' }, 404);
-    if (!USER_ROLES.includes(role)) return c.json({ message: 'Invalid role' }, 400);
+    if (!USER_ROLE_VALUES.includes(role)) return c.json({ message: 'Invalid role' }, 400);
     if (!USER_STATUSES.includes(status)) return c.json({ message: 'Invalid status' }, 400);
     if (target.id === currentUser.id && (role !== 'admin' || status !== 'active')) {
       return c.json({ message: 'You cannot remove your own active admin access' }, 400);
@@ -678,24 +729,15 @@ export const createAdminRoutes = (
     );
     const registrationClosesAt = reqRegCloses ? new Date(reqRegCloses) : defaultRegistrationClosesAt;
 
-    if (!Number.isFinite(raceStartsAt.getTime())) {
-      return c.json({ message: 'Race date and time must be valid' }, 400);
-    }
-    const raceDateError = validateRaceDateInTournament(tournament, date);
-    if (raceDateError) {
-      return c.json({ message: raceDateError }, 400);
-    }
-    if (
-      !Number.isFinite(registrationOpensAt.getTime()) ||
-      !Number.isFinite(registrationClosesAt.getTime())
-    ) {
-      return c.json({ message: 'Registration open and close times must be valid' }, 400);
-    }
-    if (registrationOpensAt >= registrationClosesAt) {
-      return c.json({ message: 'Registration close time must be after open time' }, 400);
-    }
-    if (registrationClosesAt > raceStartsAt) {
-      return c.json({ message: 'Registration must close before the race starts' }, 400);
+    const scheduleError = validateRaceSchedule({
+      tournament,
+      raceDate: date,
+      raceStartsAt,
+      registrationOpensAt,
+      registrationClosesAt,
+    });
+    if (scheduleError) {
+      return c.json({ message: scheduleError }, 400);
     }
     const distanceMeters = Number(distance);
     const selectedRaceClass = (db.raceClasses || []).find(
@@ -724,15 +766,9 @@ export const createAdminRoutes = (
     ) {
       return c.json({ message: 'Rating range must be between 0 and 140' }, 400);
     }
-    if (
-      !Number.isFinite(minHandicap) ||
-      !Number.isFinite(maxHandicap) ||
-      minHandicap < MIN_CARRIED_WEIGHT_LB ||
-      maxHandicap > MAX_CARRIED_WEIGHT_LB ||
-      maxHandicap < minHandicap
-    ) {
+    if (!raceCarriedWeightRange(selectedRaceClass)) {
       return c.json(
-        { message: `Assigned weight must be between ${MIN_CARRIED_WEIGHT_LB}lb and ${MAX_CARRIED_WEIGHT_LB}lb` },
+        { message: 'Selected race class has an invalid assigned-weight range' },
         400
       );
     }
@@ -808,22 +844,15 @@ export const createAdminRoutes = (
     const regOpens = new Date(registrationOpensAt);
     const regCloses = new Date(registrationClosesAt);
     const raceStartsAt = new Date(`${date}T${time}`);
-    if (
-      !Number.isFinite(regOpens.getTime()) ||
-      !Number.isFinite(regCloses.getTime()) ||
-      !Number.isFinite(raceStartsAt.getTime())
-    ) {
-      return c.json({ message: 'Race and registration times must be valid' }, 400);
-    }
-    if (regOpens >= regCloses) {
-      return c.json({ message: 'Registration close time must be after open time' }, 400);
-    }
-    if (regCloses > raceStartsAt) {
-      return c.json({ message: 'Registration must close before the race starts' }, 400);
-    }
-    const raceDateError = validateRaceDateInTournament(tournament, date);
-    if (raceDateError) {
-      return c.json({ message: raceDateError }, 400);
+    const scheduleError = validateRaceSchedule({
+      tournament,
+      raceDate: date,
+      raceStartsAt,
+      registrationOpensAt: regOpens,
+      registrationClosesAt: regCloses,
+    });
+    if (scheduleError) {
+      return c.json({ message: scheduleError }, 400);
     }
 
     race.name = String(name).trim();
@@ -968,22 +997,15 @@ export const createAdminRoutes = (
       const regOpens = new Date(registrationOpensAt);
       const regCloses = new Date(registrationClosesAt);
       const raceStartsAt = new Date(`${date}T${time}`);
-      if (
-        !Number.isFinite(regOpens.getTime()) ||
-        !Number.isFinite(regCloses.getTime()) ||
-        !Number.isFinite(raceStartsAt.getTime())
-      ) {
-        return c.json({ message: 'Race and registration times must be valid' }, 400);
-      }
-      if (regOpens >= regCloses) {
-        return c.json({ message: 'Registration close time must be after open time' }, 400);
-      }
-      if (regCloses > raceStartsAt) {
-        return c.json({ message: 'Registration must close before the race starts' }, 400);
-      }
-      const raceDateError = validateRaceDateInTournament(tournament, date);
-      if (raceDateError) {
-        return c.json({ message: raceDateError }, 400);
+      const scheduleError = validateRaceSchedule({
+        tournament,
+        raceDate: date,
+        raceStartsAt,
+        registrationOpensAt: regOpens,
+        registrationClosesAt: regCloses,
+      });
+      if (scheduleError) {
+        return c.json({ message: scheduleError }, 400);
       }
 
       const allRaceEntries = (db.raceEntries || []).filter((entry) => entry.raceId === race.id);
@@ -1190,94 +1212,65 @@ export const createAdminRoutes = (
         return c.json({ message: 'Every participant must be marked Ready or Absent before starting the race' }, 400);
       }
       const requiredReadyCount = minReadiedParticipants(db);
-      if(readyEntries.length < requiredReadyCount) {
-        race.status = 'cancelled';
-        race.updatedAt = new Date().toISOString();
-        const refund = refundRaceBets(
+      if (readyEntries.length < requiredReadyCount) {
+        const cancellation = cancelRace(
           db,
-          race.id,
-          `${race.name} was cancelled due to insufficient participants`
+          race,
+          entries,
+          {
+            refundReason: `${race.name} was cancelled due to insufficient participants`,
+            notificationMessage: `${race.name} has been cancelled due to insufficient participants. Only ${readyEntries.length} participants were marked Ready, but at least ${requiredReadyCount} are required.`,
+          }
         );
-        settledBets = (db.bets || []).filter(
-          (bet) => bet.raceId === race.id && bet.settledAt
-        );
-        affectedSpectators = refund.affectedUsers || [];
-        const recipientIds = new Set();
-          entries.forEach((entry) => {
-        const horse = db.horses.find((item) => item.id === entry.horseId);
-        if (horse?.ownerUserId) recipientIds.add(horse.ownerUserId);
-        if (entry.jockeyUserId) recipientIds.add(entry.jockeyUserId);
+        settledBets = cancellation.settledBets;
+        affectedSpectators = cancellation.affectedSpectators;
+      } else {
+        race.status = 'in-progress';
+        race.updatedAt = new Date().toISOString();
+        entries.forEach((entry) => {
+          if (entry.preRaceStatus === 'absent') entry.disqualified = true;
         });
-       raceRefereeIds(db, race).forEach((refereeId) => recipientIds.add(refereeId));
-        db.users
-      .filter((item) => ['admin', 'spectator'].includes(item.role))
-        .forEach((item) => recipientIds.add(item.id));
 
-       recipientIds.forEach((userId) =>createNotification(db,userId,'Race cancelled',
-      `${race.name} has been cancelled due to insufficient participants. Only ${readyEntries.length} participants were marked Ready, but at least ${requiredReadyCount} are required.`
-      )
-      );
-      }else{
-      race.status = 'in-progress';
-      race.updatedAt = new Date().toISOString();
-      entries.forEach((entry) => {
-        if (entry.preRaceStatus === 'absent') entry.disqualified = true;
-      });
+        const tournament = db.tournaments.find((item) => item.id === race.tournamentId);
+        if (tournament && tournament.status !== 'completed') {
+          tournament.status = 'active';
+          tournament.updatedAt = race.updatedAt;
+          affectedTournament = tournament;
+        }
 
-      const tournament = db.tournaments.find((item) => item.id === race.tournamentId);
-      if (tournament && tournament.status !== 'completed') {
-        tournament.status = 'active';
-        tournament.updatedAt = race.updatedAt;
-        affectedTournament = tournament;
+        race.replayTimeline = buildProvisionalRaceTimeline({
+          race,
+          entries,
+          horses: db.horses,
+        });
+
+        raceRefereeIds(db, race).forEach((refereeId) =>
+          createNotification(
+            db,
+            refereeId,
+            'Race started',
+            `${race.name} has been started by Admin.`
+          )
+        );
+      }
+    }
+    if (action === 'cancel-race') {
+      if (['in-progress', 'finished', 'completed'].includes(race.status)) {
+        return c.json({ message: 'The race has started and cannot be cancelled.' }, 400);
       }
 
-      race.replayTimeline = buildProvisionalRaceTimeline({
+      const cancellation = cancelRace(
+        db,
         race,
         entries,
-        horses: db.horses,
-      });
-
-      raceRefereeIds(db, race).forEach((refereeId) =>
-        createNotification(
-          db,
-          refereeId,
-          'Race started',
-          `${race.name} has been started by Admin.`
-        )
+        {
+          refundReason: `${race.name} was cancelled`,
+          notificationMessage: `${race.name} has been cancelled by the admin`,
+        }
       );
+      settledBets = cancellation.settledBets;
+      affectedSpectators = cancellation.affectedSpectators;
     }
-    }
-    if(action === 'cancel-race'){
-      if(race.status === 'in-progress' || race.status === 'finished' || race.status === 'completed'){
-        return c.json({ message: 'The race has started and cannot be cancelled.'}, 400);
-    }
-    race.status = 'cancelled';
-        race.updatedAt = new Date().toISOString();
-        const refund = refundRaceBets(db, race.id, `${race.name} was cancelled`);
-        settledBets = (db.bets || []).filter(
-          (bet) => bet.raceId === race.id && bet.settledAt
-        );
-        affectedSpectators = refund.affectedUsers || [];
-        const recipientIds = new Set();
-          entries.forEach((entry) => {
-        const horse = db.horses.find((item) => item.id === entry.horseId);
-        if (horse?.ownerUserId) recipientIds.add(horse.ownerUserId);
-        if (entry.jockeyUserId) recipientIds.add(entry.jockeyUserId);
-        });
-       raceRefereeIds(db, race).forEach((refereeId) => recipientIds.add(refereeId));
-        db.users
-      .filter((item) => ['admin', 'spectator'].includes(item.role))
-        .forEach((item) => recipientIds.add(item.id));
-
-       recipientIds.forEach((userId) =>
-      createNotification(
-      db,
-      userId,
-      'Race cancelled',
-      `${race.name} has been cancelled by the admin`
-      )
-      );
-  }
     if (action === 'finish-race') {
       if (race.status !== 'in-progress') {
         return c.json({ message: 'Only an in-progress race can be finished' }, 400);

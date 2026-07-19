@@ -454,7 +454,9 @@ export default function TournamentPage({
                         Assigned Wt. (lb)
                       </div>
                       <p className="text-white font-semibold mt-2">
-                        {formatWeightLb(race.handicapMin ?? 115)} - {formatWeightLb(race.handicapMax ?? 135)}
+                        {race.handicapMin != null && race.handicapMax != null
+                          ? `${formatWeightLb(race.handicapMin)} - ${formatWeightLb(race.handicapMax)}`
+                          : 'Not set'}
                       </p>
                     </div>
                   </div>

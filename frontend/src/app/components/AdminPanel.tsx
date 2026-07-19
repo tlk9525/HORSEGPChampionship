@@ -421,6 +421,25 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     </button>
   );
 
+  // Ghi chú: Đồng bộ race và entry trả về sau mọi thao tác Admin trên race.
+  const applyRaceActionResult = (
+    result: Awaited<ReturnType<typeof adminRaceAction>>
+  ) => {
+    setRaces((current) =>
+      current.map((race) => (race.id === result.race.id ? result.race : race))
+    );
+    if (Array.isArray(result.entries)) {
+      setRaceEntries((current) => {
+        const updatedEntryIds = new Set(result.entries.map((entry) => entry.id));
+
+        return [
+          ...current.filter((entry) => !updatedEntryIds.has(entry.id)),
+          ...result.entries,
+        ];
+      });
+    }
+  };
+
   // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến handle race action.
   const handleRaceAction = (
     raceId: string,
@@ -434,19 +453,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   ) => {
     adminRaceAction(raceId, action)
       .then((result) => {
-        setRaces((current) =>
-          current.map((race) => (race.id === result.race.id ? result.race : race))
-        );
-        if (Array.isArray(result.entries)) {
-          setRaceEntries((current) => {
-            const updatedEntryIds = new Set(result.entries.map((entry) => entry.id));
-
-            return [
-              ...current.filter((entry) => !updatedEntryIds.has(entry.id)),
-              ...result.entries,
-            ];
-          });
-        }
+        applyRaceActionResult(result);
         setApprovalMessage(`Race status updated to ${statusLabel(result.race.status)}.`);
       })
       .catch((error) =>
@@ -463,19 +470,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     setIsCancellingRace(true);
     adminRaceAction(cancelRaceTarget.id, 'cancel-race')
       .then((result) => {
-        setRaces((current) =>
-          current.map((race) => (race.id === result.race.id ? result.race : race))
-        );
-        if (Array.isArray(result.entries)) {
-          setRaceEntries((current) => {
-            const updatedEntryIds = new Set(result.entries.map((entry) => entry.id));
-
-            return [
-              ...current.filter((entry) => !updatedEntryIds.has(entry.id)),
-              ...result.entries,
-            ];
-          });
-        }
+        applyRaceActionResult(result);
         setApprovalMessage('Race cancelled. Set a new registration window and start time to reset it.');
         sessionStorage.setItem('selectedRaceId', result.race.id);
         setCancelRaceTarget(null);

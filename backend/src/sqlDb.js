@@ -210,24 +210,12 @@ const ensureRuntimeSchema = async () => {
           CONSTRAINT "chk_race_classes_rating"
             CHECK ("ratingMin" >= 0 AND "ratingMax" <= 140 AND "ratingMin" <= "ratingMax"),
           CONSTRAINT "chk_race_classes_weight"
-            CHECK ("handicapMin" >= 110 AND "handicapMax" <= 135 AND "handicapMin" <= "handicapMax")
+            CHECK ("handicapMin" > 0 AND "handicapMin" <= "handicapMax")
         )`
       );
       await getPool().query(
         'CREATE UNIQUE INDEX IF NOT EXISTS "uq_race_classes_name_ci" ON "raceClasses" (LOWER("name"))'
       );
-      await getPool().query(`
-        INSERT INTO "raceClasses" (
-          "id", "name", "ratingMin", "ratingMax", "handicapMin", "handicapMax", "sortOrder"
-        ) VALUES
-          ('race_class_1', 'Class 1', 101, 140, 115, 135, 10),
-          ('race_class_2', 'Class 2', 81, 100, 115, 135, 20),
-          ('race_class_3', 'Class 3', 61, 80, 113, 133, 30),
-          ('race_class_4', 'Class 4', 41, 60, 112, 132, 40),
-          ('race_class_5', 'Class 5', 0, 40, 110, 130, 50),
-          ('race_class_open', 'Open', 0, 140, 110, 135, 60)
-        ON CONFLICT ("id") DO NOTHING
-      `);
     })().catch((error) => {
       runtimeSchemaPromise = null;
       throw error;
@@ -260,6 +248,55 @@ const selectAll = (tableName, orderBy) =>
 const bool = (value) => Boolean(value);
 // Trả về thời gian hiện tại dưới dạng chuỗi ISO 8601
 const nowIso = () => new Date().toISOString();
+
+// Ghi chú: Ghi notification theo cùng một mapping ở mọi transaction row-level.
+const insertNotifications = async (
+  client,
+  notifications = [],
+  { ignoreConflicts = true } = {}
+) => {
+  for (const notification of notifications) {
+    await client.query(
+      `INSERT INTO "notifications" (
+        "id", "userId", "type", "title", "message", "isRead", "createdAt"
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ${ignoreConflicts ? 'ON CONFLICT ("id") DO NOTHING' : ''}`,
+      [
+        notification.id,
+        notification.userId,
+        notification.type || 'general',
+        notification.title || '',
+        notification.message || '',
+        Boolean(notification.read),
+        notification.createdAt || nowIso(),
+      ]
+    );
+  }
+};
+
+// Ghi chú: Ghi audit log theo cùng một mapping ở các transaction xử lý race.
+const insertRaceActionLogs = async (client, actionLogs = []) => {
+  for (const log of actionLogs) {
+    await client.query(
+      `INSERT INTO "raceActionLogs" (
+        "id", "raceId", "userId", "action", "fromStatus", "toStatus", "details", "createdAt"
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ON CONFLICT ("id") DO NOTHING`,
+      [
+        log.id,
+        log.raceId,
+        log.userId || null,
+        log.action,
+        log.fromStatus || null,
+        log.toStatus || null,
+        log.details || '',
+        log.createdAt || nowIso(),
+      ]
+    );
+  }
+};
 
 // Cộng thêm số ngày vào một ngày cụ thể và trả về chuỗi ISO 8601
 const addDaysIso = (dateValue, days) =>
@@ -732,8 +769,8 @@ export const writeDb = async (db) => {
         replayTimeline: race.replayTimeline || null,
         ratingMin: race.ratingMin ?? 0,
         ratingMax: race.ratingMax ?? 140,
-        handicapMin: race.handicapMin ?? 115,
-        handicapMax: race.handicapMax ?? 135,
+        handicapMin: race.handicapMin ?? null,
+        handicapMax: race.handicapMax ?? null,
         raceNumber: race.raceNumber || '',
         createdAt: race.createdAt || null,
         updatedAt: race.updatedAt || race.createdAt || null,
@@ -1107,24 +1144,7 @@ export const persistCreatedTournament = async (tournament, notifications = []) =
       ]
     );
 
-    for (const notification of notifications) {
-      await client.query(
-        `INSERT INTO "notifications" (
-          "id", "userId", "type", "title", "message", "isRead", "createdAt"
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT ("id") DO NOTHING`,
-        [
-          notification.id,
-          notification.userId,
-          notification.type || 'general',
-          notification.title || '',
-          notification.message || '',
-          Boolean(notification.read),
-          notification.createdAt || nowIso(),
-        ]
-      );
-    }
+    await insertNotifications(client, notifications);
 
     await client.query('COMMIT');
   } catch (error) {
@@ -1316,44 +1336,8 @@ export const persistRefereeRaceAction = async ({
       );
     }
 
-    for (const notification of notifications) {
-      await client.query(
-        `INSERT INTO "notifications" (
-          "id", "userId", "type", "title", "message", "isRead", "createdAt"
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT ("id") DO NOTHING`,
-        [
-          notification.id,
-          notification.userId,
-          notification.type || 'general',
-          notification.title || '',
-          notification.message || '',
-          Boolean(notification.read),
-          notification.createdAt || nowIso(),
-        ]
-      );
-    }
-
-    for (const log of actionLogs) {
-      await client.query(
-        `INSERT INTO "raceActionLogs" (
-          "id", "raceId", "userId", "action", "fromStatus", "toStatus", "details", "createdAt"
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT ("id") DO NOTHING`,
-        [
-          log.id,
-          log.raceId,
-          log.userId || null,
-          log.action,
-          log.fromStatus || null,
-          log.toStatus || null,
-          log.details || '',
-          log.createdAt || nowIso(),
-        ]
-      );
-    }
+    await insertNotifications(client, notifications);
+    await insertRaceActionLogs(client, actionLogs);
 
     await client.query('COMMIT');
   } catch (error) {
@@ -1524,44 +1508,8 @@ export const persistAdminRaceAction = async ({
       );
     }
 
-    for (const notification of notifications) {
-      await client.query(
-        `INSERT INTO "notifications" (
-          "id", "userId", "type", "title", "message", "isRead", "createdAt"
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT ("id") DO NOTHING`,
-        [
-          notification.id,
-          notification.userId,
-          notification.type || 'general',
-          notification.title || '',
-          notification.message || '',
-          Boolean(notification.read),
-          notification.createdAt || nowIso(),
-        ]
-      );
-    }
-
-    for (const log of actionLogs) {
-      await client.query(
-        `INSERT INTO "raceActionLogs" (
-          "id", "raceId", "userId", "action", "fromStatus", "toStatus", "details", "createdAt"
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT ("id") DO NOTHING`,
-        [
-          log.id,
-          log.raceId,
-          log.userId || null,
-          log.action,
-          log.fromStatus || null,
-          log.toStatus || null,
-          log.details || '',
-          log.createdAt || nowIso(),
-        ]
-      );
-    }
+    await insertNotifications(client, notifications);
+    await insertRaceActionLogs(client, actionLogs);
 
     await client.query('COMMIT');
   } catch (error) {
@@ -1763,23 +1711,7 @@ export const persistRegisteredUser = async (
       );
     }
 
-    for (const notification of notifications) {
-      await client.query(
-        `INSERT INTO "notifications" (
-          "id", "userId", "type", "title", "message", "isRead", "createdAt"
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          notification.id,
-          notification.userId,
-          notification.type || 'general',
-          notification.title || '',
-          notification.message || '',
-          Boolean(notification.read),
-          notification.createdAt || nowIso(),
-        ]
-      );
-    }
+    await insertNotifications(client, notifications, { ignoreConflicts: false });
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');

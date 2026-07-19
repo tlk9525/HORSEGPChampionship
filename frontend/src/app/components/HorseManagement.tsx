@@ -21,8 +21,6 @@ interface HorseManagementProps {
   onSelectHorse: (horse: HorseRecord) => void;
 }
 
-const horseRating = officialHorseRating;
-
 // Ghi chú: Hàm này render màn hình owner quản lý danh sách ngựa của mình.
 export default function HorseManagement({
   onNavigate,
@@ -31,7 +29,7 @@ export default function HorseManagement({
   const [horses, setHorses] = useState<HorseRecord[]>([]);
   const [raceEntries, setRaceEntries] = useState<RaceEntryRecord[]>([]);
   const [activePairings, setActivePairings] = useState<ActivePairing[]>([]);
-  const [maxHorses, setMaxHorses] = useState(5);
+  const [maxHorses, setMaxHorses] = useState(0);
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [message, setMessage] = useState('');
@@ -43,7 +41,7 @@ export default function HorseManagement({
         setHorses(data.horses);
         setRaceEntries(data.raceEntries);
         setActivePairings(data.activePairings || []);
-        setMaxHorses(data.limits?.maxOwnerHorses || 5);
+        setMaxHorses(data.limits.maxOwnerHorses);
       })
       .catch((error) =>
         setMessage(error instanceof Error ? error.message : 'Unable to load horses')
@@ -54,7 +52,7 @@ export default function HorseManagement({
     loadPortal();
   }, []);
 
-  const canAddHorse = horses.length < maxHorses;
+  const canAddHorse = maxHorses > 0 && horses.length < maxHorses;
 
   // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến horse entry count.
   const horseEntryCount = (horseId: string) =>
@@ -180,7 +178,7 @@ export default function HorseManagement({
                   </p>
 
                   <p className="text-gray-500 mt-1">
-                    {horse.species || 'Species not set'} • {formatWeightLb(horse.weightLb)} • Official Rating {horseRating(horse)}
+                    {horse.species || 'Species not set'} • {formatWeightLb(horse.weightLb)} • Official Rating {officialHorseRating(horse)}
                   </p>
                 </div>
 
@@ -218,7 +216,7 @@ export default function HorseManagement({
                 <div className="flex items-center justify-between">
                   <span className="text-gray-400">Overall Rating</span>
                   <span className="text-white font-semibold">
-                    {horseRating(horse)}
+                    {officialHorseRating(horse)}
                   </span>
                 </div>
 

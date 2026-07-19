@@ -96,15 +96,16 @@ test('admin can edit race class parameters in the catalog', async () => {
     name: 'Open',
     ratingMin: 5,
     ratingMax: 130,
-    handicapMin: 112,
-    handicapMax: 134,
+    handicapMin: 105,
+    handicapMax: 142,
     sortOrder: 20,
     isActive: true,
   }, 'PATCH');
 
   assert.equal(result.status, 200);
   assert.equal(result.body.raceClass.ratingMin, 5);
-  assert.equal(result.body.raceClass.handicapMax, 134);
+  assert.equal(result.body.raceClass.handicapMin, 105);
+  assert.equal(result.body.raceClass.handicapMax, 142);
   assert.equal(db.raceClasses[0].ratingMax, 130);
   assert.equal(writes, 1);
 });
@@ -280,6 +281,8 @@ test('race creation rejects invalid registration timestamps', async () => {
 
 test('creating a race does not copy approved pairs from another race', async () => {
   const db = baseDb();
+  db.raceClasses[0].handicapMin = 105;
+  db.raceClasses[0].handicapMax = 142;
   const app = new Hono();
   app.route('/', createAdminRoutes(async () => db, async () => undefined));
 
@@ -302,8 +305,8 @@ test('creating a race does not copy approved pairs from another race', async () 
   assert.equal(db.raceEntries.length, 0);
   assert.equal(result.body.race.ratingMin, 0);
   assert.equal(result.body.race.ratingMax, 140);
-  assert.equal(result.body.race.handicapMin, 110);
-  assert.equal(result.body.race.handicapMax, 135);
+  assert.equal(result.body.race.handicapMin, 105);
+  assert.equal(result.body.race.handicapMax, 142);
 });
 
 test('admin cannot create a race after the tournament end date', async () => {
