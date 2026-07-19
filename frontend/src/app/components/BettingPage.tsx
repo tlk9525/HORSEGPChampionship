@@ -117,7 +117,11 @@ export default function BettingPage({
 
   // Ghi chú: Hàm này tải đồng thời dữ liệu hệ thống, ví spectator và các pot cược mới nhất.
   const loadData = () => {
-    Promise.all([getBootstrap(), getSpectatorWallet(), getRacePots()])
+    Promise.all([
+      getBootstrap({ scope: 'betting' }),
+      getSpectatorWallet(),
+      getRacePots(),
+    ])
       .then(([bootstrap, wallet, { pots, entryTotals: apiEntryTotals }]) => {
         setTournaments(bootstrap.tournaments);
         setRaces(bootstrap.races);

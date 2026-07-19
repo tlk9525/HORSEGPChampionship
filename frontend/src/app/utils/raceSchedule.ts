@@ -11,6 +11,30 @@ interface RaceScheduleInput {
   registrationClosesAt: string;
 }
 
+interface RaceRegistrationSchedule {
+  status: string;
+  registrationOpensAt?: string;
+  registrationClosesAt?: string;
+}
+
+// Ghi chú: Chuẩn hóa số thứ tự race để dùng chung khi sắp xếp lịch thi đấu.
+export const raceNumberValue = (raceNumber?: string) =>
+  Number(String(raceNumber || '').replace(/\D/g, '')) || 999;
+
+// Ghi chú: Kiểm tra race còn mở đăng ký theo status và khoảng thời gian cấu hình.
+export const raceRegistrationOpen = (race: RaceRegistrationSchedule, now = Date.now()) => {
+  if (race.status !== 'registration-open') return false;
+
+  const opensAt = race.registrationOpensAt
+    ? new Date(race.registrationOpensAt).getTime()
+    : Number.NEGATIVE_INFINITY;
+  const closesAt = race.registrationClosesAt
+    ? new Date(race.registrationClosesAt).getTime()
+    : Number.POSITIVE_INFINITY;
+
+  return now >= opensAt && now < closesAt;
+};
+
 // Ghi chú: Kiểm tra ngày race có nằm trong lịch của tournament.
 const raceDateWithinTournamentMessage = (
   tournament: TournamentSchedule | null | undefined,

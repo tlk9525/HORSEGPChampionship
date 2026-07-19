@@ -21,30 +21,12 @@ import {
 } from '../services/api';
 import { formatWeightLb, statusLabel } from '../utils/domain';
 import { messageToneClasses } from '../utils/messageTone';
+import { raceNumberValue, raceRegistrationOpen } from '../utils/raceSchedule';
 
 interface TournamentPageProps {
   currentUser: AuthUser | null;
   onNavigate: (page: string) => void;
 }
-
-// Ghi chú: Hàm này chuẩn hóa số thứ tự race để sắp xếp trong tournament.
-const raceNumberValue = (raceNumber?: string) =>
-  Number(String(raceNumber || '').replace(/\D/g, '')) || 999;
-
-// Ghi chú: Hàm này kiểm tra race còn mở đăng ký theo status và hạn đăng ký hay không.
-const raceRegistrationOpen = (race: RaceRecord) => {
-  if (race.status !== 'registration-open') return false;
-
-  const now = Date.now();
-  const opensAt = race.registrationOpensAt
-    ? new Date(race.registrationOpensAt).getTime()
-    : Number.NEGATIVE_INFINITY;
-  const closesAt = race.registrationClosesAt
-    ? new Date(race.registrationClosesAt).getTime()
-    : Number.POSITIVE_INFINITY;
-
-  return now >= opensAt && now < closesAt;
-};
 
 // Ghi chú: Hàm này render danh sách tournament cho người dùng xem và chọn.
 export default function TournamentPage({
@@ -65,7 +47,7 @@ export default function TournamentPage({
 
   // Ghi chú: Hàm này tải nghiệp vụ liên quan đến load tournaments.
   const loadTournaments = () => {
-    getBootstrap()
+    getBootstrap({ scope: 'tournaments' })
       .then((data) => {
         setTournaments(data.tournaments);
         setRaces(data.races);

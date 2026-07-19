@@ -97,6 +97,48 @@ test('bootstrap exposes backend betting cutoff and race timezone', async () => {
   assert.equal(payload.limits.raceTimezoneOffset, RACE_TIMEZONE_OFFSET);
 });
 
+test('scoped bootstrap requests only the tables needed by that read model', async () => {
+  const db = {
+    users: [],
+    sessions: [],
+    tournaments: [],
+    horses: [],
+    races: [],
+    jockeyProfiles: [],
+    jockeyRaceRegistrations: [],
+    jockeyInvitations: [],
+    horseRaceRegistrations: [],
+    raceEntries: [],
+    raceRefereeAssignments: [],
+    notifications: [],
+    systemSettings: [],
+  };
+  let readOptions;
+  const app = new Hono();
+  app.route('/', createPublicRoutes(async (options) => {
+    readOptions = options;
+    return db;
+  }));
+
+  const response = await app.request('/bootstrap/horses');
+
+  assert.equal(response.status, 200);
+  assert.ok(readOptions.includeTables.includes('horses'));
+  assert.ok(readOptions.includeTables.includes('raceEntries'));
+  assert.ok(readOptions.includeTables.includes('users'));
+  assert.equal(readOptions.includeTables.includes('bets'), false);
+  assert.equal(readOptions.includeTables.includes('creditTransactions'), false);
+});
+
+test('scoped bootstrap rejects unknown read models', async () => {
+  const app = new Hono();
+  app.route('/', createPublicRoutes(async () => assert.fail('database should not be read')));
+
+  const response = await app.request('/bootstrap/unknown');
+
+  assert.equal(response.status, 404);
+});
+
 test('racePotTotal sums pending bets for a race', () => {
   const db = buildSettlementDb();
   assert.equal(racePotTotal(db, 'race-1'), 100);
