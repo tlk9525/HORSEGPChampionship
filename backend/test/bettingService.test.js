@@ -7,6 +7,8 @@ import {
 } from '../src/config/constants.js';
 import { createPublicRoutes } from '../src/routes/publicRoutes.js';
 import {
+  parseBetLimitInput,
+  raceBetLimit,
   racePotTotal,
   raceStartMs,
   refundRaceBets,
@@ -144,6 +146,22 @@ test('racePotTotal sums pending bets for a race', () => {
   assert.equal(racePotTotal(db, 'race-1'), 100);
 });
 
+test('raceBetLimit treats missing or non-positive values as unlimited', () => {
+  assert.equal(raceBetLimit({}), null);
+  assert.equal(raceBetLimit({ betLimit: null }), null);
+  assert.equal(raceBetLimit({ betLimit: 0 }), null);
+  assert.equal(raceBetLimit({ betLimit: 25.9 }), 25);
+  assert.equal(raceBetLimit({ betLimit: 50 }), 50);
+});
+
+test('parseBetLimitInput accepts null or positive whole numbers', () => {
+  assert.deepEqual(parseBetLimitInput(''), { ok: true, betLimit: null });
+  assert.deepEqual(parseBetLimitInput(null), { ok: true, betLimit: null });
+  assert.deepEqual(parseBetLimitInput(40), { ok: true, betLimit: 40 });
+  assert.equal(parseBetLimitInput(0).ok, false);
+  assert.equal(parseBetLimitInput(12.5).ok, false);
+});
+
 test('settleRaceBets splits the pot among winning horse bettors', () => {
   const db = buildSettlementDb();
   const entries = [
@@ -190,9 +208,16 @@ test('settleRaceBets splits the pot among winning horse bettors', () => {
     db.creditTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
     100
   );
+  assert.ok(
+    db.creditTransactions
+      .filter((transaction) => transaction.type === 'bet_payout')
+      .every(
+        (transaction) => transaction.id === `bet_payout:${transaction.metadata.betId}`
+      )
+  );
 });
 
-test('settleRaceBets marks all bets lost when nobody picked the winner', () => {
+test('settleRaceBets refunds the pot when nobody picked the winner', () => {
   const db = buildSettlementDb();
   db.bets = db.bets.map((bet) =>
     bet.raceEntryId === 'entry-winner'
@@ -200,7 +225,7 @@ test('settleRaceBets marks all bets lost when nobody picked the winner', () => {
       : bet
   );
 
-  settleRaceBets(db, 'race-1', [
+  const result = settleRaceBets(db, 'race-1', [
     {
       id: 'entry-winner',
       position: 1,
@@ -209,8 +234,32 @@ test('settleRaceBets marks all bets lost when nobody picked the winner', () => {
     },
   ]);
 
-  assert.ok(db.bets.every((bet) => bet.status === 'lost'));
-  assert.ok(db.bets.every((bet) => bet.payout === 0));
+  assert.equal(result.refunded, true);
+  assert.equal(result.noWinningBets, true);
+  assert.ok(db.bets.every((bet) => bet.status === 'refunded'));
+  assert.equal(db.users.find((user) => user.id === 'spectator-a').credits, 70);
+  assert.equal(db.users.find((user) => user.id === 'spectator-b').credits, 50);
+  assert.equal(db.users.find((user) => user.id === 'spectator-c').credits, 80);
+  assert.ok(
+    db.creditTransactions.every((transaction) => transaction.type === 'bet_refunded')
+  );
+});
+
+test('settleRaceBets refunds the pot when there is no valid 1st-place finisher', () => {
+  const db = buildSettlementDb();
+  const result = settleRaceBets(db, 'race-1', [
+    {
+      id: 'entry-winner',
+      position: 1,
+      disqualified: true,
+      preRaceStatus: 'ready',
+    },
+  ]);
+
+  assert.equal(result.refunded, true);
+  assert.equal(result.winnerEntryId, null);
+  assert.ok(db.bets.every((bet) => bet.status === 'refunded'));
+  assert.equal(db.users.find((user) => user.id === 'spectator-a').credits, 70);
 });
 
 test('raceStartMs parses date and time as Vietnam time (+07:00)', () => {
@@ -234,5 +283,31 @@ test('refundRaceBets returns credits when a race is cancelled', () => {
   assert.equal(
     db.creditTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
     100
+  );
+  assert.ok(
+    db.creditTransactions.every(
+      (transaction) => transaction.id === `bet_refunded:${transaction.metadata.betId}`
+    )
+  );
+});
+
+test('refundRaceBets does not double-credit when ledger ids already exist', () => {
+  const db = buildSettlementDb();
+  refundRaceBets(db, 'race-1', 'first cancel');
+
+  db.bets.forEach((bet) => {
+    bet.status = 'pending';
+    bet.payout = 0;
+    bet.settledAt = null;
+  });
+
+  const again = refundRaceBets(db, 'race-1', 'second cancel');
+  assert.equal(again.refunded, 3);
+  assert.equal(db.users.find((user) => user.id === 'spectator-a').credits, 70);
+  assert.equal(db.users.find((user) => user.id === 'spectator-b').credits, 50);
+  assert.equal(db.users.find((user) => user.id === 'spectator-c').credits, 80);
+  assert.equal(
+    db.creditTransactions.filter((transaction) => transaction.type === 'bet_refunded').length,
+    3
   );
 });

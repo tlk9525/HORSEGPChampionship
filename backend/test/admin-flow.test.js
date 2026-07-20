@@ -255,6 +255,130 @@ test('admin can delete a tournament with all dependent race data', async () => {
   assert.equal(writes, 1);
 });
 
+test('deleting a tournament refunds pending bets before removing races', async () => {
+  const db = baseDb();
+  db.users.push({
+    id: 'spectator-1',
+    name: 'Spectator',
+    role: 'spectator',
+    status: 'active',
+    credits: 40,
+  });
+  db.races = [
+    { id: 'race-1', tournamentId: 'tournament-1', name: 'Race 1', status: 'published' },
+  ];
+  db.raceEntries = [
+    { id: 'entry-1', raceId: 'race-1', horseId: 'horse-1', status: 'approved' },
+  ];
+  db.bets = [
+    {
+      id: 'bet-1',
+      userId: 'spectator-1',
+      raceId: 'race-1',
+      raceEntryId: 'entry-1',
+      amount: 25,
+      status: 'pending',
+    },
+  ];
+  db.wallets = [{ userId: 'spectator-1', credits: 40 }];
+  db.creditTransactions = [];
+  db.notifications = [];
+
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => undefined));
+
+  const result = await requestJson(app, '/tournaments/tournament-1', undefined, 'DELETE');
+
+  assert.equal(result.status, 200);
+  assert.equal(db.users.find((user) => user.id === 'spectator-1').credits, 65);
+  assert.equal(db.bets.some((bet) => bet.raceId === 'race-1'), false);
+  assert.equal(
+    db.creditTransactions.filter((transaction) => transaction.type === 'bet_refunded').length,
+    1
+  );
+});
+
+test('admin can view and update a race bet limit', async () => {
+  const db = baseDb();
+  db.races = [
+    {
+      id: 'race-1',
+      tournamentId: 'tournament-1',
+      name: 'Feature Race',
+      status: 'published',
+      betLimit: 50,
+    },
+  ];
+  db.bets = [];
+  let writes = 0;
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => {
+    writes += 1;
+  }));
+
+  const overview = await requestJson(app, '/betting', undefined, 'GET');
+  assert.equal(overview.status, 200);
+  assert.equal(overview.body.raceSummaries.length, 1);
+  assert.equal(overview.body.raceSummaries[0].betLimit, 50);
+
+  const updated = await requestJson(app, '/races/race-1/bet-limit', { betLimit: 25 }, 'PATCH');
+  assert.equal(updated.status, 200);
+  assert.equal(updated.body.betLimit, 25);
+  assert.equal(db.races[0].betLimit, 25);
+  assert.equal(writes, 1);
+
+  const cleared = await requestJson(app, '/races/race-1/bet-limit', { betLimit: null }, 'PATCH');
+  assert.equal(cleared.status, 200);
+  assert.equal(cleared.body.betLimit, null);
+  assert.equal(db.races[0].betLimit, null);
+});
+
+test('changing a user role to spectator grants starter credits', async () => {
+  const db = baseDb();
+  db.wallets = [];
+  db.creditTransactions = [];
+  let writes = 0;
+  const app = new Hono();
+  app.route('/', createAdminRoutes(async () => db, async () => {
+    writes += 1;
+  }));
+
+  const result = await requestJson(
+    app,
+    '/users/owner-1',
+    { role: 'spectator', status: 'active' },
+    'PATCH'
+  );
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.user.role, 'spectator');
+  assert.equal(result.body.user.credits, 100);
+  assert.equal(db.users.find((user) => user.id === 'owner-1').credits, 100);
+  assert.equal(db.wallets.find((wallet) => wallet.userId === 'owner-1')?.credits, 100);
+  assert.equal(
+    db.creditTransactions.filter((transaction) => transaction.type === 'starter_bonus').length,
+    1
+  );
+  assert.equal(
+    db.creditTransactions.find((transaction) => transaction.type === 'starter_bonus')?.id,
+    'starter_bonus:owner-1'
+  );
+  assert.equal(writes, 1);
+
+  const again = await requestJson(
+    app,
+    '/users/owner-1',
+    { role: 'spectator', status: 'active' },
+    'PATCH'
+  );
+  assert.equal(again.status, 200);
+  assert.equal(
+    db.creditTransactions.filter((transaction) => transaction.type === 'starter_bonus').length,
+    1
+  );
+  assert.equal(db.users.find((user) => user.id === 'owner-1').credits, 100);
+});
+
 test('race creation rejects invalid registration timestamps', async () => {
   const db = baseDb();
   const app = new Hono();

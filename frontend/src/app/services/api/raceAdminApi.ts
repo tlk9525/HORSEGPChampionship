@@ -52,6 +52,7 @@ export const createRace = async (race: {
   registrationOpensAt: string;
   registrationClosesAt: string;
   totalPrize?: string | number;
+  betLimit?: string | number | null;
   refereeUserId: string;
   refereeUserIds?: string[];
   tournamentId?: string;
@@ -64,6 +65,15 @@ export const createRace = async (race: {
     method: 'POST',
     body: JSON.stringify(race),
   });
+
+export const updateRaceBetLimit = (raceId: string, betLimit: number | null) =>
+  request<{ race: RaceRecord; betLimit: number | null }>(
+    `/admin/races/${raceId}/bet-limit`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ betLimit }),
+    },
+  );
 
 export const updateRace = async (
   raceId: string,

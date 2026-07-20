@@ -15,6 +15,27 @@ export const createBettingPersistence = ({ ensureRuntimeSchema, getPool }) => {
     try {
       await client.query('BEGIN');
 
+      const { rows: raceRows } = await client.query(
+        `SELECT "id", "betLimit", "status"
+         FROM "races"
+         WHERE "id" = $1
+         FOR UPDATE`,
+        [bet.raceId],
+      );
+      const race = raceRows[0];
+      if (!race) {
+        await client.query('ROLLBACK');
+        return { ok: false, reason: 'race_not_found' };
+      }
+
+      const rawLimit = Number(race.betLimit);
+      const maxBet =
+        Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : null;
+      if (maxBet !== null && amount > maxBet) {
+        await client.query('ROLLBACK');
+        return { ok: false, reason: 'bet_limit', betLimit: maxBet };
+      }
+
       await client.query(
         `INSERT INTO "wallets" ("userId", "credits", "updatedAt")
          VALUES ($1, 100, $2)

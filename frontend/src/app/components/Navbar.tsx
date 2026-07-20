@@ -91,6 +91,7 @@ export default function Navbar({
     { name: 'Jockey Portal', page: 'jockeys', roles: ['jockey'] },
     { name: 'Race Operations', page: 'live-race', roles: ['admin', 'referee', 'spectator'] },
     { name: 'Betting', page: 'betting', roles: ['spectator'] },
+    { name: 'Betting', page: 'admin-betting', roles: ['admin'] },
     { name: 'Race Replay', page: 'simulation-demo', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
     { name: 'Results', page: 'results', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'], public: true },
     { name: 'Admin', page: 'admin', roles: ['admin'] },

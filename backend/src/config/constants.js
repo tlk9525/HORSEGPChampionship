@@ -9,6 +9,8 @@ export const MIN_READIED_PARTICIPANTS = Number(process.env.MIN_READIED_PARTICIPA
 export const MAX_TOURNAMENT_RACES = Number(process.env.MAX_TOURNAMENT_RACES || 10);
 export const MAX_OWNER_HORSES = Number(process.env.MAX_OWNER_HORSES || 10);
 export const SPECTATOR_STARTING_CREDITS = Number(process.env.SPECTATOR_STARTING_CREDITS || 100);
+/** Default max stake per bet when creating a race. Null/omit means unlimited. */
+export const DEFAULT_RACE_BET_LIMIT = Number(process.env.DEFAULT_RACE_BET_LIMIT || 50);
 export const BETTING_CLOSE_BEFORE_RACE_MS = 60 * 1000;
 /** Race date/time fields are entered as Vietnam wall-clock time. */
 export const RACE_TIMEZONE_OFFSET = process.env.RACE_TIMEZONE_OFFSET || '+07:00';

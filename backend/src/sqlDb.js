@@ -179,6 +179,15 @@ const ensureRuntimeSchema = async () => {
         'ALTER TABLE "races" ADD COLUMN IF NOT EXISTS "replayTimeline" JSONB'
       );
       await getPool().query(
+        `ALTER TABLE "races"
+         ADD COLUMN IF NOT EXISTS "betLimit" NUMERIC(12, 2)`
+      );
+      await getPool().query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "uq_credit_transactions_starter_bonus_user"
+          ON "creditTransactions" ("userId")
+          WHERE "type" = 'starter_bonus'
+      `);
+      await getPool().query(
         'ALTER TABLE "raceEntries" ADD COLUMN IF NOT EXISTS "resultOutcome" VARCHAR(32) NOT NULL DEFAULT \'finished\''
       );
       await getPool().query(
@@ -328,6 +337,106 @@ const upsertChangedRows = async (
   }
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến derived referee assignment id.
+const derivedRefereeAssignmentId = (raceId, refereeUserId) => {
+  const digest = createHash('sha1')
+    .update(`${raceId}:${refereeUserId}`)
+    .digest('hex')
+    .slice(0, 24);
+  return `rra_${digest}`;
+};
+
+export class RaceStateConflictError extends Error {
+  constructor(message = 'Race state changed by another request') {
+    super(message);
+    this.name = 'RaceStateConflictError';
+    this.code = 'RACE_STATE_CONFLICT';
+  }
+}
+
+/**
+ * Insert ledger rows first (ON CONFLICT DO NOTHING RETURNING).
+ * Only credit/debit the wallet when the ledger insert actually lands.
+ * balanceAfter is written from the live wallet RETURNING value.
+ */
+const applyCreditTransactionsIdempotent = async (client, creditTransactions = []) => {
+  const walletBalances = {};
+  const appliedDeltaByUser = {};
+  const sorted = [...creditTransactions].sort((left, right) => {
+    const userCmp = String(left.userId).localeCompare(String(right.userId));
+    if (userCmp !== 0) return userCmp;
+    return String(left.id).localeCompare(String(right.id));
+  });
+
+  for (const transaction of sorted) {
+    const amount = Number(transaction.amount);
+    const updatedAt = transaction.createdAt || nowIso();
+    if (!Number.isFinite(amount) || amount === 0) continue;
+
+    await client.query(
+      `INSERT INTO "wallets" ("userId", "credits", "updatedAt")
+       VALUES ($1, 0, $2)
+       ON CONFLICT ("userId") DO NOTHING`,
+      [transaction.userId, updatedAt]
+    );
+
+    await client.query(
+      `SELECT "credits" FROM "wallets" WHERE "userId" = $1 FOR UPDATE`,
+      [transaction.userId]
+    );
+
+    const { rows: insertedRows } = await client.query(
+      `INSERT INTO "creditTransactions" (
+        "id", "userId", "type", "amount", "balanceAfter", "metadata", "createdAt"
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT ("id") DO NOTHING
+      RETURNING "id"`,
+      [
+        transaction.id,
+        transaction.userId,
+        transaction.type,
+        amount,
+        0,
+        transaction.metadata || null,
+        updatedAt,
+      ]
+    );
+
+    if (!insertedRows.length) {
+      continue;
+    }
+
+    const { rows: walletRows } = await client.query(
+      `UPDATE "wallets"
+       SET "credits" = "credits" + $2,
+           "updatedAt" = $3
+       WHERE "userId" = $1
+       RETURNING "credits"`,
+      [transaction.userId, amount, updatedAt]
+    );
+    const nextCredits = Number(walletRows[0]?.credits ?? 0);
+    if (nextCredits < 0) {
+      throw new Error(
+        `Insufficient credits while applying ${transaction.type} for ${transaction.userId}`
+      );
+    }
+
+    await client.query(
+      `UPDATE "creditTransactions"
+       SET "balanceAfter" = $2
+       WHERE "id" = $1`,
+      [transaction.id, nextCredits]
+    );
+
+    transaction.balanceAfter = nextCredits;
+    walletBalances[transaction.userId] = nextCredits;
+    appliedDeltaByUser[transaction.userId] =
+      (appliedDeltaByUser[transaction.userId] || 0) + amount;
+  }
+
+  return { walletBalances, appliedDeltaByUser };
+};
 const tableDeleteOrder = [
   'notifications',
   'sessions',
@@ -426,6 +535,7 @@ export const {
 export const {
   persistLoginSession,
   persistRegisteredUser,
+  persistEnsureSpectatorStarterCredits,
   persistSystemSettings,
   deleteSession,
 } = userPersistence;

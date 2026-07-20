@@ -1,6 +1,9 @@
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
-import { ACTIVE_TOURNAMENT_STATUSES } from '../config/constants.js';
+import {
+  ACTIVE_TOURNAMENT_STATUSES,
+  DEFAULT_RACE_BET_LIMIT,
+} from '../config/constants.js';
 import { requireRole } from '../services/authService.js';
 import {
   approvedRaceEntries,
@@ -27,7 +30,12 @@ import {
 import {
   systemSettingsFromDb,
 } from '../services/systemSettingsService.js';
-import { racePotTotal } from '../services/bettingService.js';
+import {
+  parseBetLimitInput,
+  raceBetLimit,
+  racePotTotal,
+  refundRaceBets,
+} from '../services/bettingService.js';
 import {
   registerAdminConfigurationRoutes,
   sortedRaceClasses,
@@ -113,7 +121,8 @@ export const createAdminRoutes = (
   writeDb,
   persistAdminRaceAction,
   persistSystemSettings,
-  persistCreatedTournament
+  persistCreatedTournament,
+  persistEnsureSpectatorStarterCredits
 ) => {
   const app = new Hono();
 
@@ -136,35 +145,56 @@ export const createAdminRoutes = (
   app.get('/betting', (c) => {
     const db = c.get('db');
     const bets = db.bets || [];
-    const raceIds = [...new Set(bets.map((bet) => bet.raceId))];
+    const betRaceIds = new Set(bets.map((bet) => bet.raceId));
+    const configurableStatuses = new Set([
+      'registration-open',
+      'registration-closed',
+      'published',
+      'in-progress',
+      'finished',
+      'completed',
+    ]);
+    const raceIds = [
+      ...new Set([
+        ...betRaceIds,
+        ...(db.races || [])
+          .filter((race) => configurableStatuses.has(race.status))
+          .map((race) => race.id),
+      ]),
+    ];
 
-    const raceSummaries = raceIds.map((raceId) => {
-      const race = db.races.find((item) => item.id === raceId);
-      const raceBets = bets.filter((bet) => bet.raceId === raceId);
-      const bettorIds = new Set(raceBets.map((bet) => bet.userId));
-      const pending = raceBets.filter((bet) => bet.status === 'pending');
-      const won = raceBets.filter((bet) => bet.status === 'won');
-      const lost = raceBets.filter((bet) => bet.status === 'lost');
-      const refunded = raceBets.filter((bet) => bet.status === 'refunded');
+    const raceSummaries = raceIds
+      .map((raceId) => {
+        const race = db.races.find((item) => item.id === raceId);
+        if (!race) return null;
+        const raceBets = bets.filter((bet) => bet.raceId === raceId);
+        const bettorIds = new Set(raceBets.map((bet) => bet.userId));
+        const pending = raceBets.filter((bet) => bet.status === 'pending');
+        const won = raceBets.filter((bet) => bet.status === 'won');
+        const lost = raceBets.filter((bet) => bet.status === 'lost');
+        const refunded = raceBets.filter((bet) => bet.status === 'refunded');
 
-      return {
-        raceId,
-        raceName: race?.name || raceId,
-        raceStatus: race?.status || 'unknown',
-        totalBets: raceBets.length,
-        uniqueBettors: bettorIds.size,
-        poolTotal: racePotTotal(db, raceId),
-        totalWagered: raceBets.reduce((sum, bet) => sum + Number(bet.amount || 0), 0),
-        totalPaidOut: won.reduce((sum, bet) => sum + Number(bet.payout || 0), 0),
-        totalRefunded: refunded.reduce((sum, bet) => sum + Number(bet.payout || 0), 0),
-        counts: {
-          pending: pending.length,
-          won: won.length,
-          lost: lost.length,
-          refunded: refunded.length,
-        },
-      };
-    });
+        return {
+          raceId,
+          raceName: race.name || raceId,
+          raceStatus: race.status || 'unknown',
+          betLimit: raceBetLimit(race),
+          totalBets: raceBets.length,
+          uniqueBettors: bettorIds.size,
+          poolTotal: racePotTotal(db, raceId),
+          totalWagered: raceBets.reduce((sum, bet) => sum + Number(bet.amount || 0), 0),
+          totalPaidOut: won.reduce((sum, bet) => sum + Number(bet.payout || 0), 0),
+          totalRefunded: refunded.reduce((sum, bet) => sum + Number(bet.payout || 0), 0),
+          counts: {
+            pending: pending.length,
+            won: won.length,
+            lost: lost.length,
+            refunded: refunded.length,
+          },
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => String(a.raceName).localeCompare(String(b.raceName)));
 
     const spectators = db.users
       .filter((user) => user.role === 'spectator')
@@ -188,7 +218,48 @@ export const createAdminRoutes = (
     return c.json({ raceSummaries, spectators });
   });
 
-  registerAdminConfigurationRoutes(app, { writeDb, persistSystemSettings });
+  app.patch('/races/:raceId/bet-limit', async (c) => {
+    const db = c.get('db');
+    const race = db.races.find((item) => item.id === c.req.param('raceId'));
+    if (!race) return c.json({ message: 'Race not found' }, 404);
+
+    if (['completed', 'cancelled'].includes(race.status)) {
+      return c.json(
+        { message: 'Bet limit cannot be changed after a race is completed or cancelled.' },
+        400
+      );
+    }
+
+    const body = await c.req.json();
+    const parsed = parseBetLimitInput(body?.betLimit);
+    if (!parsed.ok) {
+      return c.json({ message: parsed.message }, 400);
+    }
+
+    race.betLimit = parsed.betLimit;
+    race.updatedAt = new Date().toISOString();
+    recordRaceAction(db, {
+      raceId: race.id,
+      userId: c.get('user').id,
+      action: 'set-bet-limit',
+      fromStatus: race.status,
+      toStatus: race.status,
+      details:
+        parsed.betLimit === null
+          ? 'Cleared race bet limit (unlimited)'
+          : `Set race bet limit to ${parsed.betLimit} credits`,
+    });
+
+    await writeDb(db);
+    broadcastRaceUpdate(race.id);
+    return c.json({ race, betLimit: race.betLimit });
+  });
+
+  registerAdminConfigurationRoutes(app, {
+    writeDb,
+    persistSystemSettings,
+    persistEnsureSpectatorStarterCredits,
+  });
   registerAdminRaceLifecycleRoutes(app, { writeDb, persistAdminRaceAction });
 
   // Lấy dữ liệu trang tạo cuộc đua: giải, các cuộc đua hiện có, danh sách trọng tài
@@ -355,6 +426,13 @@ export const createAdminRoutes = (
       (log) => !raceIds.has(log.raceId)
     );
 
+    // Refund pending bets before races/entries are removed (CASCADE would
+    // otherwise delete bet rows and leave stakes deducted from wallets).
+    for (const raceId of raceIds) {
+      refundRaceBets(db, raceId, `${tournament.name} was deleted`);
+    }
+    db.bets = (db.bets || []).filter((bet) => !raceIds.has(bet.raceId));
+
     notifyAdmins(db, 'Tournament deleted', `${tournament.name} was deleted by ${user.name}.`);
 
     await writeDb(db);
@@ -373,7 +451,7 @@ export const createAdminRoutes = (
     const db = c.get('db');
     const {
       tournamentId, raceNumber, name, round, date, time, venue, distance, surface,
-      raceClassId, raceClass, totalPrize, refereeUserId, refereeUserIds,
+      raceClassId, raceClass, totalPrize, betLimit, refereeUserId, refereeUserIds,
       registrationOpensAt: reqRegOpens, registrationClosesAt: reqRegCloses,
     } = await c.req.json();
 
@@ -475,13 +553,23 @@ export const createAdminRoutes = (
       return c.json({ message: `${raceNumber} already exists in this tournament` }, 409);
     }
 
+    const parsedBetLimit =
+      betLimit === undefined
+        ? { ok: true, betLimit: DEFAULT_RACE_BET_LIMIT > 0 ? DEFAULT_RACE_BET_LIMIT : null }
+        : parseBetLimitInput(betLimit);
+    if (!parsedBetLimit.ok) {
+      return c.json({ message: parsedBetLimit.message }, 400);
+    }
+
     const race = {
       id: randomUUID(), tournamentId: tournament.id, raceNumber: raceNumber || '',
       name, round: round || '', date, time, venue,
       distance: `${distanceMeters}m`, surface, raceClass: selectedRaceClass.name,
       ratingMin: Math.round(minRating), ratingMax: Math.round(maxRating),
       handicapMin: minHandicap, handicapMax: maxHandicap,
-      totalPrize: Number(totalPrize) || 0, status: 'registration-open',
+      totalPrize: Number(totalPrize) || 0,
+      betLimit: parsedBetLimit.betLimit,
+      status: 'registration-open',
       participants: 0, ownerConfirmed: 0, jockeyConfirmed: 0,
       registrationOpensAt: registrationOpensAt.toISOString(),
       registrationClosesAt: registrationClosesAt.toISOString(),
