@@ -126,6 +126,13 @@ const recordCreditTransaction = (
 
 export const creditTransactionIdForBet = (type, betId) => `${type}:${betId}`;
 
+/** Stable ledger id so concurrent starter grants collide on PK instead of double-paying. */
+export const creditTransactionIdForStarterBonus = (userId) =>
+  `${CREDIT_TRANSACTION_TYPES.STARTER_BONUS}:${userId}`;
+
+const findCreditTransactionById = (db, id) =>
+  (db.creditTransactions || []).find((transaction) => transaction.id === id);
+
 // Ghi chú: Hàm này cấp số credit ban đầu cho spectator mới và ghi nhận giao dịch thưởng.
 export const grantStarterCredits = (
   db,
@@ -137,10 +144,21 @@ export const grantStarterCredits = (
   const user = db.users.find((item) => item.id === userId);
   if (!user) return null;
 
+  const transactionId = creditTransactionIdForStarterBonus(userId);
+  const existing = findCreditTransactionById(db, transactionId);
+  if (existing) {
+    if (user.credits == null) {
+      user.credits = Number(existing.balanceAfter ?? amount);
+    }
+    syncWalletCredits(db, userId, user.credits, createdAt);
+    return existing;
+  }
+
   user.credits = Number(amount);
   user.updatedAt = createdAt;
   syncWalletCredits(db, userId, user.credits, createdAt);
   return recordCreditTransaction(db, {
+    id: transactionId,
     userId,
     type: CREDIT_TRANSACTION_TYPES.STARTER_BONUS,
     amount: Number(amount),
@@ -152,7 +170,7 @@ export const grantStarterCredits = (
 
 /**
  * Grant starter credits when a user becomes a spectator (registration or role change).
- * Idempotent: skips if a starter_bonus ledger entry already exists.
+ * Idempotent: skips if the fixed starter_bonus:{userId} ledger entry already exists.
  */
 export const ensureSpectatorStarterCredits = (
   db,
@@ -164,11 +182,14 @@ export const ensureSpectatorStarterCredits = (
   const user = db.users.find((item) => item.id === userId);
   if (!user) return null;
 
-  const alreadyGranted = (db.creditTransactions || []).some(
-    (transaction) =>
-      transaction.userId === userId &&
-      transaction.type === CREDIT_TRANSACTION_TYPES.STARTER_BONUS
-  );
+  const transactionId = creditTransactionIdForStarterBonus(userId);
+  const alreadyGranted =
+    Boolean(findCreditTransactionById(db, transactionId)) ||
+    (db.creditTransactions || []).some(
+      (transaction) =>
+        transaction.userId === userId &&
+        transaction.type === CREDIT_TRANSACTION_TYPES.STARTER_BONUS
+    );
   if (alreadyGranted) {
     if (user.credits == null) {
       const wallet = (db.wallets || []).find((item) => item.userId === userId);
@@ -190,8 +211,16 @@ export const debitCredits = (
 ) => {
   const parsedAmount = Number(amount);
   const user = db.users.find((item) => item.id === userId);
-  const currentCredits = Number(user?.credits ?? 0);
   if (!user || !Number.isFinite(parsedAmount) || parsedAmount <= 0) return null;
+
+  if (id) {
+    const existing = findCreditTransactionById(db, id);
+    if (existing) {
+      return { user, transaction: existing, credits: Number(user.credits ?? 0) };
+    }
+  }
+
+  const currentCredits = Number(user.credits ?? 0);
   if (currentCredits < parsedAmount) return null;
 
   user.credits = currentCredits - parsedAmount;
@@ -219,6 +248,13 @@ export const creditCredits = (
   const parsedAmount = Number(amount);
   const user = db.users.find((item) => item.id === userId);
   if (!user || !Number.isFinite(parsedAmount) || parsedAmount <= 0) return null;
+
+  if (id) {
+    const existing = findCreditTransactionById(db, id);
+    if (existing) {
+      return { user, transaction: existing, credits: Number(user.credits ?? 0) };
+    }
+  }
 
   user.credits = Number(user.credits ?? 0) + parsedAmount;
   user.updatedAt = createdAt;

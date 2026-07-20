@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   CREDIT_TRANSACTION_TYPES,
   awardDailyLoginBonus,
+  creditCredits,
   ensureSpectatorStarterCredits,
   grantStarterCredits,
 } from '../src/services/creditService.js';
@@ -28,6 +29,7 @@ test('new spectator receives 100 starter credits with a ledger entry', () => {
   assert.equal(db.users[0].credits, 100);
   assert.equal(db.wallets[0].credits, 100);
   assert.equal(db.creditTransactions[0].type, CREDIT_TRANSACTION_TYPES.STARTER_BONUS);
+  assert.equal(db.creditTransactions[0].id, 'starter_bonus:spectator-1');
   assert.equal(db.creditTransactions[0].amount, 100);
   assert.equal(db.creditTransactions[0].balanceAfter, 100);
 });
@@ -55,9 +57,52 @@ test('ensureSpectatorStarterCredits grants once and is idempotent', () => {
   );
 
   assert.equal(first?.amount, 100);
+  assert.equal(first?.id, 'starter_bonus:owner-1');
   assert.equal(first?.metadata?.source, 'spectator_role_change');
   assert.equal(second, null);
   assert.equal(db.users[0].credits, 100);
+  assert.equal(db.creditTransactions.length, 1);
+});
+
+test('concurrent-style starter grants on separate snapshots share one fixed ledger id', () => {
+  const firstDb = {
+    users: [{ id: 'owner-1', role: 'owner', credits: null }],
+    wallets: [],
+    creditTransactions: [],
+  };
+  const secondDb = {
+    users: [{ id: 'owner-1', role: 'owner', credits: null }],
+    wallets: [],
+    creditTransactions: [],
+  };
+
+  const first = ensureSpectatorStarterCredits(firstDb, 'owner-1');
+  const second = ensureSpectatorStarterCredits(secondDb, 'owner-1');
+
+  assert.equal(first.id, second.id);
+  assert.equal(first.id, 'starter_bonus:owner-1');
+  assert.equal(firstDb.users[0].credits, 100);
+  assert.equal(secondDb.users[0].credits, 100);
+});
+
+test('creditCredits ignores a second apply with the same transaction id', () => {
+  const db = buildDb();
+  db.users[0].credits = 40;
+
+  const first = creditCredits(db, 'spectator-1', 25, {
+    id: 'bet_refunded:bet-1',
+    type: CREDIT_TRANSACTION_TYPES.BET_REFUNDED,
+    metadata: { betId: 'bet-1' },
+  });
+  const second = creditCredits(db, 'spectator-1', 25, {
+    id: 'bet_refunded:bet-1',
+    type: CREDIT_TRANSACTION_TYPES.BET_REFUNDED,
+    metadata: { betId: 'bet-1' },
+  });
+
+  assert.equal(first.credits, 65);
+  assert.equal(second.credits, 65);
+  assert.equal(db.users[0].credits, 65);
   assert.equal(db.creditTransactions.length, 1);
 });
 

@@ -71,7 +71,7 @@ const sanitizeRaceClass = (input, current = {}) => {
 // Đăng ký các route quản lý user, system settings và race class catalog.
 export const registerAdminConfigurationRoutes = (
   app,
-  { writeDb, persistSystemSettings }
+  { writeDb, persistSystemSettings, persistEnsureSpectatorStarterCredits }
 ) => {
   app.get('/users', (c) => {
     const db = c.get('db');
@@ -192,6 +192,22 @@ export const registerAdminConfigurationRoutes = (
     }
 
     await writeDb(db);
+
+    if (becomingSpectator && persistEnsureSpectatorStarterCredits) {
+      const starter = await persistEnsureSpectatorStarterCredits({
+        userId: target.id,
+        source: 'spectator_role_change',
+        createdAt: target.updatedAt,
+      });
+      if (starter?.ok) {
+        target.credits = starter.credits;
+        const wallet = (db.wallets || []).find((item) => item.userId === target.id);
+        if (wallet) {
+          wallet.credits = starter.credits;
+          wallet.updatedAt = target.updatedAt;
+        }
+      }
+    }
 
     return c.json({ user: publicUser(target), users: sortedPublicUsers(db) });
   });

@@ -121,7 +121,8 @@ export const createAdminRoutes = (
   writeDb,
   persistAdminRaceAction,
   persistSystemSettings,
-  persistCreatedTournament
+  persistCreatedTournament,
+  persistEnsureSpectatorStarterCredits
 ) => {
   const app = new Hono();
 
@@ -254,7 +255,11 @@ export const createAdminRoutes = (
     return c.json({ race, betLimit: race.betLimit });
   });
 
-  registerAdminConfigurationRoutes(app, { writeDb, persistSystemSettings });
+  registerAdminConfigurationRoutes(app, {
+    writeDb,
+    persistSystemSettings,
+    persistEnsureSpectatorStarterCredits,
+  });
   registerAdminRaceLifecycleRoutes(app, { writeDb, persistAdminRaceAction });
 
   // Lấy dữ liệu trang tạo cuộc đua: giải, các cuộc đua hiện có, danh sách trọng tài

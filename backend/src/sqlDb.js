@@ -182,6 +182,11 @@ const ensureRuntimeSchema = async () => {
         `ALTER TABLE "races"
          ADD COLUMN IF NOT EXISTS "betLimit" NUMERIC(12, 2)`
       );
+      await getPool().query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "uq_credit_transactions_starter_bonus_user"
+          ON "creditTransactions" ("userId")
+          WHERE "type" = 'starter_bonus'
+      `);
       await getPool().query(
         'ALTER TABLE "raceEntries" ADD COLUMN IF NOT EXISTS "resultOutcome" VARCHAR(32) NOT NULL DEFAULT \'finished\''
       );
@@ -530,6 +535,7 @@ export const {
 export const {
   persistLoginSession,
   persistRegisteredUser,
+  persistEnsureSpectatorStarterCredits,
   persistSystemSettings,
   deleteSession,
 } = userPersistence;

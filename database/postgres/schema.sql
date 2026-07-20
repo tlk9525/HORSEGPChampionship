@@ -110,7 +110,6 @@ CREATE TABLE "races" (
   "handicapMin" NUMERIC(6, 2) NOT NULL,
   "handicapMax" NUMERIC(6, 2) NOT NULL,
   "totalPrize" NUMERIC(14, 2) NOT NULL DEFAULT 0,
-  "betLimit" NUMERIC(12, 2) CHECK ("betLimit" IS NULL OR "betLimit" > 0),
   "status" VARCHAR(64) NOT NULL DEFAULT 'draft',
   "participants" INTEGER NOT NULL DEFAULT 0,
   "ownerConfirmed" INTEGER NOT NULL DEFAULT 0,

@@ -194,11 +194,23 @@ export const createSpectatorRoutes = (
         if (result.reason === 'insufficient') {
           return c.json({ message: 'Insufficient credits for this bet.' }, 400);
         }
+        if (result.reason === 'bet_limit') {
+          return c.json(
+            {
+              message: `Bet amount exceeds this race's limit of ${result.betLimit} credits per bet.`,
+              betLimit: result.betLimit,
+            },
+            400
+          );
+        }
         if (result.reason === 'duplicate') {
           return c.json(
             { message: 'You already have an active bet on this horse for this race.' },
             409
           );
+        }
+        if (result.reason === 'race_not_found') {
+          return c.json({ message: 'Race not found.' }, 404);
         }
         return c.json({ message: 'Unable to place bet.' }, 500);
       }

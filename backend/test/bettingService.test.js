@@ -290,3 +290,24 @@ test('refundRaceBets returns credits when a race is cancelled', () => {
     )
   );
 });
+
+test('refundRaceBets does not double-credit when ledger ids already exist', () => {
+  const db = buildSettlementDb();
+  refundRaceBets(db, 'race-1', 'first cancel');
+
+  db.bets.forEach((bet) => {
+    bet.status = 'pending';
+    bet.payout = 0;
+    bet.settledAt = null;
+  });
+
+  const again = refundRaceBets(db, 'race-1', 'second cancel');
+  assert.equal(again.refunded, 3);
+  assert.equal(db.users.find((user) => user.id === 'spectator-a').credits, 70);
+  assert.equal(db.users.find((user) => user.id === 'spectator-b').credits, 50);
+  assert.equal(db.users.find((user) => user.id === 'spectator-c').credits, 80);
+  assert.equal(
+    db.creditTransactions.filter((transaction) => transaction.type === 'bet_refunded').length,
+    3
+  );
+});

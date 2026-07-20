@@ -359,6 +359,10 @@ test('changing a user role to spectator grants starter credits', async () => {
     db.creditTransactions.filter((transaction) => transaction.type === 'starter_bonus').length,
     1
   );
+  assert.equal(
+    db.creditTransactions.find((transaction) => transaction.type === 'starter_bonus')?.id,
+    'starter_bonus:owner-1'
+  );
   assert.equal(writes, 1);
 
   const again = await requestJson(
