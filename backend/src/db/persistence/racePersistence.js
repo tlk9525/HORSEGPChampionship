@@ -13,7 +13,9 @@ export class RaceStateConflictError extends Error {
   }
 }
 
+// Khởi tạo các hàm persistence ghi dữ liệu tournament và race theo từng transaction nhỏ.
 export const createRacePersistence = ({ ensureRuntimeSchema, getPool }) => {
+  // Tạo tournament và các notification liên quan trong cùng một transaction.
   const persistCreatedTournament = async (tournament, notifications = []) => {
     await ensureRuntimeSchema();
 

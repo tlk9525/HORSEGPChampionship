@@ -64,12 +64,14 @@ const isBettingOpen = (
   return Date.now() < startMs - bettingCloseBeforeRaceMs;
 };
 
+// Ghi chú: Chuẩn hóa bet limit của race thành số nguyên dương hoặc không giới hạn.
 const raceMaxBet = (race: RaceRecord) => {
   const limit = Number(race.betLimit);
   if (!Number.isFinite(limit) || limit <= 0) return null;
   return Math.floor(limit);
 };
 
+// Ghi chú: Tính chuỗi đếm ngược đến thời điểm đóng cược của race.
 const formatCountdown = (
   race: RaceRecord,
   bettingCloseBeforeRaceMs: number,

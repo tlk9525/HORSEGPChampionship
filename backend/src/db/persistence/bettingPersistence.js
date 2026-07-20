@@ -7,10 +7,11 @@ import {
 import { CREDIT_TRANSACTION_TYPES } from '../../services/creditService.js';
 import { nowIso } from './persistenceHelpers.js';
 
+// Khởi tạo các hàm persistence xử lý đặt và hủy cược bằng transaction database.
 export const createBettingPersistence = ({ ensureRuntimeSchema, getPool }) => {
   /**
-   * Atomically debit wallet credits and insert a pending bet.
-   * Uses SELECT ... FOR UPDATE to prevent double-spend under concurrent requests.
+   * Trừ credit và tạo cược pending trong cùng một transaction.
+   * Khóa row bằng SELECT ... FOR UPDATE để tránh chi tiêu hai lần khi có request đồng thời.
    */
   const persistPlaceBet = async ({ userId, bet, amount }) => {
     await ensureRuntimeSchema();
@@ -124,7 +125,7 @@ export const createBettingPersistence = ({ ensureRuntimeSchema, getPool }) => {
   };
 
   /**
-   * Atomically cancel a pending bet and refund credits to the wallet.
+   * Hủy cược pending và hoàn credit về ví trong cùng một transaction.
    */
   const persistCancelBet = async ({
     userId,
