@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { nowIso, rowTimestamps } from './persistenceHelpers.js';
 
+// Tạo ID ổn định cho một cặp race và referee khi snapshot chưa có assignment ID.
 const derivedRefereeAssignmentId = (raceId, refereeUserId) => {
   const digest = createHash('sha1')
     .update(`${raceId}:${refereeUserId}`)
@@ -99,6 +100,7 @@ export const writeRaceSnapshot = async ({ db, writeRows }) => {
       'handicapMin',
       'handicapMax',
       'totalPrize',
+      'betLimit',
       'status',
       'participants',
       'ownerConfirmed',
@@ -125,6 +127,7 @@ export const writeRaceSnapshot = async ({ db, writeRows }) => {
       ratingMax: race.ratingMax ?? 140,
       handicapMin: race.handicapMin ?? null,
       handicapMax: race.handicapMax ?? null,
+      betLimit: race.betLimit ?? null,
       raceNumber: race.raceNumber || '',
       createdAt: race.createdAt || null,
       updatedAt: race.updatedAt || race.createdAt || null,

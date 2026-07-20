@@ -8,6 +8,7 @@ import { requireRole } from '../services/authService.js';
 import { publicRaceEntries } from '../services/domainService.js';
 import {
   isBettableEntry,
+  raceBetLimit,
   racePotTotal,
   raceStartMs,
 } from '../services/bettingService.js';
@@ -143,6 +144,17 @@ export const createSpectatorRoutes = (
       );
     }
 
+    const maxBet = raceBetLimit(race);
+    if (maxBet !== null && parsedAmount > maxBet) {
+      return c.json(
+        {
+          message: `Bet amount exceeds this race's limit of ${maxBet} credits per bet.`,
+          betLimit: maxBet,
+        },
+        400
+      );
+    }
+
     const dbUser = db.users.find((item) => item.id === user.id);
     const currentCredits = Number(dbUser?.credits ?? 0);
     if (currentCredits < parsedAmount) {
@@ -182,10 +194,34 @@ export const createSpectatorRoutes = (
         if (result.reason === 'insufficient') {
           return c.json({ message: 'Insufficient credits for this bet.' }, 400);
         }
+        if (result.reason === 'bet_limit') {
+          return c.json(
+            {
+              message: `Bet amount exceeds this race's limit of ${result.betLimit} credits per bet.`,
+              betLimit: result.betLimit,
+            },
+            400
+          );
+        }
         if (result.reason === 'duplicate') {
           return c.json(
             { message: 'You already have an active bet on this horse for this race.' },
             409
+          );
+        }
+        if (result.reason === 'race_not_found') {
+          return c.json({ message: 'Race not found.' }, 404);
+        }
+        if (result.reason === 'entry_not_bettable') {
+          return c.json(
+            { message: 'Race entry is no longer available for betting.' },
+            400
+          );
+        }
+        if (result.reason === 'betting_closed') {
+          return c.json(
+            { message: 'Betting is closed or no longer open for this race.' },
+            400
           );
         }
         return c.json({ message: 'Unable to place bet.' }, 500);
@@ -257,6 +293,7 @@ export const createSpectatorRoutes = (
       const result = await persistCancelBet({
         userId: user.id,
         betId: bet.id,
+        raceId: bet.raceId,
         amount,
         settledAt: now,
       });
@@ -266,6 +303,12 @@ export const createSpectatorRoutes = (
         }
         if (result.reason === 'not_pending') {
           return c.json({ message: 'Only pending bets can be cancelled.' }, 400);
+        }
+        if (result.reason === 'betting_closed') {
+          return c.json(
+            { message: 'Cannot cancel because betting for this race has closed.' },
+            400
+          );
         }
         return c.json({ message: 'Unable to cancel bet.' }, 500);
       }

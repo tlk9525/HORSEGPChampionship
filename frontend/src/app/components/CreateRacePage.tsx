@@ -73,6 +73,7 @@ export default function CreateRacePage({
     surfaceType: '',
     raceClassId: '',
     totalPrize: '',
+    betLimit: '50',
     refereeUserIds: [] as string[],
   });
 
@@ -197,6 +198,7 @@ export default function CreateRacePage({
       surface: form.surfaceType,
       raceClassId: form.raceClassId,
       totalPrize: form.totalPrize,
+      betLimit: form.betLimit === '' ? null : form.betLimit,
       refereeUserIds: form.refereeUserIds,
       refereeUserId: form.refereeUserIds[0],
     })
@@ -426,6 +428,24 @@ export default function CreateRacePage({
                       setForm({ ...form, totalPrize: event.target.value })
                     }
                   />
+                </div>
+
+                <div className="min-w-0">
+                  <label className="block text-gray-300 mb-2">Max Bet (credits)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="Empty = unlimited"
+                    className={fieldClass}
+                    value={form.betLimit}
+                    onChange={(event) =>
+                      setForm({ ...form, betLimit: event.target.value })
+                    }
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Maximum credits a spectator can wager on one horse. Leave empty for unlimited.
+                  </p>
                 </div>
 
                 <div className="min-w-0">

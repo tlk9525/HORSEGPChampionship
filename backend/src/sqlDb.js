@@ -2,6 +2,8 @@ import pg from 'pg';
 import { buildReadModel, readTableOrder } from './db/readModel.js';
 import { createBettingPersistence } from './db/persistence/bettingPersistence.js';
 import { writeBettingSnapshot } from './db/persistence/bettingSnapshotPersistence.js';
+import { applyCreditTransactionsIdempotent } from './db/persistence/creditPersistence.js';
+import { nowIso } from './db/persistence/persistenceHelpers.js';
 import { createRacePersistence } from './db/persistence/racePersistence.js';
 import { writeRaceSnapshot } from './db/persistence/raceSnapshotPersistence.js';
 import { createUserPersistence } from './db/persistence/userPersistence.js';
@@ -66,8 +68,7 @@ const requiredRuntimeTables = [
   'creditTransactions',
 ];
 
-// Betting schema is soft-created after core tables exist so existing DBs
-// without wallets/bets do not fail /api/spectator/* with "Request failed".
+// Tạo bổ sung schema betting sau các bảng lõi để database cũ vẫn phục vụ được API spectator.
 const ensureBettingSchema = async () => {
   await getPool().query(`
     CREATE TABLE IF NOT EXISTS "wallets" (
@@ -177,6 +178,10 @@ const ensureRuntimeSchema = async () => {
 
       await getPool().query(
         'ALTER TABLE "races" ADD COLUMN IF NOT EXISTS "replayTimeline" JSONB'
+      );
+      await getPool().query(
+        `ALTER TABLE "races"
+         ADD COLUMN IF NOT EXISTS "betLimit" NUMERIC(12, 2)`
       );
       await getPool().query(
         'ALTER TABLE "raceEntries" ADD COLUMN IF NOT EXISTS "resultOutcome" VARCHAR(32) NOT NULL DEFAULT \'finished\''
@@ -328,6 +333,15 @@ const upsertChangedRows = async (
   }
 };
 
+// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến derived referee assignment id.
+const derivedRefereeAssignmentId = (raceId, refereeUserId) => {
+  const digest = createHash('sha1')
+    .update(`${raceId}:${refereeUserId}`)
+    .digest('hex')
+    .slice(0, 24);
+  return `rra_${digest}`;
+};
+
 const tableDeleteOrder = [
   'notifications',
   'sessions',
@@ -359,8 +373,15 @@ export const writeDb = async (db) => {
     (baseline.users || []).map((user) => [user.id, user])
   );
   // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến write rows.
-  const writeRows = async (tableName, columns, rows = [], keyColumn) => {
+  const writeRows = async (
+    tableName,
+    columns,
+    rows = [],
+    keyColumn,
+    { skipUpsert = false } = {},
+  ) => {
     persistedRows.set(tableName, rows);
+    if (skipUpsert) return;
     await upsertChangedRows(
       client,
       tableName,
@@ -373,6 +394,29 @@ export const writeDb = async (db) => {
 
   try {
     await client.query('BEGIN');
+
+    const baselineCreditTransactionIds = new Set(
+      (baseline.creditTransactions || []).map((transaction) => transaction.id),
+    );
+    const newCreditTransactions = (db.creditTransactions || []).filter(
+      (transaction) => !baselineCreditTransactionIds.has(transaction.id),
+    );
+    const { walletBalances } = await applyCreditTransactionsIdempotent(
+      client,
+      newCreditTransactions,
+    );
+    for (const [userId, credits] of Object.entries(walletBalances)) {
+      const user = (db.users || []).find((item) => item.id === userId);
+      if (user) user.credits = credits;
+
+      db.wallets = db.wallets || [];
+      const wallet = db.wallets.find((item) => item.userId === userId);
+      if (wallet) {
+        wallet.credits = credits;
+      } else {
+        db.wallets.push({ userId, credits, updatedAt: nowIso() });
+      }
+    }
 
     await writeUserSnapshot({ db, baselineUsersById, writeRows });
     await writeRaceSnapshot({ db, writeRows });
@@ -426,6 +470,7 @@ export const {
 export const {
   persistLoginSession,
   persistRegisteredUser,
+  persistEnsureSpectatorStarterCredits,
   persistSystemSettings,
   deleteSession,
 } = userPersistence;

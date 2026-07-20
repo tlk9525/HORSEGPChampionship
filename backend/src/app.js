@@ -24,6 +24,7 @@ export const createApp = ({
   persistRegisteredUser,
   persistSystemSettings,
   persistCreatedTournament,
+  persistEnsureSpectatorStarterCredits,
   persistPlaceBet,
   persistCancelBet,
   deleteSession,
@@ -77,7 +78,8 @@ export const createApp = ({
       writeDb,
       persistAdminRaceAction,
       persistSystemSettings,
-      persistCreatedTournament
+      persistCreatedTournament,
+      persistEnsureSpectatorStarterCredits
     )
   );
   app.route(

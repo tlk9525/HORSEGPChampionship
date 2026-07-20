@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { USER_ROLES } from '../../config/constants.js';
 import { publicUser } from '../../services/authService.js';
+import { ensureSpectatorStarterCredits } from '../../services/creditService.js';
 import { raceCarriedWeightRange } from '../../services/handicapService.js';
 import {
   sanitizeSystemSettings,
@@ -11,6 +12,7 @@ import {
 const userRoleValues = Object.values(USER_ROLES);
 const userStatuses = ['pending', 'active', 'rejected', 'suspended', 'locked'];
 
+// Sắp xếp user mới nhất trước và chỉ trả về các trường thông tin công khai.
 const sortedPublicUsers = (db) =>
   [...(db.users || [])]
     .sort((first, second) => {
@@ -20,9 +22,11 @@ const sortedPublicUsers = (db) =>
     })
     .map(publicUser);
 
+// Đếm số tài khoản admin đang hoạt động để bảo vệ admin cuối cùng.
 const activeAdminCount = (db) =>
   (db.users || []).filter((user) => user.role === 'admin' && user.status === 'active').length;
 
+// Lọc và sắp xếp Race Class Catalog theo thứ tự hiển thị rồi theo tên.
 export const sortedRaceClasses = (db, { activeOnly = false } = {}) =>
   [...(db.raceClasses || [])]
     .filter((raceClass) => !activeOnly || raceClass.isActive !== false)
@@ -32,6 +36,7 @@ export const sortedRaceClasses = (db, { activeOnly = false } = {}) =>
         String(first.name).localeCompare(String(second.name))
     );
 
+// Chuẩn hóa và kiểm tra dữ liệu đầu vào của một race class.
 const sanitizeRaceClass = (input, current = {}) => {
   const raceClass = {
     name: String(input.name ?? current.name ?? '').trim(),
@@ -70,7 +75,7 @@ const sanitizeRaceClass = (input, current = {}) => {
 // Đăng ký các route quản lý user, system settings và race class catalog.
 export const registerAdminConfigurationRoutes = (
   app,
-  { writeDb, persistSystemSettings }
+  { writeDb, persistSystemSettings, persistEnsureSpectatorStarterCredits }
 ) => {
   app.get('/users', (c) => {
     const db = c.get('db');
@@ -179,10 +184,34 @@ export const registerAdminConfigurationRoutes = (
       return c.json({ message: 'At least one active admin is required' }, 400);
     }
 
+    const becomingSpectator =
+      role === USER_ROLES.SPECTATOR && target.role !== USER_ROLES.SPECTATOR;
+
     target.role = role;
     target.status = status;
     target.updatedAt = new Date().toISOString();
+
+    if (becomingSpectator) {
+      ensureSpectatorStarterCredits(db, target.id);
+    }
+
     await writeDb(db);
+
+    if (becomingSpectator && persistEnsureSpectatorStarterCredits) {
+      const starter = await persistEnsureSpectatorStarterCredits({
+        userId: target.id,
+        source: 'spectator_role_change',
+        createdAt: target.updatedAt,
+      });
+      if (starter?.ok) {
+        target.credits = starter.credits;
+        const wallet = (db.wallets || []).find((item) => item.userId === target.id);
+        if (wallet) {
+          wallet.credits = starter.credits;
+          wallet.updatedAt = target.updatedAt;
+        }
+      }
+    }
 
     return c.json({ user: publicUser(target), users: sortedPublicUsers(db) });
   });

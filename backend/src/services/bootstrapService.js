@@ -86,14 +86,17 @@ const bootstrapScopes = {
 const authenticationTables = ['users', 'sessions', 'systemSettings'];
 const publicRaceStatuses = new Set(PUBLIC_RACE_STATUSES);
 
+// Xác định tập bảng tối thiểu cần đọc cho từng bootstrap scope.
 export const bootstrapTablesForScope = (scope) => {
   const scopeTables = bootstrapScopes[scope];
   if (!scopeTables) return null;
   return [...new Set([...authenticationTables, ...scopeTables])];
 };
 
+// Kiểm tra trạng thái race có được phép xuất hiện trong dữ liệu công khai hay không.
 const isPublicRace = (race) => publicRaceStatuses.has(race?.status);
 
+// Lọc danh sách race mà user hiện tại được phép nhìn thấy theo role.
 const visibleRaces = (db, user) => {
   if (user?.role === USER_ROLES.ADMIN) return db.races;
   if (user?.role === USER_ROLES.REFEREE) {
@@ -109,6 +112,7 @@ const visibleRaces = (db, user) => {
   return db.races.filter(isPublicRace);
 };
 
+// Lọc race entry theo quyền của admin, owner, jockey, referee hoặc khách công khai.
 const visibleRaceEntries = (db, user) => {
   const publicEntries = publicRaceEntries(db);
   if (user?.role === USER_ROLES.ADMIN) return publicEntries;
@@ -123,7 +127,9 @@ const visibleRaceEntries = (db, user) => {
   });
 };
 
+// Lọc horse theo các entry được phép xem và bổ sung tên owner cho từng horse.
 const visibleHorses = (db, user, entries) => {
+  // Gắn tên owner vào horse trước khi đưa vào bootstrap payload.
   const withOwnerName = (horse) => ({
     ...horse,
     ownerName: ownerName(db, horse.ownerUserId),
@@ -140,12 +146,14 @@ const visibleHorses = (db, user, entries) => {
     .map(withOwnerName);
 };
 
+// Chỉ trả user hiện tại, hoặc toàn bộ user công khai khi người gọi là admin.
 const visibleUsers = (db, user) => {
   if (user?.role === USER_ROLES.ADMIN) return db.users.map(publicUser);
   if (user) return [publicUser(user)];
   return [];
 };
 
+// Lọc đăng ký jockey theo phạm vi dữ liệu mà role hiện tại được phép xem.
 const visibleJockeyRegistrations = (db, user) => {
   if (user?.role === USER_ROLES.ADMIN) return db.jockeyRaceRegistrations || [];
   if (user?.role === USER_ROLES.OWNER) {
@@ -159,6 +167,7 @@ const visibleJockeyRegistrations = (db, user) => {
   return [];
 };
 
+// Lọc lời mời jockey theo owner, jockey hoặc quyền admin hiện tại.
 const visibleJockeyInvitations = (db, user) => {
   if (user?.role === USER_ROLES.ADMIN) return db.jockeyInvitations || [];
   if (user?.role === USER_ROLES.OWNER) {
@@ -170,6 +179,7 @@ const visibleJockeyInvitations = (db, user) => {
   return [];
 };
 
+// Lọc đăng ký horse vào race theo owner, jockey hoặc quyền admin hiện tại.
 const visibleHorseRaceRegistrations = (db, user) => {
   if (user?.role === USER_ROLES.ADMIN) return db.horseRaceRegistrations || [];
   if (user?.role === USER_ROLES.OWNER) {
@@ -181,6 +191,7 @@ const visibleHorseRaceRegistrations = (db, user) => {
   return [];
 };
 
+// Dựng bootstrap payload đã lọc quyền cùng các giới hạn cấu hình cho frontend.
 export const buildBootstrapPayload = (db, user) => {
   const raceEntries = visibleRaceEntries(db, user);
   const settings = systemSettingsFromDb(db);

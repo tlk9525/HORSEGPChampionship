@@ -3,6 +3,7 @@ import { RACE_TIMEZONE_OFFSET } from '../config/constants.js';
 import {
   CREDIT_TRANSACTION_TYPES,
   creditCredits,
+  creditTransactionIdForBet,
 } from './creditService.js';
 
 // Ghi chú: Hàm này tìm entry về nhất hợp lệ trong kết quả chính thức của race.
@@ -14,10 +15,7 @@ const winningEntry = (entries = []) =>
       entry.preRaceStatus !== 'absent'
   );
 
-/**
- * Parse race wall-clock date/time as Vietnam time (+07:00) so betting cutoff
- * matches how admins enter race schedules (not UTC).
- */
+// Chuyển ngày giờ race theo múi giờ Việt Nam sang timestamp để tính mốc đóng cược chính xác.
 export const raceStartMs = (race) => {
   const date = String(race?.date || race?.raceDate || '').slice(0, 10);
   const rawTime = String(race?.time || race?.raceTime || '');
@@ -39,6 +37,30 @@ export const isBettableEntry = (entry) =>
       !entry.disqualified &&
       entry.preRaceStatus !== 'absent'
   );
+
+// Lấy mức credit tối đa cho một bet, hoặc null nếu race không giới hạn mức cược.
+export const raceBetLimit = (race) => {
+  const limit = Number(race?.betLimit);
+  if (!Number.isFinite(limit) || limit <= 0) return null;
+  return Math.floor(limit);
+};
+
+// Chuẩn hóa bet limit do admin nhập và chỉ chấp nhận số nguyên dương hoặc giá trị trống.
+export const parseBetLimitInput = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return { ok: true, betLimit: null };
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return { ok: false, message: 'Bet limit must be a positive number of credits, or empty for unlimited.' };
+  }
+  if (!Number.isInteger(parsed)) {
+    return { ok: false, message: 'Bet limit must be a whole number of credits.' };
+  }
+
+  return { ok: true, betLimit: parsed };
+};
 
 // Ghi chú: Hàm này tính tổng credit của các cược đang chờ xử lý trong một race.
 export const racePotTotal = (db, raceId) =>
@@ -66,6 +88,7 @@ export const refundRaceBets = (db, raceId, reason = 'Race cancelled') => {
     bet.settledAt = settledAt;
 
     const credited = creditCredits(db, bet.userId, amount, {
+      id: creditTransactionIdForBet(CREDIT_TRANSACTION_TYPES.BET_REFUNDED, bet.id),
       type: CREDIT_TRANSACTION_TYPES.BET_REFUNDED,
       metadata: { betId: bet.id, raceId, reason },
       createdAt: settledAt,
@@ -112,26 +135,43 @@ export const settleRaceBets = (db, raceId, entries = []) => {
     bet.settledAt = settledAt;
   };
 
+  // Void the pool (refund stakes) when there is no payable 1st place or nobody
+  // backed the winner — do not burn credits.
   if (!winner) {
-    pendingBets.forEach(markLost);
-    return { pot, settled: pendingBets.length, winnerEntryId: null, affectedUsers: [] };
+    const refund = refundRaceBets(
+      db,
+      raceId,
+      'No valid 1st-place finisher; pending bets were refunded'
+    );
+    return {
+      pot,
+      settled: refund.refunded,
+      winnerEntryId: null,
+      affectedUsers: refund.affectedUsers,
+      refunded: true,
+    };
   }
 
   const winningBets = pendingBets.filter((bet) => bet.raceEntryId === winner.id);
   const losingBets = pendingBets.filter((bet) => bet.raceEntryId !== winner.id);
 
-  losingBets.forEach(markLost);
-
   if (winningBets.length === 0) {
-    pendingBets.forEach(markLost);
+    const refund = refundRaceBets(
+      db,
+      raceId,
+      'No bets on the winning horse; the pot was refunded'
+    );
     return {
       pot,
-      settled: pendingBets.length,
+      settled: refund.refunded,
       winnerEntryId: winner.id,
-      affectedUsers: [],
+      affectedUsers: refund.affectedUsers,
       noWinningBets: true,
+      refunded: true,
     };
   }
+
+  losingBets.forEach(markLost);
 
   const totalWinningStake = winningBets.reduce(
     (sum, bet) => sum + Number(bet.amount || 0),
@@ -151,6 +191,7 @@ export const settleRaceBets = (db, raceId, entries = []) => {
     bet.settledAt = settledAt;
 
     const credited = creditCredits(db, bet.userId, payout, {
+      id: creditTransactionIdForBet(CREDIT_TRANSACTION_TYPES.BET_PAYOUT, bet.id),
       type: CREDIT_TRANSACTION_TYPES.BET_PAYOUT,
       metadata: { betId: bet.id, raceId, pot, winningEntryId: winner.id },
       createdAt: settledAt,

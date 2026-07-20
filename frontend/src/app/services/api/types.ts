@@ -162,6 +162,8 @@ export interface RaceRecord {
   handicapMin?: number;
   handicapMax?: number;
   totalPrize?: number;
+  /** Max credits per single bet; null/undefined means unlimited. */
+  betLimit?: number | null;
   refereeUserId?: string;
   refereeUserIds?: string;
   referee?: string;
@@ -354,6 +356,7 @@ export interface AdminBettingRaceSummary {
   raceId: string;
   raceName: string;
   raceStatus: string;
+  betLimit: number | null;
   totalBets: number;
   uniqueBettors: number;
   poolTotal: number;

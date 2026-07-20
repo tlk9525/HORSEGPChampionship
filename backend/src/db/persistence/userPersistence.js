@@ -2,10 +2,114 @@ import { randomUUID } from 'node:crypto';
 import {
   CREDIT_TRANSACTION_TYPES,
   calculateDailyLoginReward,
+  creditTransactionIdForStarterBonus,
 } from '../../services/creditService.js';
+import { SPECTATOR_STARTING_CREDITS } from '../../config/constants.js';
 import { insertNotifications, nowIso } from './persistenceHelpers.js';
 
+// Khởi tạo các hàm persistence cho tài khoản, phiên đăng nhập và credit của spectator.
 export const createUserPersistence = ({ ensureRuntimeSchema, getPool }) => {
+  /**
+   * Cấp starter credit cho mỗi user đúng một lần trong một transaction.
+   * Khóa row user/ví và dùng ledger ID cố định để các request đổi role đồng thời
+   * không thể cấp thưởng hai lần.
+   */
+  const persistEnsureSpectatorStarterCredits = async ({
+    userId,
+    amount = SPECTATOR_STARTING_CREDITS,
+    source = 'spectator_role_change',
+    createdAt = nowIso(),
+  }) => {
+    await ensureRuntimeSchema();
+    const client = await getPool().connect();
+    const transactionId = creditTransactionIdForStarterBonus(userId);
+    const parsedAmount = Number(amount);
+
+    try {
+      await client.query('BEGIN');
+
+      const { rows: userRows } = await client.query(
+        `SELECT "id" FROM "users" WHERE "id" = $1 FOR UPDATE`,
+        [userId],
+      );
+      if (!userRows.length) {
+        await client.query('ROLLBACK');
+        return { ok: false, reason: 'not_found' };
+      }
+
+      await client.query(
+        `INSERT INTO "wallets" ("userId", "credits", "updatedAt")
+         VALUES ($1, 0, $2)
+         ON CONFLICT ("userId") DO NOTHING`,
+        [userId, createdAt],
+      );
+
+      const { rows: walletRows } = await client.query(
+        `SELECT "credits" FROM "wallets" WHERE "userId" = $1 FOR UPDATE`,
+        [userId],
+      );
+      const currentCredits = Number(walletRows[0]?.credits ?? 0);
+
+      const { rows: existingStarterRows } = await client.query(
+        `SELECT "id"
+         FROM "creditTransactions"
+         WHERE "userId" = $1 AND "type" = $2
+         LIMIT 1`,
+        [userId, CREDIT_TRANSACTION_TYPES.STARTER_BONUS],
+      );
+      if (existingStarterRows.length) {
+        await client.query('COMMIT');
+        return { ok: true, granted: false, credits: currentCredits };
+      }
+
+      const { rows: insertedRows } = await client.query(
+        `INSERT INTO "creditTransactions" (
+          "id", "userId", "type", "amount", "balanceAfter", "metadata", "createdAt"
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT ("id") DO NOTHING
+        RETURNING "id"`,
+        [
+          transactionId,
+          userId,
+          CREDIT_TRANSACTION_TYPES.STARTER_BONUS,
+          parsedAmount,
+          0,
+          { source },
+          createdAt,
+        ],
+      );
+
+      if (!insertedRows.length) {
+        await client.query('COMMIT');
+        return { ok: true, granted: false, credits: currentCredits };
+      }
+
+      const nextCredits = parsedAmount;
+      await client.query(
+        `UPDATE "wallets"
+         SET "credits" = $2, "updatedAt" = $3
+         WHERE "userId" = $1`,
+        [userId, nextCredits, createdAt],
+      );
+      await client.query(
+        `UPDATE "creditTransactions"
+         SET "balanceAfter" = $2
+         WHERE "id" = $1`,
+        [transactionId, nextCredits],
+      );
+
+      await client.query('COMMIT');
+      return { ok: true, granted: true, credits: nextCredits };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  };
+
+  // Lưu session đăng nhập, cập nhật mật khẩu và cấp thưởng hằng ngày cho spectator.
   const persistLoginSession = async (
     user,
     session,
@@ -172,7 +276,7 @@ export const createUserPersistence = ({ ensureRuntimeSchema, getPool }) => {
         );
 
         const starterTransaction = creditTransactions[0] || {
-          id: randomUUID(),
+          id: creditTransactionIdForStarterBonus(user.id),
           userId: user.id,
           type: CREDIT_TRANSACTION_TYPES.STARTER_BONUS,
           amount: Number(user.credits ?? 100),
@@ -184,7 +288,8 @@ export const createUserPersistence = ({ ensureRuntimeSchema, getPool }) => {
           `INSERT INTO "creditTransactions" (
             "id", "userId", "type", "amount", "balanceAfter", "metadata", "createdAt"
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          ON CONFLICT ("id") DO NOTHING`,
           [
             starterTransaction.id,
             starterTransaction.userId,
@@ -253,6 +358,7 @@ export const createUserPersistence = ({ ensureRuntimeSchema, getPool }) => {
   return {
     persistLoginSession,
     persistRegisteredUser,
+    persistEnsureSpectatorStarterCredits,
     persistSystemSettings,
     deleteSession,
   };

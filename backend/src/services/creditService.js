@@ -38,10 +38,7 @@ const previousDateKey = (dateKey) => {
   return date.toISOString().slice(0, 10);
 };
 
-// PostgreSQL DATE values can arrive as Date objects representing midnight in
-// the database timezone. Convert those objects back through Vietnam time;
-// slicing String(date) would produce values such as "Thu Jul 16" and award the
-// same daily bonus again on every login.
+// Chuẩn hóa PostgreSQL DATE về ngày Việt Nam để không cấp lại daily bonus do lệch múi giờ.
 const storedRewardDateKey = (value) => {
   if (!value) return null;
   if (value instanceof Date) return vietnamDateKey(value);
@@ -100,11 +97,19 @@ const syncWalletCredits = (
 // Ghi chú: Hàm này tạo một bản ghi lịch sử biến động credit với số dư sau giao dịch.
 const recordCreditTransaction = (
   db,
-  { userId, type, amount, balanceAfter, metadata = null, createdAt = new Date().toISOString() }
+  {
+    id = randomUUID(),
+    userId,
+    type,
+    amount,
+    balanceAfter,
+    metadata = null,
+    createdAt = new Date().toISOString(),
+  }
 ) => {
   db.creditTransactions = db.creditTransactions || [];
   const transaction = {
-    id: randomUUID(),
+    id,
     userId,
     type,
     amount: Number(amount),
@@ -116,27 +121,81 @@ const recordCreditTransaction = (
   return transaction;
 };
 
+// Tạo ledger ID ổn định cho một giao dịch credit gắn với bet.
+export const creditTransactionIdForBet = (type, betId) => `${type}:${betId}`;
+
+// Tạo ledger ID cố định để các request cấp starter bonus đồng thời không trả thưởng hai lần.
+export const creditTransactionIdForStarterBonus = (userId) =>
+  `${CREDIT_TRANSACTION_TYPES.STARTER_BONUS}:${userId}`;
+
+// Tìm một credit transaction theo ID trong read model hiện tại.
+const findCreditTransactionById = (db, id) =>
+  (db.creditTransactions || []).find((transaction) => transaction.id === id);
+
 // Ghi chú: Hàm này cấp số credit ban đầu cho spectator mới và ghi nhận giao dịch thưởng.
 export const grantStarterCredits = (
   db,
   userId,
   amount = SPECTATOR_STARTING_CREDITS,
-  createdAt = new Date().toISOString()
+  createdAt = new Date().toISOString(),
+  { source = 'spectator_registration' } = {}
 ) => {
   const user = db.users.find((item) => item.id === userId);
   if (!user) return null;
+
+  const transactionId = creditTransactionIdForStarterBonus(userId);
+  const existing = findCreditTransactionById(db, transactionId);
+  if (existing) {
+    if (user.credits == null) {
+      user.credits = Number(existing.balanceAfter ?? amount);
+    }
+    syncWalletCredits(db, userId, user.credits, createdAt);
+    return existing;
+  }
 
   user.credits = Number(amount);
   user.updatedAt = createdAt;
   syncWalletCredits(db, userId, user.credits, createdAt);
   return recordCreditTransaction(db, {
+    id: transactionId,
     userId,
     type: CREDIT_TRANSACTION_TYPES.STARTER_BONUS,
     amount: Number(amount),
     balanceAfter: user.credits,
-    metadata: { source: 'spectator_registration' },
+    metadata: { source },
     createdAt,
   });
+};
+
+// Cấp starter credit khi user thành spectator và bỏ qua nếu ledger đã ghi nhận khoản thưởng.
+export const ensureSpectatorStarterCredits = (
+  db,
+  userId,
+  amount = SPECTATOR_STARTING_CREDITS,
+  createdAt = new Date().toISOString(),
+  { source = 'spectator_role_change' } = {}
+) => {
+  const user = db.users.find((item) => item.id === userId);
+  if (!user) return null;
+
+  const transactionId = creditTransactionIdForStarterBonus(userId);
+  const alreadyGranted =
+    Boolean(findCreditTransactionById(db, transactionId)) ||
+    (db.creditTransactions || []).some(
+      (transaction) =>
+        transaction.userId === userId &&
+        transaction.type === CREDIT_TRANSACTION_TYPES.STARTER_BONUS
+    );
+  if (alreadyGranted) {
+    if (user.credits == null) {
+      const wallet = (db.wallets || []).find((item) => item.userId === userId);
+      user.credits = wallet ? Number(wallet.credits ?? 0) : Number(amount);
+    }
+    syncWalletCredits(db, userId, user.credits, createdAt);
+    return null;
+  }
+
+  return grantStarterCredits(db, userId, amount, createdAt, { source });
 };
 
 // Ghi chú: Hàm này trừ credit khi số dư hợp lệ, đồng thời cập nhật wallet và lịch sử giao dịch.
@@ -144,18 +203,27 @@ export const debitCredits = (
   db,
   userId,
   amount,
-  { type, metadata = null, createdAt = new Date().toISOString() }
+  { type, metadata = null, createdAt = new Date().toISOString(), id } = {}
 ) => {
   const parsedAmount = Number(amount);
   const user = db.users.find((item) => item.id === userId);
-  const currentCredits = Number(user?.credits ?? 0);
   if (!user || !Number.isFinite(parsedAmount) || parsedAmount <= 0) return null;
+
+  if (id) {
+    const existing = findCreditTransactionById(db, id);
+    if (existing) {
+      return { user, transaction: existing, credits: Number(user.credits ?? 0) };
+    }
+  }
+
+  const currentCredits = Number(user.credits ?? 0);
   if (currentCredits < parsedAmount) return null;
 
   user.credits = currentCredits - parsedAmount;
   user.updatedAt = createdAt;
   syncWalletCredits(db, userId, user.credits, createdAt);
   const transaction = recordCreditTransaction(db, {
+    id,
     userId,
     type,
     amount: -parsedAmount,
@@ -171,16 +239,24 @@ export const creditCredits = (
   db,
   userId,
   amount,
-  { type, metadata = null, createdAt = new Date().toISOString() }
+  { type, metadata = null, createdAt = new Date().toISOString(), id } = {}
 ) => {
   const parsedAmount = Number(amount);
   const user = db.users.find((item) => item.id === userId);
   if (!user || !Number.isFinite(parsedAmount) || parsedAmount <= 0) return null;
 
+  if (id) {
+    const existing = findCreditTransactionById(db, id);
+    if (existing) {
+      return { user, transaction: existing, credits: Number(user.credits ?? 0) };
+    }
+  }
+
   user.credits = Number(user.credits ?? 0) + parsedAmount;
   user.updatedAt = createdAt;
   syncWalletCredits(db, userId, user.credits, createdAt);
   const transaction = recordCreditTransaction(db, {
+    id,
     userId,
     type,
     amount: parsedAmount,

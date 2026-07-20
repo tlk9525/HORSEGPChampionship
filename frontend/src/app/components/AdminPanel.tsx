@@ -21,7 +21,6 @@ import {
 } from 'lucide-react';
 import {
   AdminBettingRaceSummary,
-  AdminBettingSpectator,
   ApprovalItem,
   HorseRaceRegistration,
   RaceEntryRecord,
@@ -42,7 +41,6 @@ import {
 import { statusLabel } from '../utils/domain';
 import { messageToneClasses } from '../utils/messageTone';
 import { raceStatusBadgeClass } from '../utils/raceDisplay';
-import AdminBettingModal from './admin/AdminBettingModal';
 import SystemSettingsModal, {
   SystemSettingsTab,
 } from './admin/SystemSettingsModal';
@@ -128,8 +126,6 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   });
 
   const [bettingRaces, setBettingRaces] = useState<AdminBettingRaceSummary[]>([]);
-  const [bettingSpectators, setBettingSpectators] = useState<AdminBettingSpectator[]>([]);
-  const [showBettingModal, setShowBettingModal] = useState(false);
 
   const [expandedTournaments, setExpandedTournaments] = useState<Record<string, boolean>>({});
   // Ghi chú: Hàm này bật/tắt nghiệp vụ liên quan đến toggle tournament.
@@ -191,7 +187,6 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
     getAdminBetting()
       .then((data) => {
         setBettingRaces(data.raceSummaries || []);
-        setBettingSpectators(data.spectators || []);
       })
       .catch(() => undefined);
   }, []);
@@ -1096,7 +1091,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                   Betting Activity
                 </h2>
                 <button
-                  onClick={() => setShowBettingModal(true)}
+                  onClick={() => onNavigate('admin-betting')}
                   className="px-4 py-2 bg-[#d4af37]/20 border border-[#d4af37] rounded-xl text-[#d4af37] font-bold text-sm hover:bg-[#d4af37] hover:text-white transition-all"
                 >
                   View All
@@ -1126,6 +1121,12 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                           <span className="text-gray-500">Pool</span>
                           <span className="block text-[#d4af37] font-bold">
                             {race.poolTotal.toFixed(0)} credits
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Max Bet</span>
+                          <span className="block text-white font-bold">
+                            {race.betLimit == null ? 'Unlimited' : `${race.betLimit} credits`}
                           </span>
                         </div>
                         <div>
@@ -1502,16 +1503,6 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
               </div>
             </div>
           </div>
-        )}
-
-
-        {showBettingModal && (
-          <AdminBettingModal
-            races={bettingRaces}
-            spectators={bettingSpectators}
-            activePoolCredits={totalPoolCredits}
-            onClose={() => setShowBettingModal(false)}
-          />
         )}
       </div>
     </div>

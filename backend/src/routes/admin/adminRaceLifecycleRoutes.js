@@ -76,11 +76,13 @@ export const registerAdminRaceLifecycleRoutes = (
     const existingCreditTransactionIds = new Set(
       (db.creditTransactions || []).map((transaction) => transaction.id),
     );
+    const existingBetStatuses = new Map(
+      (db.bets || []).map((bet) => [bet.id, bet.status]),
+    );
     const assignedRefereeIds = raceRefereeIds(db, race);
     let affectedTournament = null;
     let affectedHorses = [];
     let settledBets = [];
-    let affectedSpectators = [];
 
     if (action === 'reset-race') {
       if (race.status !== 'cancelled') {
@@ -366,7 +368,6 @@ export const registerAdminRaceLifecycleRoutes = (
           notificationMessage: `${race.name} has been cancelled due to insufficient participants. Only ${readyEntries.length} participants were marked Ready, but at least ${requiredReadyCount} are required.`,
         });
         settledBets = cancellation.settledBets;
-        affectedSpectators = cancellation.affectedSpectators;
       } else {
         race.status = 'in-progress';
         race.updatedAt = new Date().toISOString();
@@ -412,7 +413,6 @@ export const registerAdminRaceLifecycleRoutes = (
         notificationMessage: `${race.name} has been cancelled by the admin`,
       });
       settledBets = cancellation.settledBets;
-      affectedSpectators = cancellation.affectedSpectators;
     }
     if (action === 'finish-race') {
       if (race.status !== 'in-progress') {
@@ -512,11 +512,10 @@ export const registerAdminRaceLifecycleRoutes = (
         horses: db.horses,
       });
 
-      const settlement = settleRaceBets(db, race.id, entries);
+      settleRaceBets(db, race.id, entries);
       settledBets = (db.bets || []).filter(
         (bet) => bet.raceId === race.id && bet.settledAt,
       );
-      affectedSpectators = settlement.affectedUsers || [];
 
       const recipientIds = new Set();
       entries.forEach((entry) => {
@@ -556,23 +555,38 @@ export const registerAdminRaceLifecycleRoutes = (
     });
 
     if (persistAdminRaceAction) {
-      await persistAdminRaceAction({
-        race,
-        raceEntries: entries,
-        horses: affectedHorses,
-        tournament: affectedTournament,
-        bets: settledBets,
-        users: affectedSpectators,
-        creditTransactions: (db.creditTransactions || []).filter(
-          (transaction) => !existingCreditTransactionIds.has(transaction.id),
-        ),
-        notifications: (db.notifications || []).filter(
-          (notification) => !existingNotificationIds.has(notification.id),
-        ),
-        actionLogs: (db.raceActionLogs || []).filter(
-          (log) => !existingActionLogIds.has(log.id),
-        ),
-      });
+      const changedPendingBets = settledBets.filter(
+        (bet) =>
+          existingBetStatuses.get(bet.id) === 'pending' &&
+          bet.status !== 'pending',
+      );
+      try {
+        await persistAdminRaceAction({
+          race,
+          expectedStatus: fromStatus,
+          raceEntries: entries,
+          horses: affectedHorses,
+          tournament: affectedTournament,
+          bets: changedPendingBets,
+          creditTransactions: (db.creditTransactions || []).filter(
+            (transaction) => !existingCreditTransactionIds.has(transaction.id),
+          ),
+          notifications: (db.notifications || []).filter(
+            (notification) => !existingNotificationIds.has(notification.id),
+          ),
+          actionLogs: (db.raceActionLogs || []).filter(
+            (log) => !existingActionLogIds.has(log.id),
+          ),
+        });
+      } catch (error) {
+        if (error?.code === 'RACE_STATE_CONFLICT') {
+          return c.json(
+            { message: 'Race state changed while this action was being saved. Refresh and try again.' },
+            409,
+          );
+        }
+        throw error;
+      }
     } else {
       await writeDb(db);
     }
