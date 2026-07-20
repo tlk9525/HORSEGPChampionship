@@ -1,5 +1,5 @@
 import { lazy } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthUser, HorseRecord } from './services/api';
 
 const LandingPage = lazy(() => import('./components/LandingPage'));
@@ -42,6 +42,10 @@ export default function AppRoutes({
   onLogin,
   onUserUpdate,
 }: AppRoutesProps) {
+  const { pathname } = useLocation();
+  const currentHorseRouteId = pathname.match(/^\/horses\/([^/]+)(?:\/edit)?\/?$/)?.[1];
+  const routeHorse = selectedHorse?.id === currentHorseRouteId ? selectedHorse : null;
+
   return (
     <Routes>
       <Route path="/" element={<LandingPage onNavigate={onNavigate} />} />
@@ -64,11 +68,11 @@ export default function AppRoutes({
       />
       <Route
         path="/horses/:horseId"
-        element={<HorseDetails currentUser={currentUser} horse={selectedHorse} onNavigate={onNavigate} />}
+        element={<HorseDetails currentUser={currentUser} horse={routeHorse} onNavigate={onNavigate} />}
       />
       <Route
         path="/horses/:horseId/edit"
-        element={<RegisterHorsePage horse={selectedHorse} mode="edit" onNavigate={onNavigate} />}
+        element={<RegisterHorsePage horse={routeHorse} mode="edit" onNavigate={onNavigate} />}
       />
       <Route path="/jockey-portal" element={<JockeyPage currentUser={currentUser} onNavigate={onNavigate} />} />
       <Route path="/jockeys" element={<JockeyDirectoryPage />} />

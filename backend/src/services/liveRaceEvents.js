@@ -32,6 +32,7 @@ export const streamRaceUpdates = (req, raceId) => {
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
+    // Ghi chú: Hàm này mở luồng SSE, gửi dữ liệu ban đầu và đăng ký listener cập nhật race.
     start(controller) {
       // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến send event.
       const sendEvent = (payload) => {

@@ -87,7 +87,7 @@ CREATE TABLE "raceClasses" (
   CONSTRAINT "chk_race_classes_rating"
     CHECK ("ratingMin" >= 0 AND "ratingMax" <= 140 AND "ratingMin" <= "ratingMax"),
   CONSTRAINT "chk_race_classes_weight"
-    CHECK ("handicapMin" >= 110 AND "handicapMax" <= 135 AND "handicapMin" <= "handicapMax")
+    CHECK ("handicapMin" > 0 AND "handicapMin" <= "handicapMax")
 );
 
 CREATE UNIQUE INDEX "uq_race_classes_name_ci"
@@ -107,8 +107,8 @@ CREATE TABLE "races" (
   "raceClass" VARCHAR(128),
   "ratingMin" NUMERIC(6, 2) NOT NULL DEFAULT 0,
   "ratingMax" NUMERIC(6, 2) NOT NULL DEFAULT 140,
-  "handicapMin" NUMERIC(6, 2) NOT NULL DEFAULT 110,
-  "handicapMax" NUMERIC(6, 2) NOT NULL DEFAULT 135,
+  "handicapMin" NUMERIC(6, 2) NOT NULL,
+  "handicapMax" NUMERIC(6, 2) NOT NULL,
   "totalPrize" NUMERIC(14, 2) NOT NULL DEFAULT 0,
   "status" VARCHAR(64) NOT NULL DEFAULT 'draft',
   "participants" INTEGER NOT NULL DEFAULT 0,
@@ -127,7 +127,9 @@ CREATE TABLE "races" (
     ON DELETE CASCADE,
   CONSTRAINT "fk_races_created_by"
     FOREIGN KEY ("createdBy") REFERENCES "users" ("id")
-    ON DELETE SET NULL
+    ON DELETE SET NULL,
+  CONSTRAINT "chk_races_weight"
+    CHECK ("handicapMin" > 0 AND "handicapMin" <= "handicapMax")
 );
 
 CREATE INDEX "idx_races_tournament" ON "races" ("tournamentId", "status");

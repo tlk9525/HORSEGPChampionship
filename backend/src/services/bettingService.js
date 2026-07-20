@@ -5,6 +5,7 @@ import {
   creditCredits,
 } from './creditService.js';
 
+// Ghi chú: Hàm này tìm entry về nhất hợp lệ trong kết quả chính thức của race.
 const winningEntry = (entries = []) =>
   entries.find(
     (entry) =>
@@ -30,6 +31,7 @@ export const raceStartMs = (race) => {
   return new Date(`${date}T${normalized}${RACE_TIMEZONE_OFFSET}`).getTime();
 };
 
+// Ghi chú: Hàm này kiểm tra một race entry có đủ điều kiện nhận cược hay không.
 export const isBettableEntry = (entry) =>
   Boolean(
     entry &&
@@ -38,11 +40,13 @@ export const isBettableEntry = (entry) =>
       entry.preRaceStatus !== 'absent'
   );
 
+// Ghi chú: Hàm này tính tổng credit của các cược đang chờ xử lý trong một race.
 export const racePotTotal = (db, raceId) =>
   (db.bets || [])
     .filter((bet) => bet.raceId === raceId && bet.status === 'pending')
     .reduce((sum, bet) => sum + Number(bet.amount || 0), 0);
 
+// Ghi chú: Hàm này hoàn tiền mọi cược đang chờ khi race bị hủy và thông báo cho người cược.
 export const refundRaceBets = (db, raceId, reason = 'Race cancelled') => {
   const pendingBets = (db.bets || []).filter(
     (bet) => bet.raceId === raceId && bet.status === 'pending'
@@ -86,6 +90,7 @@ export const refundRaceBets = (db, raceId, reason = 'Race cancelled') => {
   };
 };
 
+// Ghi chú: Hàm này chốt pot cược theo kết quả race, trả thưởng người thắng và đánh dấu cược thua.
 export const settleRaceBets = (db, raceId, entries = []) => {
   const pendingBets = (db.bets || []).filter(
     (bet) => bet.raceId === raceId && bet.status === 'pending'
@@ -100,6 +105,7 @@ export const settleRaceBets = (db, raceId, entries = []) => {
   const winner = winningEntry(entries);
   const affectedUserIds = new Set();
 
+  // Ghi chú: Hàm này đánh dấu một cược là thua và lưu thời điểm chốt cược.
   const markLost = (bet) => {
     bet.status = 'lost';
     bet.payout = 0;

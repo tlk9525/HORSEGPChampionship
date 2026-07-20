@@ -23,6 +23,7 @@ interface RaceClassForm {
   isActive: boolean;
 }
 
+// Ghi chú: Hàm này tạo dữ liệu form rỗng với giá trị mặc định để thêm race class mới.
 const emptyForm = (): RaceClassForm => ({
   name: '',
   ratingMin: '',
@@ -218,8 +219,7 @@ export default function RaceClassCatalog({ onNavigate }: RaceClassCatalogProps) 
               <input
                 required
                 type="number"
-                min="110"
-                max="135"
+                min="0.01"
                 step="1"
                 className={`${fieldClass} mt-2`}
                 value={form.handicapMin}
@@ -231,8 +231,7 @@ export default function RaceClassCatalog({ onNavigate }: RaceClassCatalogProps) 
               <input
                 required
                 type="number"
-                min="110"
-                max="135"
+                min="0.01"
                 step="1"
                 className={`${fieldClass} mt-2`}
                 value={form.handicapMax}

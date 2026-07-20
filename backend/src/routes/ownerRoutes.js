@@ -2,7 +2,6 @@ import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import {
   ACTIVE_TOURNAMENT_STATUSES,
-  MAX_OWNER_HORSES,
 } from '../config/constants.js';
 import { requireRole } from '../services/authService.js';
 import {
@@ -25,6 +24,9 @@ import {
   officialHorseRating,
   raceEligibilityRange,
 } from '../services/handicapService.js';
+import { systemSettingsFromDb } from '../services/systemSettingsService.js';
+
+const COMPLETED_RACE_STATUSES = ['completed', 'cancelled'];
 
 // Ghi chú: Hàm này kiểm tra các chỉ số rating owner nhập nằm trong khoảng hợp lệ.
 const validRatingComponents = (values) =>
@@ -52,6 +54,7 @@ export const createOwnerRoutes = (getDb, writeDb) => {
   app.get('/portal', (c) => {
     const user = c.get('user');
     const db = c.get('db');
+    const settings = systemSettingsFromDb(db);
     const activeTournamentIds = new Set(
       db.tournaments
         .filter((tournament) => tournament.status !== 'completed')
@@ -113,7 +116,7 @@ export const createOwnerRoutes = (getDb, writeDb) => {
           ? activeTournamentIds.has(invitation.tournamentId)
           : activeRaceIds.has(invitation.raceId))
       ),
-      limits: { maxOwnerHorses: MAX_OWNER_HORSES },
+      limits: { maxOwnerHorses: settings.maxOwnerHorses },
     });
   });
 
@@ -137,7 +140,6 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     ]);
 
     // Horses busy in another non-completed race in the same tournament cannot be registered again
-    const COMPLETED_RACE_STATUSES = ['completed', 'cancelled'];
     const busyInOtherRace = new Set([
       ...(db.raceEntries || []).filter((entry) => {
         if (entry.raceId === race.id || entry.status === 'rejected') return false;
@@ -212,8 +214,9 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     }
 
     const ownerHorses = db.horses.filter((horse) => horse.ownerUserId === user.id);
-    if (ownerHorses.length >= MAX_OWNER_HORSES) {
-      return c.json({ message: `Each owner can register up to ${MAX_OWNER_HORSES} horses.` }, 400);
+    const maxOwnerHorses = systemSettingsFromDb(db).maxOwnerHorses;
+    if (ownerHorses.length >= maxOwnerHorses) {
+      return c.json({ message: `Each owner can register up to ${maxOwnerHorses} horses.` }, 400);
     }
 
     const {
@@ -249,7 +252,7 @@ export const createOwnerRoutes = (getDb, writeDb) => {
     createNotification(db, user.id, 'Horse registration submitted', `${horse.name} is waiting for admin approval.`);
 
     await writeDb(db);
-    return c.json({ horse, horseCount: ownerHorses.length + 1, maxHorses: MAX_OWNER_HORSES }, 201);
+    return c.json({ horse, horseCount: ownerHorses.length + 1, maxHorses: maxOwnerHorses }, 201);
   });
 
   // Cập nhật thông tin hồ sơ. Các thành phần rating chỉ được nhập khi tạo ngựa.
@@ -367,7 +370,6 @@ export const createOwnerRoutes = (getDb, writeDb) => {
 
       // Rule: 1 horse may only be in 1 active (non-completed) race per tournament.
       // If a previous race is fully completed (results confirmed), allow entering a new one.
-      const COMPLETED_RACE_STATUSES = ['completed', 'cancelled'];
       const conflictRaceId = (() => {
         const entryConflict = (db.raceEntries || []).find((entry) => {
           if (entry.horseId !== horse.id || entry.raceId === race.id) return false;

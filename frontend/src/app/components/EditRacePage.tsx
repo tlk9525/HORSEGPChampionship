@@ -10,6 +10,7 @@ import {
   updateRace,
 } from '../services/api';
 import { messageToneClasses } from '../utils/messageTone';
+import { isoToDatetimeLocal, parseRaceSchedule } from '../utils/raceSchedule';
 
 interface EditRacePageProps {
   onNavigate: (page: string) => void;
@@ -17,33 +18,6 @@ interface EditRacePageProps {
 
 const EDITABLE_RACE_STATUSES = ['registration-open', 'registration-closed'];
 const RESETTABLE_RACE_STATUSES = ['cancelled'];
-
-// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho raceDateWithinTournamentMessage.
-const raceDateWithinTournamentMessage = (
-  tournament: TournamentRecord | null,
-  raceDate: string
-) => {
-  if (!tournament) return '';
-  if (tournament.startDate && raceDate < tournament.startDate) {
-    return 'Race date must be on or after tournament start date.';
-  }
-  if (tournament.finalDate && raceDate > tournament.finalDate) {
-    return 'Race date must be on or before tournament end date.';
-  }
-  return '';
-};
-
-// Ghi chú: Hàm này đổi thời gian ISO sang định dạng input datetime-local.
-const toDatetimeLocal = (value?: string) => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return '';
-
-  // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến pad.
-  const pad = (part: number) => String(part).padStart(2, '0');
-
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-};
 
 // Ghi chú: Hàm này render form chỉnh sửa hoặc hủy race hiện có.
 export default function EditRacePage({
@@ -68,6 +42,16 @@ export default function EditRacePage({
     registrationClosesAt: '',
   });
   const isResetMode = editingRace?.status === 'cancelled';
+
+  // Ghi chú: Parse lịch hiện tại của form cho cả thao tác edit và reset.
+  const currentSchedule = () =>
+    parseRaceSchedule({
+      tournament: editingTournament,
+      raceDate: form.raceDate,
+      startTime: form.startTime,
+      registrationOpensAt: form.registrationOpensAt,
+      registrationClosesAt: form.registrationClosesAt,
+    });
 
   useEffect(() => {
     getRaceBuilder()
@@ -97,10 +81,10 @@ export default function EditRacePage({
           startTime: RESETTABLE_RACE_STATUSES.includes(race.status) ? '' : race.time || '',
           registrationOpensAt: RESETTABLE_RACE_STATUSES.includes(race.status)
             ? ''
-            : toDatetimeLocal(race.registrationOpensAt),
+            : isoToDatetimeLocal(race.registrationOpensAt),
           registrationClosesAt: RESETTABLE_RACE_STATUSES.includes(race.status)
             ? ''
-            : toDatetimeLocal(race.registrationClosesAt),
+            : isoToDatetimeLocal(race.registrationClosesAt),
         });
       })
       .catch((error) =>
@@ -150,28 +134,9 @@ export default function EditRacePage({
       return;
     }
 
-    const regOpens = new Date(form.registrationOpensAt);
-    const regCloses = new Date(form.registrationClosesAt);
-    const raceStartsAt = new Date(`${form.raceDate}T${form.startTime}`);
-    if (
-      !Number.isFinite(regOpens.getTime()) ||
-      !Number.isFinite(regCloses.getTime()) ||
-      !Number.isFinite(raceStartsAt.getTime())
-    ) {
-      setMessage('Race and registration times must be valid.');
-      return;
-    }
-    if (regOpens >= regCloses) {
-      setMessage('Registration close time must be after open time.');
-      return;
-    }
-    if (regCloses > raceStartsAt) {
-      setMessage('Registration must close before the race starts.');
-      return;
-    }
-    const raceDateError = raceDateWithinTournamentMessage(editingTournament, form.raceDate);
-    if (raceDateError) {
-      setMessage(raceDateError);
+    const schedule = currentSchedule();
+    if (schedule.error) {
+      setMessage(schedule.error);
       return;
     }
 
@@ -184,8 +149,8 @@ export default function EditRacePage({
     resetRace(raceId, {
       date: form.raceDate,
       time: form.startTime,
-      registrationOpensAt: regOpens.toISOString(),
-      registrationClosesAt: regCloses.toISOString(),
+      registrationOpensAt: schedule.regOpens.toISOString(),
+      registrationClosesAt: schedule.regCloses.toISOString(),
     })
       .then((result) => {
         setEditingRace(result.race);
@@ -214,28 +179,9 @@ export default function EditRacePage({
       return;
     }
 
-    const regOpens = new Date(form.registrationOpensAt);
-    const regCloses = new Date(form.registrationClosesAt);
-    const raceStartsAt = new Date(`${form.raceDate}T${form.startTime}`);
-    if (
-      !Number.isFinite(regOpens.getTime()) ||
-      !Number.isFinite(regCloses.getTime()) ||
-      !Number.isFinite(raceStartsAt.getTime())
-    ) {
-      setMessage('Race and registration times must be valid.');
-      return;
-    }
-    if (regOpens >= regCloses) {
-      setMessage('Registration close time must be after open time.');
-      return;
-    }
-    if (regCloses > raceStartsAt) {
-      setMessage('Registration must close before the race starts.');
-      return;
-    }
-    const raceDateError = raceDateWithinTournamentMessage(editingTournament, form.raceDate);
-    if (raceDateError) {
-      setMessage(raceDateError);
+    const schedule = currentSchedule();
+    if (schedule.error) {
+      setMessage(schedule.error);
       return;
     }
 
@@ -244,8 +190,8 @@ export default function EditRacePage({
       name: form.raceName,
       date: form.raceDate,
       time: form.startTime,
-      registrationOpensAt: regOpens.toISOString(),
-      registrationClosesAt: regCloses.toISOString(),
+      registrationOpensAt: schedule.regOpens.toISOString(),
+      registrationClosesAt: schedule.regCloses.toISOString(),
     })
       .then(() => {
         setMessage('Race schedule saved.');

@@ -20,6 +20,7 @@ import {
 
 const BETTABLE_RACE_STATUSES = new Set(['published']);
 
+// Ghi chú: Hàm này kiểm tra race đã publish và vẫn còn trước thời điểm đóng cược hay chưa.
 const isBettingOpen = (race) => {
   if (!BETTABLE_RACE_STATUSES.has(race.status)) return false;
   const startMs = raceStartMs(race);
@@ -27,8 +28,10 @@ const isBettingOpen = (race) => {
   return Date.now() < startMs - BETTING_CLOSE_BEFORE_RACE_MS;
 };
 
+// Ghi chú: Hàm này lấy các race entry hợp lệ để spectator có thể đặt cược.
 const bettableEntries = (db) => publicRaceEntries(db).filter(isBettableEntry);
 
+// Ghi chú: Hàm này khởi tạo các API dành cho spectator gồm ví credit, pot cược và thao tác đặt/hủy cược.
 export const createSpectatorRoutes = (
   getDb,
   writeDb,

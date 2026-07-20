@@ -14,6 +14,7 @@ export const CREDIT_TRANSACTION_TYPES = Object.freeze({
 const CREDIT_TIME_ZONE = 'Asia/Ho_Chi_Minh';
 const DAILY_LOGIN_REWARD_CAP = 50;
 
+// Ghi chú: Hàm này chuyển thời điểm thành khóa ngày YYYY-MM-DD theo múi giờ Việt Nam.
 export const vietnamDateKey = (value = new Date()) => {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat('en-CA', {
@@ -30,6 +31,7 @@ export const vietnamDateKey = (value = new Date()) => {
   return `${parts.year}-${parts.month}-${parts.day}`;
 };
 
+// Ghi chú: Hàm này tính khóa ngày liền trước từ một khóa ngày YYYY-MM-DD.
 const previousDateKey = (dateKey) => {
   const date = new Date(`${dateKey}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() - 1);
@@ -52,6 +54,7 @@ const storedRewardDateKey = (value) => {
   return Number.isNaN(parsed.getTime()) ? null : vietnamDateKey(parsed);
 };
 
+// Ghi chú: Hàm này tính số credit thưởng đăng nhập và chuỗi ngày liên tiếp của spectator.
 export const calculateDailyLoginReward = (
   user,
   now = new Date(),
@@ -72,6 +75,7 @@ export const calculateDailyLoginReward = (
   return { claimed: true, amount, streak, rewardDate };
 };
 
+// Ghi chú: Hàm này đồng bộ số credit hiện tại của user sang bản ghi wallet tương ứng.
 const syncWalletCredits = (
   db,
   userId,
@@ -93,6 +97,7 @@ const syncWalletCredits = (
   return created;
 };
 
+// Ghi chú: Hàm này tạo một bản ghi lịch sử biến động credit với số dư sau giao dịch.
 const recordCreditTransaction = (
   db,
   { userId, type, amount, balanceAfter, metadata = null, createdAt = new Date().toISOString() }
@@ -111,6 +116,7 @@ const recordCreditTransaction = (
   return transaction;
 };
 
+// Ghi chú: Hàm này cấp số credit ban đầu cho spectator mới và ghi nhận giao dịch thưởng.
 export const grantStarterCredits = (
   db,
   userId,
@@ -133,6 +139,7 @@ export const grantStarterCredits = (
   });
 };
 
+// Ghi chú: Hàm này trừ credit khi số dư hợp lệ, đồng thời cập nhật wallet và lịch sử giao dịch.
 export const debitCredits = (
   db,
   userId,
@@ -159,6 +166,7 @@ export const debitCredits = (
   return { user, transaction, credits: user.credits };
 };
 
+// Ghi chú: Hàm này cộng credit cho user, đồng thời cập nhật wallet và lịch sử giao dịch.
 export const creditCredits = (
   db,
   userId,
@@ -183,6 +191,7 @@ export const creditCredits = (
   return { user, transaction, credits: user.credits };
 };
 
+// Ghi chú: Hàm này trao thưởng đăng nhập hằng ngày một lần cho spectator và cập nhật streak.
 export const awardDailyLoginBonus = (db, userId, now = new Date()) => {
   const user = db.users.find((item) => item.id === userId);
   if (!user || user.role !== USER_ROLES.SPECTATOR) return null;
