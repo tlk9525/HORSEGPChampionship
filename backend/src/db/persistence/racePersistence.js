@@ -3,6 +3,15 @@ import {
   insertRaceActionLogs,
   nowIso,
 } from './persistenceHelpers.js';
+import { applyCreditTransactionsIdempotent } from './creditPersistence.js';
+
+export class RaceStateConflictError extends Error {
+  constructor(message = 'Race state changed by another request') {
+    super(message);
+    this.name = 'RaceStateConflictError';
+    this.code = 'RACE_STATE_CONFLICT';
+  }
+}
 
 export const createRacePersistence = ({ ensureRuntimeSchema, getPool }) => {
   const persistCreatedTournament = async (tournament, notifications = []) => {
@@ -234,11 +243,11 @@ export const createRacePersistence = ({ ensureRuntimeSchema, getPool }) => {
   // Lưu thao tác Admin trên race bằng row-level update để tránh rewrite toàn DB.
   const persistAdminRaceAction = async ({
     race,
+    expectedStatus = null,
     raceEntries = [],
     horses = [],
     tournament = null,
     bets = [],
-    users = [],
     creditTransactions = [],
     notifications = [],
     actionLogs = [],
@@ -249,6 +258,22 @@ export const createRacePersistence = ({ ensureRuntimeSchema, getPool }) => {
 
     try {
       await client.query('BEGIN');
+      const { rows: lockedRaceRows } = await client.query(
+        `SELECT "status"
+         FROM "races"
+         WHERE "id" = $1
+         FOR UPDATE`,
+        [race.id],
+      );
+      if (!lockedRaceRows.length) {
+        throw new RaceStateConflictError('Race no longer exists');
+      }
+      if (expectedStatus && lockedRaceRows[0].status !== expectedStatus) {
+        throw new RaceStateConflictError(
+          `Race state changed from ${expectedStatus} to ${lockedRaceRows[0].status}`,
+        );
+      }
+
       await client.query(
         `UPDATE "races"
          SET "status" = $2,
@@ -334,6 +359,19 @@ export const createRacePersistence = ({ ensureRuntimeSchema, getPool }) => {
       }
 
       for (const bet of bets) {
+        const { rows: lockedBetRows } = await client.query(
+          `SELECT "status"
+           FROM "bets"
+           WHERE "id" = $1
+           FOR UPDATE`,
+          [bet.id],
+        );
+        if (!lockedBetRows.length || lockedBetRows[0].status !== 'pending') {
+          throw new RaceStateConflictError(
+            `Bet ${bet.id} was already changed by another request`,
+          );
+        }
+
         await client.query(
           `UPDATE "bets"
            SET "status" = $2,
@@ -349,35 +387,7 @@ export const createRacePersistence = ({ ensureRuntimeSchema, getPool }) => {
         );
       }
 
-      for (const user of users) {
-        await client.query(
-          `INSERT INTO "wallets" ("userId", "credits", "updatedAt")
-           VALUES ($1, $2, $3)
-           ON CONFLICT ("userId") DO UPDATE SET
-             "credits" = EXCLUDED."credits",
-             "updatedAt" = EXCLUDED."updatedAt"`,
-          [user.id, Number(user.credits ?? 0), user.updatedAt || nowIso()],
-        );
-      }
-
-      for (const transaction of creditTransactions) {
-        await client.query(
-          `INSERT INTO "creditTransactions" (
-            "id", "userId", "type", "amount", "balanceAfter", "metadata", "createdAt"
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
-          ON CONFLICT ("id") DO NOTHING`,
-          [
-            transaction.id,
-            transaction.userId,
-            transaction.type,
-            Number(transaction.amount),
-            Number(transaction.balanceAfter),
-            transaction.metadata || null,
-            transaction.createdAt || nowIso(),
-          ],
-        );
-      }
+      await applyCreditTransactionsIdempotent(client, creditTransactions);
 
       await insertNotifications(client, notifications);
       await insertRaceActionLogs(client, actionLogs);

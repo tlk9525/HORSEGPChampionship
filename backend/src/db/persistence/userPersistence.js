@@ -49,6 +49,18 @@ export const createUserPersistence = ({ ensureRuntimeSchema, getPool }) => {
       );
       const currentCredits = Number(walletRows[0]?.credits ?? 0);
 
+      const { rows: existingStarterRows } = await client.query(
+        `SELECT "id"
+         FROM "creditTransactions"
+         WHERE "userId" = $1 AND "type" = $2
+         LIMIT 1`,
+        [userId, CREDIT_TRANSACTION_TYPES.STARTER_BONUS],
+      );
+      if (existingStarterRows.length) {
+        await client.query('COMMIT');
+        return { ok: true, granted: false, credits: currentCredits };
+      }
+
       const { rows: insertedRows } = await client.query(
         `INSERT INTO "creditTransactions" (
           "id", "userId", "type", "amount", "balanceAfter", "metadata", "createdAt"
