@@ -68,8 +68,7 @@ const requiredRuntimeTables = [
   'creditTransactions',
 ];
 
-// Betting schema is soft-created after core tables exist so existing DBs
-// without wallets/bets do not fail /api/spectator/* with "Request failed".
+// Tạo bổ sung schema betting sau các bảng lõi để database cũ vẫn phục vụ được API spectator.
 const ensureBettingSchema = async () => {
   await getPool().query(`
     CREATE TABLE IF NOT EXISTS "wallets" (

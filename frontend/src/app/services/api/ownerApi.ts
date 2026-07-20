@@ -11,6 +11,7 @@ import type {
   TournamentRecord,
 } from './types';
 
+// Lấy dữ liệu tổng hợp cần hiển thị trên cổng Owner.
 export const getOwnerPortal = async () =>
   request<{
     horses: HorseRecord[];
@@ -21,6 +22,7 @@ export const getOwnerPortal = async () =>
     limits: Pick<SystemLimits, 'maxOwnerHorses'>;
   }>('/owner/portal');
 
+// Lấy dữ liệu đăng ký ngựa và Jockey cho một cuộc đua.
 export const getRaceRegistration = async (raceId: string) =>
   request<{
     tournament: TournamentRecord;
@@ -32,6 +34,7 @@ export const getRaceRegistration = async (raceId: string) =>
     raceEntries: RaceEntryRecord[];
   }>(`/owner/race-registration?raceId=${encodeURIComponent(raceId)}`);
 
+// Gửi đăng ký ngựa và lời mời Jockey tham gia cuộc đua.
 export const submitHorseRaceRegistration = async (entry: {
   raceId: string;
   horseId: string;
@@ -46,6 +49,7 @@ export const submitHorseRaceRegistration = async (entry: {
     body: JSON.stringify(entry),
   });
 
+// Tạo hồ sơ ngựa mới thuộc Owner đang đăng nhập.
 export const createHorse = async (horse: {
   name: string;
   breed: string;
@@ -72,6 +76,7 @@ export const createHorse = async (horse: {
     },
   );
 
+// Cập nhật thông tin hồ sơ của một ngựa thuộc Owner.
 export const updateHorse = async (
   horseId: string,
   horse: {

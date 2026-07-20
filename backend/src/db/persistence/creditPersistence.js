@@ -1,9 +1,8 @@
 import { nowIso } from './persistenceHelpers.js';
 
 /**
- * Insert immutable ledger rows first and update wallets from their live locked
- * balances. Replaying the same transaction id returns the current balance
- * without applying its amount again.
+ * Ghi ledger bất biến trước rồi cập nhật ví từ số dư đang được khóa.
+ * Khi chạy lại cùng transaction ID, hàm trả số dư hiện tại mà không cộng trừ lần nữa.
  */
 export const applyCreditTransactionsIdempotent = async (
   client,

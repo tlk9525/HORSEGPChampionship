@@ -13,6 +13,7 @@ interface AdminBettingPageProps {
   onNavigate: (page: string) => void;
 }
 
+// Ghi chú: Chọn màu badge tương ứng với trạng thái hiện tại của race.
 const raceStatusBadgeClass = (status: string) => {
   const classes: Record<string, string> = {
     'registration-open': 'bg-emerald-500/20 text-emerald-300',
@@ -26,6 +27,7 @@ const raceStatusBadgeClass = (status: string) => {
   return classes[status] || 'bg-white/10 text-gray-300';
 };
 
+// Ghi chú: Render trang tổng quan pool cược, giới hạn cược và bảng xếp hạng spectator cho Admin.
 export default function AdminBettingPage({ onNavigate }: AdminBettingPageProps) {
   const [bettingRaces, setBettingRaces] = useState<AdminBettingRaceSummary[]>([]);
   const [bettingSpectators, setBettingSpectators] = useState<AdminBettingSpectator[]>([]);
@@ -34,6 +36,7 @@ export default function AdminBettingPage({ onNavigate }: AdminBettingPageProps) 
   const [bettingMessage, setBettingMessage] = useState('');
   const [loading, setLoading] = useState(true);
 
+  // Ghi chú: Tải lại thống kê betting và đồng bộ giá trị bet limit vào form chỉnh sửa.
   const loadBetting = () => {
     setLoading(true);
     getAdminBetting()
@@ -64,6 +67,7 @@ export default function AdminBettingPage({ onNavigate }: AdminBettingPageProps) 
 
   const totalPoolCredits = bettingRaces.reduce((sum, race) => sum + race.poolTotal, 0);
 
+  // Ghi chú: Kiểm tra và lưu giới hạn tiền cược của một race từ trang Admin.
   const handleSaveBetLimit = (raceId: string) => {
     const raw = betLimitDrafts[raceId] ?? '';
     const betLimit = raw.trim() === '' ? null : Number(raw);

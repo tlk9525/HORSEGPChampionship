@@ -34,6 +34,7 @@ export default function SystemSettingsModal({
   onSave,
   onClose,
 }: SystemSettingsModalProps) {
+  // Ghi chú: Render một setting dạng số và chuyển giá trị nhập về đúng kiểu cấu hình.
   const renderNumberSetting = (
     label: string,
     description: string,
@@ -58,6 +59,7 @@ export default function SystemSettingsModal({
     </label>
   );
 
+  // Ghi chú: Render công tắc bật/tắt cho một setting boolean của hệ thống.
   const renderToggleSetting = (
     label: string,
     description: string,
