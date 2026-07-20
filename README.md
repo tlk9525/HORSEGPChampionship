@@ -490,6 +490,7 @@ Action lifecycle hợp lệ: `close-registration`, `publish`, `start-race`, `fin
 
 ## Tài liệu liên quan
 
+- [`docs/bao-ve-project.md`](docs/bao-ve-project.md) — Kịch bản bảo vệ, 46 API, toàn bộ status, demo và câu hỏi phản biện
 - [`docs/business-flow-and-roles.md`](docs/business-flow-and-roles.md)
 - [`docs/schema-erd.md`](docs/schema-erd.md)
 - [`docs/erd.drawio`](docs/erd.drawio)
