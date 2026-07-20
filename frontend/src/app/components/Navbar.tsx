@@ -8,6 +8,7 @@ import {
   TrendingUp,
   Circle,
   LogOut,
+  Coins,
 } from 'lucide-react';
 import {
   AuthUser,
@@ -89,6 +90,7 @@ export default function Navbar({
     { name: 'Jockey Profiles', page: 'jockey-profiles', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
     { name: 'Jockey Portal', page: 'jockeys', roles: ['jockey'] },
     { name: 'Race Operations', page: 'live-race', roles: ['admin', 'referee', 'spectator'] },
+    { name: 'Betting', page: 'betting', roles: ['spectator'] },
     { name: 'Race Replay', page: 'simulation-demo', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'] },
     { name: 'Results', page: 'results', roles: ['admin', 'owner', 'jockey', 'referee', 'spectator'], public: true },
     { name: 'Admin', page: 'admin', roles: ['admin'] },
@@ -264,6 +266,15 @@ export default function Navbar({
 
             {currentUser ? (
               <div className="flex items-center gap-3">
+                {currentUser.role === 'spectator' && (
+                  <div className="flex items-center gap-2 rounded-lg border border-[#d4af37]/30 bg-[#12304f] px-3 py-2">
+                    <Coins className="h-4 w-4 text-[#d4af37]" />
+                    <span className="text-sm font-bold text-white">
+                      {currentUser.credits ?? 0}
+                    </span>
+                    <span className="text-xs text-[#d8d2c4]">Credits</span>
+                  </div>
+                )}
                 <div className="text-right">
                   <div className="text-white text-sm font-bold">
                     {currentUser.name}

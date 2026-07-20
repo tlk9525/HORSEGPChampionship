@@ -18,9 +18,11 @@ export type AppPage =
   | 'live-race'
   | 'simulation-demo'
   | 'results'
+  | 'betting'
   | 'admin'
   | 'create-race'
   | 'edit-race'
+  | 'race-classes'
   | 'manage-users';
 
 export const roleHome: Record<UserRole, AppPage> = {
@@ -41,6 +43,7 @@ export const protectedPages: Record<AppPage, UserRole[] | undefined> = {
   admin: ['admin'],
   'create-race': ['admin'],
   'edit-race': ['admin'],
+  'race-classes': ['admin'],
   'manage-users': ['admin'],
   horses: ['owner'],
   'register-horse': ['owner'],
@@ -53,6 +56,7 @@ export const protectedPages: Record<AppPage, UserRole[] | undefined> = {
   'live-race': ['admin', 'referee', 'spectator'],
   'simulation-demo': ['admin', 'owner', 'jockey', 'referee', 'spectator'],
   results: ['admin', 'owner', 'jockey', 'referee', 'spectator'],
+  betting: ['spectator'],
 };
 
 export interface RouteContext {
@@ -83,9 +87,11 @@ export const pageFromPath = (pathname: string): AppPage => {
   if (path === '/live-race' || path.startsWith('/live-race/')) return 'live-race';
   if (path === '/simulation-demo' || path.startsWith('/simulation-demo/')) return 'simulation-demo';
   if (path === '/results') return 'results';
+  if (path === '/betting') return 'betting';
   if (path === '/admin') return 'admin';
   if (path === '/admin/users') return 'manage-users';
   if (path === '/admin/races/new') return 'create-race';
+  if (path === '/admin/race-classes') return 'race-classes';
   if (/^\/admin\/races\/[^/]+\/edit$/.test(path)) return 'edit-race';
 
   return 'tournaments';
@@ -123,11 +129,13 @@ export const pathForPage = (
       ? `/simulation-demo/${context.selectedRaceId}`
       : '/simulation-demo',
     results: '/results',
+    betting: '/betting',
     admin: '/admin',
     'create-race': '/admin/races/new',
     'edit-race': context.selectedRaceId
       ? `/admin/races/${context.selectedRaceId}/edit`
       : '/admin',
+    'race-classes': '/admin/race-classes',
     'manage-users': '/admin/users',
   };
 

@@ -24,7 +24,7 @@ export default function ResultsPage() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    getBootstrap()
+    getBootstrap({ scope: 'results' })
       .then((data) => {
         setTournaments(data.tournaments || []);
         setRaces(data.races || []);

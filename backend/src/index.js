@@ -8,6 +8,9 @@ import {
   persistLoginSession,
   persistRegisteredUser,
   persistSystemSettings,
+  persistCreatedTournament,
+  persistPlaceBet,
+  persistCancelBet,
   deleteSession,
   readDb,
   writeDb,
@@ -15,7 +18,7 @@ import {
 import { createApp } from './app.js';
 
 // Ghi chú: Hàm này đọc dữ liệu hiện tại để các route dùng chung một nguồn dữ liệu.
-const getDb = () => readDb();
+const getDb = (options) => readDb(options);
 
 const app = createApp({
   getDb,
@@ -27,6 +30,9 @@ const app = createApp({
   persistLoginSession,
   persistRegisteredUser,
   persistSystemSettings,
+  persistCreatedTournament,
+  persistPlaceBet,
+  persistCancelBet,
   deleteSession,
 });
 

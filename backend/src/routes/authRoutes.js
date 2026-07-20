@@ -9,8 +9,14 @@ import {
   SELF_REGISTRATION_ROLES,
   SESSION_COOKIE_NAME,
   SESSION_DAYS,
+  SPECTATOR_STARTING_CREDITS,
+  USER_ROLES,
 } from '../config/constants.js';
 import { authenticate, publicUser } from '../services/authService.js';
+import {
+  awardDailyLoginBonus,
+  grantStarterCredits,
+} from '../services/creditService.js';
 import {
   createNotification,
   notifyAdmins,
@@ -100,15 +106,42 @@ export const createAuthRoutes = (
 
     const token = createSession(db, user.id);
     const session = db.sessions.find((item) => item.token === token);
+    const loginAt = new Date();
+    let dailyReward = null;
 
     if (persistLoginSession) {
-      await persistLoginSession(user, session, expiresAt.toISOString());
+      const persisted = await persistLoginSession(
+        user,
+        session,
+        expiresAt.toISOString(),
+        loginAt.toISOString()
+      );
+      if (persisted?.user) Object.assign(user, persisted.user);
+      dailyReward = persisted?.dailyReward || null;
     } else {
+      dailyReward = awardDailyLoginBonus(db, user.id, loginAt);
       await writeDb(db);
     }
 
     setCookie(c, SESSION_COOKIE_NAME, token, sessionCookieOptions);
-    return c.json({ user: publicUser(user) });
+    return c.json({
+      user: publicUser(user),
+      ...(user.role === USER_ROLES.SPECTATOR
+        ? {
+            dailyReward: dailyReward
+              ? {
+                  claimed: dailyReward.claimed,
+                  amount: dailyReward.amount,
+                  streak: dailyReward.streak,
+                }
+              : {
+                  claimed: false,
+                  amount: 0,
+                  streak: Number(user.loginStreak || 0),
+                },
+          }
+        : {}),
+    });
   });
 
   // Đăng ký tài khoản mới, trả về thông tin user và trạng thái phê duyệt
@@ -148,10 +181,23 @@ export const createAuthRoutes = (
       password: await bcrypt.hash(String(password), 12),
       role,
       status: needsApproval ? 'pending' : 'active',
+      credits: role === USER_ROLES.SPECTATOR ? SPECTATOR_STARTING_CREDITS : null,
+      loginStreak: 0,
+      lastLoginRewardDate: null,
       createdAt,
       updatedAt: createdAt,
     };
     db.users.push(user);
+    let starterTransactions = [];
+    if (role === USER_ROLES.SPECTATOR) {
+      const starterTransaction = grantStarterCredits(
+        db,
+        user.id,
+        SPECTATOR_STARTING_CREDITS,
+        createdAt
+      );
+      starterTransactions = starterTransaction ? [starterTransaction] : [];
+    }
     const existingNotificationIds = new Set(
       (db.notifications || []).map((notification) => notification.id)
     );
@@ -174,7 +220,7 @@ export const createAuthRoutes = (
       (notification) => !existingNotificationIds.has(notification.id)
     );
     if (persistRegisteredUser) {
-      await persistRegisteredUser(user, createdNotifications);
+      await persistRegisteredUser(user, createdNotifications, starterTransactions);
     } else {
       await writeDb(db);
     }

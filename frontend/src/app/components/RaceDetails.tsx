@@ -75,7 +75,7 @@ export default function RaceDetails() {
 
   // Ghi chú: Hàm này tải nghiệp vụ liên quan đến load race data.
   const loadRaceData = () => {
-    getBootstrap()
+    getBootstrap({ scope: 'race' })
       .then((data) => {
         const sortedRaces = [...(data.races || [])].sort(
           (a, b) => raceSortValue(a) - raceSortValue(b)
