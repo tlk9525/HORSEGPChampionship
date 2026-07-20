@@ -1,6 +1,9 @@
 import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
-import { ACTIVE_TOURNAMENT_STATUSES } from '../config/constants.js';
+import {
+  ACTIVE_TOURNAMENT_STATUSES,
+  DEFAULT_RACE_BET_LIMIT,
+} from '../config/constants.js';
 import { requireRole } from '../services/authService.js';
 import {
   approvedRaceEntries,
@@ -27,7 +30,12 @@ import {
 import {
   systemSettingsFromDb,
 } from '../services/systemSettingsService.js';
-import { racePotTotal } from '../services/bettingService.js';
+import {
+  parseBetLimitInput,
+  raceBetLimit,
+  racePotTotal,
+  refundRaceBets,
+} from '../services/bettingService.js';
 import {
   registerAdminConfigurationRoutes,
   sortedRaceClasses,
@@ -207,6 +215,43 @@ export const createAdminRoutes = (
       .sort((a, b) => b.credits - a.credits);
 
     return c.json({ raceSummaries, spectators });
+  });
+
+  app.patch('/races/:raceId/bet-limit', async (c) => {
+    const db = c.get('db');
+    const race = db.races.find((item) => item.id === c.req.param('raceId'));
+    if (!race) return c.json({ message: 'Race not found' }, 404);
+
+    if (['completed', 'cancelled'].includes(race.status)) {
+      return c.json(
+        { message: 'Bet limit cannot be changed after a race is completed or cancelled.' },
+        400
+      );
+    }
+
+    const body = await c.req.json();
+    const parsed = parseBetLimitInput(body?.betLimit);
+    if (!parsed.ok) {
+      return c.json({ message: parsed.message }, 400);
+    }
+
+    race.betLimit = parsed.betLimit;
+    race.updatedAt = new Date().toISOString();
+    recordRaceAction(db, {
+      raceId: race.id,
+      userId: c.get('user').id,
+      action: 'set-bet-limit',
+      fromStatus: race.status,
+      toStatus: race.status,
+      details:
+        parsed.betLimit === null
+          ? 'Cleared race bet limit (unlimited)'
+          : `Set race bet limit to ${parsed.betLimit} credits`,
+    });
+
+    await writeDb(db);
+    broadcastRaceUpdate(race.id);
+    return c.json({ race, betLimit: race.betLimit });
   });
 
   registerAdminConfigurationRoutes(app, { writeDb, persistSystemSettings });

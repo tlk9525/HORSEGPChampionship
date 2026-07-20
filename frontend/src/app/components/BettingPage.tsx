@@ -70,8 +70,12 @@ const raceMaxBet = (race: RaceRecord) => {
   return Math.floor(limit);
 };
 
-const formatCountdown = (race: RaceRecord) => {
-  const startMs = raceStartMs(race);
+const formatCountdown = (
+  race: RaceRecord,
+  bettingCloseBeforeRaceMs: number,
+  raceTimezoneOffset: string
+) => {
+  const startMs = raceStartMs(race, raceTimezoneOffset);
   if (!Number.isFinite(startMs)) return 'Start time unavailable';
 
   const closeMs = startMs - bettingCloseBeforeRaceMs;

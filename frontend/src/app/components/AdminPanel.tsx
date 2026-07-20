@@ -41,7 +41,6 @@ import {
 import { statusLabel } from '../utils/domain';
 import { messageToneClasses } from '../utils/messageTone';
 import { raceStatusBadgeClass } from '../utils/raceDisplay';
-import AdminBettingModal from './admin/AdminBettingModal';
 import SystemSettingsModal, {
   SystemSettingsTab,
 } from './admin/SystemSettingsModal';
@@ -1504,16 +1503,6 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
               </div>
             </div>
           </div>
-        )}
-
-
-        {showBettingModal && (
-          <AdminBettingModal
-            races={bettingRaces}
-            spectators={bettingSpectators}
-            activePoolCredits={totalPoolCredits}
-            onClose={() => setShowBettingModal(false)}
-          />
         )}
       </div>
     </div>

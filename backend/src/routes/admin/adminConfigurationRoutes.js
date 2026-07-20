@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { USER_ROLES } from '../../config/constants.js';
 import { publicUser } from '../../services/authService.js';
+import { ensureSpectatorStarterCredits } from '../../services/creditService.js';
 import { raceCarriedWeightRange } from '../../services/handicapService.js';
 import {
   sanitizeSystemSettings,
@@ -179,9 +180,17 @@ export const registerAdminConfigurationRoutes = (
       return c.json({ message: 'At least one active admin is required' }, 400);
     }
 
+    const becomingSpectator =
+      role === USER_ROLES.SPECTATOR && target.role !== USER_ROLES.SPECTATOR;
+
     target.role = role;
     target.status = status;
     target.updatedAt = new Date().toISOString();
+
+    if (becomingSpectator) {
+      ensureSpectatorStarterCredits(db, target.id);
+    }
+
     await writeDb(db);
 
     return c.json({ user: publicUser(target), users: sortedPublicUsers(db) });
