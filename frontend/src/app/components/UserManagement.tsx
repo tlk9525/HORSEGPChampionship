@@ -358,7 +358,7 @@ export default function UserManagement({ currentUser, onNavigate }: UserManageme
     </div>
   );
 }
-/*import {
+import {
   ArrowLeft,
   Ban,
   Check,
@@ -718,4 +718,3 @@ export default function UserManagement({ currentUser, onNavigate }: UserManageme
     </div>
   );
 }
-*/
