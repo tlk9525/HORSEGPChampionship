@@ -152,113 +152,122 @@ export default function HorseManagement({
           </select>
         </div>
 
-        <div className="flex flex-col gap-6 max-w-3xl mx-auto">
-  {filteredHorses.length === 0 && (
-    <div className="rounded-2xl border border-white/10 bg-[#102a46] p-8 text-gray-400">
-      No horses match the current filters.
-    </div>
-  )}
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          {filteredHorses.length === 0 && (
+            <div className="sm:col-span-2 xl:col-span-3 2xl:col-span-4 rounded-2xl border border-white/10 bg-[#102a46] p-8 text-gray-400">
+              No horses match the current filters.
+            </div>
+          )}
 
-  {filteredHorses.map((horse) => {
-    const activePairing = activePairingForHorse(horse.id);
+          {filteredHorses.map((horse) => {
+            const activePairing = activePairingForHorse(horse.id);
 
-    return (
-      <div
-        key={horse.id}
-        className="rounded-2xl border border-white/10 bg-[#102a46] p-6"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold text-white">
-              {horse.name}
-            </h2>
+            return (
+            <div
+              key={horse.id}
+              className="flex h-full flex-col rounded-2xl border border-white/10 bg-[#102a46] p-6"
+            >
+              <div className="flex flex-col items-center text-center">
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-[#d4af37]/30 bg-[#d4af37]/15">
+                  <Award className="h-8 w-8 text-[#d4af37]" />
+                </div>
 
-            <p className="text-gray-400 mt-2">
-              {horse.breed} • {horse.age} years old
-            </p>
+                <h2 className="text-2xl font-bold text-white">
+                  {horse.name}
+                </h2>
 
-            <p className="text-gray-500 mt-1">
-              {horse.species || 'Species not set'} • {formatWeightLb(horse.weightLb)} • Official Rating {officialHorseRating(horse)}
-            </p>
-          </div>
+                <p className="mt-2 text-gray-400">
+                  {horse.breed} • {horse.age} years old
+                </p>
 
-          <span className="px-3 py-1 rounded-xl bg-[#d4af37]/10 text-[#d4af37] border border-[#d4af37]/30 text-sm font-bold">
-            {statusLabel(horse.status)}
-          </span>
+                <p className="mt-1 text-sm text-gray-500">
+                  {horse.species || 'Species not set'} • {formatWeightLb(horse.weightLb)}
+                </p>
+
+                <span className="mt-4 px-3 py-1 rounded-xl bg-[#d4af37]/10 text-[#d4af37] border border-[#d4af37]/30 text-sm font-bold">
+                  {statusLabel(horse.status)}
+                </span>
+              </div>
+
+              <div className="mt-6 grid flex-1 grid-cols-2 gap-3 border-t border-white/10 pt-5">
+                <div className="rounded-xl border border-white/10 bg-[#071a2f] p-4">
+                  <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wide text-gray-500">
+                    <Award className="h-4 w-4" />
+                    Race Entries
+                  </div>
+                  <div className="text-lg font-bold text-white">
+                    {horseEntryCount(horse.id)}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-[#071a2f] p-4">
+                  <div className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                    Health
+                  </div>
+                  <div className="text-sm font-bold text-white">
+                    {horse.healthStatus || 'Not set'}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-[#071a2f] p-4">
+                  <div className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                    Height
+                  </div>
+                  <div className="text-lg font-bold text-white">
+                    {horse.heightCm ? `${horse.heightCm}cm` : 'Not set'}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-[#071a2f] p-4">
+                  <div className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                    Overall Rating
+                  </div>
+                  <div className="text-lg font-bold text-white">
+                    {officialHorseRating(horse)}
+                  </div>
+                </div>
+
+                <div className="col-span-2 rounded-xl border border-white/10 bg-[#071a2f] p-4">
+                  <div className="mb-2 text-xs uppercase tracking-wide text-gray-500">
+                    Jockey Pairing
+                  </div>
+                  <div className="text-sm font-bold text-white">
+                    {activePairing
+                      ? `${activePairing.jockeyName} • ${activePairing.tournamentName}`
+                      : 'No active pairing'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-col gap-3">
+                <button
+                  onClick={() => {
+                    sessionStorage.setItem('selectedHorseId', horse.id);
+                    onSelectHorse(horse);
+                    onNavigate('horse-details');
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/10 py-3 font-semibold text-white transition-all hover:bg-white/15"
+                >
+                  <Eye className="w-4 h-4" />
+                  Details
+                </button>
+
+                <button
+                  onClick={() => {
+                    sessionStorage.setItem('selectedHorseId', horse.id);
+                    onSelectHorse(horse);
+                    onNavigate('edit-horse');
+                  }}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/10 py-3 font-semibold text-[#d4af37] transition-all hover:bg-[#d4af37]/20"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  Edit
+                </button>
+              </div>
+            </div>
+            );
+          })}
         </div>
-
-        <div className="mt-6 space-y-3 border-t border-white/10 pt-5">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-2 text-gray-400">
-              <Award className="w-4 h-4" />
-              Race Entries
-            </span>
-
-            <span className="text-white font-semibold">
-              {horseEntryCount(horse.id)}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400">Health</span>
-            <span className="text-white font-semibold">
-              {horse.healthStatus || 'Not set'}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400">Height</span>
-            <span className="text-white font-semibold">
-              {horse.heightCm ? `${horse.heightCm}cm` : 'Not set'}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400">Overall Rating</span>
-            <span className="text-white font-semibold">
-              {officialHorseRating(horse)}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400">Jockey Pairing</span>
-            <span className="text-white font-semibold">
-              {activePairing
-                ? `${activePairing.jockeyName} • ${activePairing.tournamentName}`
-                : 'No active pairing'}
-            </span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 mt-6">
-          <button
-            onClick={() => {
-              sessionStorage.setItem('selectedHorseId', horse.id);
-              onSelectHorse(horse);
-              onNavigate('horse-details');
-            }}
-            className="flex items-center justify-center gap-2 py-3 rounded-xl bg-white/10 text-white hover:bg-white/15 transition-all font-semibold"
-          >
-            <Eye className="w-4 h-4" />
-            Details
-          </button>
-
-          <button
-            onClick={() => {
-              sessionStorage.setItem('selectedHorseId', horse.id);
-              onSelectHorse(horse);
-              onNavigate('edit-horse');
-            }}
-            className="flex items-center justify-center gap-2 py-3 rounded-xl bg-[#d4af37]/10 text-[#d4af37] hover:bg-[#d4af37]/20 transition-all font-semibold border border-[#d4af37]/30"
-          >
-            <Edit3 className="w-4 h-4" />
-            Edit
-          </button>
-        </div>
-      </div>
-    );
-  })}
-</div>
       </div>
     </div>
   );
