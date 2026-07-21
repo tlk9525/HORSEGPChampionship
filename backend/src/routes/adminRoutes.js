@@ -849,7 +849,7 @@ export const createAdminRoutes = (
           `Admin rejected your assignment to ride ${horse?.name || 'the horse'} in ${targetLabel}.`);
       }
     }
-
+         
     await writeDb(db);
     raceIdsToBroadcast.forEach((raceId) => broadcastRaceUpdate(raceId));
     return c.json({ ok: true, approvals: formatApprovals(db), notifications: db.notifications || [] });
