@@ -62,20 +62,15 @@ export const readTableOrder = {
   ],
 };
 
-// Chuyển một giá trị database sang kiểu boolean.
 const bool = (value) => Boolean(value);
-
-// Trả về thời điểm hiện tại theo định dạng ISO cho các giá trị mặc định.
 const nowIso = () => new Date().toISOString();
 
-// Chuẩn hóa giờ của race về định dạng HH:mm.
 const formatRaceTime = (value) => {
   if (!value) return '';
   const [hours = '00', minutes = '00'] = String(value).split(':');
   return `${hours.padStart(2, '0')}:${minutes.padStart(2, '0')}`;
 };
 
-// Chuẩn hóa một giá trị ngày về định dạng YYYY-MM-DD.
 const formatDateOnly = (value) => {
   if (!value) return '';
   if (value instanceof Date) {

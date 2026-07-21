@@ -35,8 +35,6 @@ export const writeBettingSnapshot = async ({ db, writeRows }) => {
       metadata: transaction.metadata || null,
       createdAt: transaction.createdAt || nowIso(),
     })),
-    undefined,
-    { skipUpsert: true },
   );
 
   const walletsFromUsers = (db.users || [])
@@ -65,6 +63,5 @@ export const writeBettingSnapshot = async ({ db, writeRows }) => {
       updatedAt: wallet.updatedAt || nowIso(),
     })),
     'userId',
-    { skipUpsert: true },
   );
 };

@@ -7,12 +7,11 @@ import {
 import { SPECTATOR_STARTING_CREDITS } from '../../config/constants.js';
 import { insertNotifications, nowIso } from './persistenceHelpers.js';
 
-// Khởi tạo các hàm persistence cho tài khoản, phiên đăng nhập và credit của spectator.
 export const createUserPersistence = ({ ensureRuntimeSchema, getPool }) => {
   /**
-   * Cấp starter credit cho mỗi user đúng một lần trong một transaction.
-   * Khóa row user/ví và dùng ledger ID cố định để các request đổi role đồng thời
-   * không thể cấp thưởng hai lần.
+   * Atomically grant starter credits once per user.
+   * Locks the user/wallet row and inserts a fixed ledger id so concurrent
+   * role-change requests cannot award the bonus twice.
    */
   const persistEnsureSpectatorStarterCredits = async ({
     userId,
@@ -49,18 +48,6 @@ export const createUserPersistence = ({ ensureRuntimeSchema, getPool }) => {
         [userId],
       );
       const currentCredits = Number(walletRows[0]?.credits ?? 0);
-
-      const { rows: existingStarterRows } = await client.query(
-        `SELECT "id"
-         FROM "creditTransactions"
-         WHERE "userId" = $1 AND "type" = $2
-         LIMIT 1`,
-        [userId, CREDIT_TRANSACTION_TYPES.STARTER_BONUS],
-      );
-      if (existingStarterRows.length) {
-        await client.query('COMMIT');
-        return { ok: true, granted: false, credits: currentCredits };
-      }
 
       const { rows: insertedRows } = await client.query(
         `INSERT INTO "creditTransactions" (
@@ -108,8 +95,6 @@ export const createUserPersistence = ({ ensureRuntimeSchema, getPool }) => {
       client.release();
     }
   };
-
-  // Lưu session đăng nhập, cập nhật mật khẩu và cấp thưởng hằng ngày cho spectator.
   const persistLoginSession = async (
     user,
     session,

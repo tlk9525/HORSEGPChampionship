@@ -1,13 +1,10 @@
-// Trả về thời điểm hiện tại theo định dạng ISO để dùng thống nhất khi ghi database.
 export const nowIso = () => new Date().toISOString();
 
-// Cộng số ngày vào một thời điểm rồi trả về kết quả theo định dạng ISO.
 export const addDaysIso = (dateValue, days) =>
   new Date(
     new Date(dateValue || nowIso()).getTime() + days * 24 * 60 * 60 * 1000,
   ).toISOString();
 
-// Chuẩn hóa createdAt và updatedAt của một row với thời điểm dự phòng.
 export const rowTimestamps = (row, fallbackCreatedAt = nowIso()) => ({
   createdAt: row.createdAt || fallbackCreatedAt,
   updatedAt: row.updatedAt || row.createdAt || fallbackCreatedAt,

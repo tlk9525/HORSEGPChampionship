@@ -24,9 +24,7 @@ export const register = async (
     body: JSON.stringify({ name, email, password, role }),
   });
 
-// Đăng xuất và yêu cầu backend hủy session hiện tại.
 export const logout = async () =>
   request<{ ok: boolean }>('/logout', { method: 'POST' });
 
-// Lấy người dùng đang đăng nhập từ session cookie.
 export const getMe = async () => request<{ user: AuthUser }>('/me');

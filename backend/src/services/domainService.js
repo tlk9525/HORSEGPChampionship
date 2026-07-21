@@ -327,9 +327,7 @@ const approvalWarnings = (db, { horseId, jockeyUserId, raceId } = {}) => {
     warnings.push('Jockey certificate has not been provided.');
   }
 
-  // A horse-account approval is not tied to a race yet, so class eligibility
-  // can only be evaluated for approvals that actually provide a race.
-  if (horse && race) {
+  if (horse) {
     const rating = officialHorseRating(horse);
     const { min, max } = raceEligibilityRange(race);
     if (rating < min || rating > max) {

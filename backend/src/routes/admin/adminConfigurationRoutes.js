@@ -12,7 +12,6 @@ import {
 const userRoleValues = Object.values(USER_ROLES);
 const userStatuses = ['pending', 'active', 'rejected', 'suspended', 'locked'];
 
-// Sắp xếp user mới nhất trước và chỉ trả về các trường thông tin công khai.
 const sortedPublicUsers = (db) =>
   [...(db.users || [])]
     .sort((first, second) => {
@@ -22,11 +21,9 @@ const sortedPublicUsers = (db) =>
     })
     .map(publicUser);
 
-// Đếm số tài khoản admin đang hoạt động để bảo vệ admin cuối cùng.
 const activeAdminCount = (db) =>
   (db.users || []).filter((user) => user.role === 'admin' && user.status === 'active').length;
 
-// Lọc và sắp xếp Race Class Catalog theo thứ tự hiển thị rồi theo tên.
 export const sortedRaceClasses = (db, { activeOnly = false } = {}) =>
   [...(db.raceClasses || [])]
     .filter((raceClass) => !activeOnly || raceClass.isActive !== false)
@@ -36,7 +33,6 @@ export const sortedRaceClasses = (db, { activeOnly = false } = {}) =>
         String(first.name).localeCompare(String(second.name))
     );
 
-// Chuẩn hóa và kiểm tra dữ liệu đầu vào của một race class.
 const sanitizeRaceClass = (input, current = {}) => {
   const raceClass = {
     name: String(input.name ?? current.name ?? '').trim(),

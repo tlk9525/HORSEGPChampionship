@@ -83,7 +83,6 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
 
   const [pendingApprovals, setPendingApprovals] = useState<ApprovalItem[]>([]);
   const [approvalMessage, setApprovalMessage] = useState('');
-  const [approvalLoadError, setApprovalLoadError] = useState('');
   const [isLoadingApprovals, setIsLoadingApprovals] = useState(true);
   const [totalUsers, setTotalUsers] = useState(0);
   const [tournaments, setTournaments] = useState<TournamentRecord[]>([]);
@@ -143,14 +142,13 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
   // Ghi chú: Hàm này tải nghiệp vụ liên quan đến load approvals.
   const loadApprovals = () => {
     setIsLoadingApprovals(true);
-    setApprovalLoadError('');
 
     getApprovals()
       .then((approvalResult) => {
         setPendingApprovals(approvalResult.approvals);
       })
       .catch((error) => {
-        setApprovalLoadError(
+        setApprovalMessage(
           error instanceof Error ? error.message : 'Unable to load approvals'
         );
       })
@@ -636,12 +634,6 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                 </div>
               )}
 
-              {approvalLoadError && (
-                <div className="mb-5 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 font-semibold text-red-300">
-                  {approvalLoadError}
-                </div>
-              )}
-
               <div className="space-y-5">
 
                 {isLoadingApprovals && (
@@ -650,7 +642,7 @@ export default function AdminPanel({ onNavigate }: AdminPanelProps) {
                   </div>
                 )}
 
-                {!isLoadingApprovals && !approvalLoadError && pendingApprovals.length === 0 && (
+                {!isLoadingApprovals && pendingApprovals.length === 0 && (
                   <div className="bg-[#071a2f] border border-white/10 rounded-2xl p-5 text-gray-400">
                     No pending approvals.
                   </div>

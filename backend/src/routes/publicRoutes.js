@@ -13,7 +13,6 @@ import { streamRaceUpdates } from '../services/liveRaceEvents.js';
 export const createPublicRoutes = (getDb) => {
   const app = new Hono();
 
-  // Xác thực người gọi rồi trả bootstrap payload đúng với scope được yêu cầu.
   const sendBootstrap = async (c, scope = 'full') => {
     const includeTables = scope === 'full' ? null : bootstrapTablesForScope(scope);
     if (scope !== 'full' && !includeTables) {

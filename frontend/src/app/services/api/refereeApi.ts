@@ -3,14 +3,12 @@ import type { RaceEntryRecord, RaceRecord } from './types';
 
 export type RaceEntryReadiness = 'ready' | 'absent' | 'incident' | 'scratched';
 
-// Gửi toàn bộ kết quả cuộc đua để chuyển sang bước công bố.
 export const submitRaceResults = async (raceId: string) =>
   request<{ race?: RaceRecord; entries?: RaceEntryRecord[] }>(
     `/referee/races/${raceId}/submit-results`,
     { method: 'POST' },
   );
 
-// Ghi nhận trạng thái sẵn sàng của một ngựa trước cuộc đua.
 export const markRaceEntryReadiness = async (
   entryId: string,
   readiness: RaceEntryReadiness,
@@ -20,7 +18,6 @@ export const markRaceEntryReadiness = async (
     { method: 'POST' },
   );
 
-// Lưu kết quả thi đấu và ghi chú sự cố của một ngựa.
 export const recordRaceResult = async (
   entryId: string,
   result: {

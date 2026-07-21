@@ -8,7 +8,6 @@ import type {
   TournamentRecord,
 } from './types';
 
-// Lấy dữ liệu cần thiết để Admin tạo và quản lý cuộc đua.
 export const getRaceBuilder = async () =>
   request<{
     tournaments: TournamentRecord[];
@@ -20,11 +19,9 @@ export const getRaceBuilder = async () =>
     closeRegistrationHours: number;
   }>('/admin/race-builder');
 
-// Lấy danh sách hạng đua đang được cấu hình.
 export const getRaceClasses = async () =>
   request<{ raceClasses: RaceClassRecord[] }>('/admin/race-classes');
 
-// Tạo một hạng đua mới cùng các giới hạn tương ứng.
 export const createRaceClass = async (
   raceClass: Omit<RaceClassRecord, 'id' | 'createdAt' | 'updatedAt'>,
 ) =>
@@ -33,7 +30,6 @@ export const createRaceClass = async (
     { method: 'POST', body: JSON.stringify(raceClass) },
   );
 
-// Cập nhật cấu hình của một hạng đua.
 export const updateRaceClass = async (
   raceClassId: string,
   raceClass: Partial<Omit<RaceClassRecord, 'id' | 'createdAt' | 'updatedAt'>>,
@@ -43,7 +39,6 @@ export const updateRaceClass = async (
     { method: 'PATCH', body: JSON.stringify(raceClass) },
   );
 
-// Tạo cuộc đua mới với lịch, hạng đua và trọng tài được chọn.
 export const createRace = async (race: {
   raceNumber?: string;
   name: string;
@@ -71,7 +66,6 @@ export const createRace = async (race: {
     body: JSON.stringify(race),
   });
 
-// Cập nhật mức cược tối đa cho một cuộc đua.
 export const updateRaceBetLimit = (raceId: string, betLimit: number | null) =>
   request<{ race: RaceRecord; betLimit: number | null }>(
     `/admin/races/${raceId}/bet-limit`,
@@ -81,7 +75,6 @@ export const updateRaceBetLimit = (raceId: string, betLimit: number | null) =>
     },
   );
 
-// Cập nhật lịch và thời gian đăng ký của cuộc đua.
 export const updateRace = async (
   raceId: string,
   race: {
@@ -97,7 +90,6 @@ export const updateRace = async (
     body: JSON.stringify(race),
   });
 
-// Đưa cuộc đua về trạng thái ban đầu với lịch mới.
 export const resetRace = async (
   raceId: string,
   race: {
@@ -125,7 +117,6 @@ export type AdminRaceAction =
   | 'cancel-race'
   | 'reset-race';
 
-// Gửi một hành động chuyển trạng thái cuộc đua từ phía Admin.
 export const adminRaceAction = async (
   raceId: string,
   action: AdminRaceAction,

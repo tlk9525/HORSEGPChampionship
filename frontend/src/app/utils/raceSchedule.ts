@@ -82,7 +82,6 @@ export const parseRaceSchedule = ({
 
 // Ghi chú: Đổi Date sang định dạng input datetime-local.
 export const formatDatetimeLocal = (date: Date) => {
-  // Ghi chú: Bổ sung số 0 phía trước để thành phần ngày giờ luôn có hai chữ số.
   const pad = (value: number) => String(value).padStart(2, '0');
 
   return [

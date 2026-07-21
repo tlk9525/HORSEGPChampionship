@@ -9,7 +9,6 @@ import type {
   TournamentRecord,
 } from './types';
 
-// Đăng ký Jockey tham gia một cuộc đua.
 export const joinRaceAsJockey = async (raceId: string) =>
   request<{
     registration: JockeyRaceRegistration;
@@ -19,7 +18,6 @@ export const joinRaceAsJockey = async (raceId: string) =>
     body: JSON.stringify({ raceId }),
   });
 
-// Lấy toàn bộ dữ liệu cần hiển thị trên cổng Jockey.
 export const getJockeyPortal = async () =>
   request<{
     profile: JockeyProfileRecord | null;
@@ -30,7 +28,6 @@ export const getJockeyPortal = async () =>
     invitations: JockeyInvitation[];
   }>('/jockey/portal');
 
-// Tạo hoặc cập nhật hồ sơ chuyên môn của Jockey.
 export const saveJockeyProfile = async (profile: {
   bio: string;
   certificate: string;
@@ -42,7 +39,6 @@ export const saveJockeyProfile = async (profile: {
     body: JSON.stringify(profile),
   });
 
-// Chấp nhận hoặc từ chối lời mời ghép cặp từ Owner.
 export const decideJockeyInvitation = async (
   id: string,
   decision: 'accepted' | 'rejected',
