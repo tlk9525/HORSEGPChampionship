@@ -7,7 +7,7 @@ export const FRONTEND_URL = process.env.FRONTEND_URL || 'http://127.0.0.1:5173/'
 export const MAX_RACE_FIELD_SIZE = Number(process.env.MAX_RACE_FIELD_SIZE || 10);
 export const MIN_READIED_PARTICIPANTS = Number(process.env.MIN_READIED_PARTICIPANTS || 5);
 export const MAX_TOURNAMENT_RACES = Number(process.env.MAX_TOURNAMENT_RACES || 10);
-export const MAX_OWNER_HORSES = Number(process.env.MAX_OWNER_HORSES || 10);
+export const MAX_OWNER_HORSES = Number(process.env.MAX_OWNER_HORSES || 20);
 export const SPECTATOR_STARTING_CREDITS = Number(process.env.SPECTATOR_STARTING_CREDITS || 100);
 /** Default max stake per bet when creating a race. Null/omit means unlimited. */
 export const DEFAULT_RACE_BET_LIMIT = Number(process.env.DEFAULT_RACE_BET_LIMIT || 50);
