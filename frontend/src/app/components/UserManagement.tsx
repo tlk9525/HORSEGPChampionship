@@ -301,24 +301,18 @@ export default function UserManagement({ currentUser, onNavigate }: UserManageme
 
             <div className="space-y-5">
               <label className="block">
-                <span className="block text-gray-300 mb-2 font-semibold">Role</span>
-                <select
-                  value={editingUser.role}
-                  onChange={(event) =>
-                    setEditingUser({
-                      ...editingUser,
-                      role: event.target.value as UserRole,
-                    })
-                  }
-                  className="w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white"
-                >
-                  {roleOptions.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <span className="block text-gray-300 mb-2 font-semibold">Name</span>
+              <div className="w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white">
+                {editingUser.name}
+              </div>
+            </label>
+
+            <label className="block">
+              <span className="block text-gray-300 mb-2 font-semibold">Role</span>
+              <div className="w-full bg-[#071a2f] border border-white/10 rounded-xl px-4 py-3 text-white">
+                {editingUser.role}
+              </div>
+            </label>
 
               <label className="block">
                 <span className="block text-gray-300 mb-2 font-semibold">Status</span>
