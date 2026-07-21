@@ -137,7 +137,6 @@ Horse Racing Tournament Website/
 │   │       ├── bettingService.js           # Pot, cutoff, settlement và refund.
 │   │       ├── liveRaceEvents.js           # SSE live race.
 │   │       └── *.js                        # Auth, credit, notification, audit, replay...
-│   └── test/*.test.js                      # Test nghiệp vụ bằng node:test.
 │
 ├── database/postgres/
 │   ├── schema.sql                          # Schema PostgreSQL chính.
@@ -359,6 +358,7 @@ npm run check
 | `MAX_RACE_FIELD_SIZE` | `10` | Số entry tối đa của race |
 | `MIN_READIED_PARTICIPANTS` | `5` | Số ngựa tối thiểu phải được referee đánh dấu Ready trước khi start race |
 | `MAX_TOURNAMENT_RACES` | `10` | Số race tối đa trong một giải |
+| `DEFAULT_RACE_BET_LIMIT` | `50` | Mức credit tối đa mặc định cho một bet khi tạo race |
 | `SESSION_DAYS` | `7` | Thời hạn session |
 | `SESSION_COOKIE_NAME` | `horse-racing-session` | Tên cookie đăng nhập |
 | `COOKIE_SECURE` | Production: `true` | Chỉ gửi cookie qua HTTPS |
@@ -378,14 +378,15 @@ npm run check
 | `npm run db:migrate-rating-ranges` | Thêm rating range theo race |
 | `npm run db:migrate-race-classes` | Tạo catalog race class |
 | `npm run db:migrate-dynamic-race-class-weights` | Cập nhật weight range động theo race class |
+| `npm run db:migrate-bet-limit` | Thêm giới hạn tiền cược theo race |
+| `npm run db:migrate-starter-bonus-unique` | Bảo đảm starter bonus chỉ cấp một lần cho mỗi user |
 | `npm run db:seed` | Chỉ seed dữ liệu |
-| `npm test` | Chạy test backend |
 | `npm run typecheck` | Kiểm tra TypeScript |
 | `npm run build` | Build frontend production |
 | `npm run preview` | Xem bản build |
-| `npm run check` | Typecheck + test + build |
+| `npm run check` | Typecheck + build |
 
-`npm run check` là lệnh nên chạy trước khi demo hoặc deploy vì nó bao gồm TypeScript, toàn bộ test backend và build frontend production.
+`npm run check` là lệnh nên chạy trước khi demo hoặc deploy. Bản source hiện tại chưa có backend automated test suite, vì vậy lệnh này mới bao gồm TypeScript và frontend production build.
 
 ## API chính
 
@@ -415,6 +416,7 @@ Scope hợp lệ: `tournaments`, `race`, `horses`, `jockeys`, `live`, `results`,
 |---|---|---|
 | `GET` | `/api/admin/approvals` | Danh sách chờ duyệt |
 | `GET` | `/api/admin/betting` | Thống kê betting và credit cho Admin |
+| `PATCH` | `/api/admin/races/:id/bet-limit` | Cập nhật giới hạn credit cho một bet của race |
 | `POST` | `/api/admin/approvals/:type/:id` | Duyệt / từ chối |
 | `POST` | `/api/admin/tournaments` | Tạo giải |
 | `PATCH` | `/api/admin/tournaments/:id` | Cập nhật giải |
@@ -486,10 +488,11 @@ Action lifecycle hợp lệ: `close-registration`, `publish`, `start-race`, `fin
 - SSE đang dùng listener trong process. Khi chạy nhiều backend instance cần Redis Pub/Sub hoặc message broker để đồng bộ sự kiện.
 - `GET /api/bootstrap` đầy đủ vẫn có thể nặng với database lớn; frontend đã dùng scoped bootstrap nhưng các danh sách dài vẫn nên bổ sung phân trang.
 - `writeDb` là fallback đồng bộ snapshot trong một transaction. Các luồng quan trọng đã dùng row-level persistence, nhưng route mới nên ưu tiên transaction nhỏ thay vì gọi fallback này.
-- Test hiện tập trung vào backend business rules và service. Nên bổ sung E2E cho các luồng đăng nhập, đăng ký race, referee và betting trước khi mở rộng production.
+- Backend automated test suite không còn trong cấu trúc hiện tại. Cần khôi phục regression test và bổ sung E2E cho các luồng đăng nhập, đăng ký race, referee và betting trước khi mở rộng production.
 
 ## Tài liệu liên quan
 
+- [`docs/bao-ve-project.md`](docs/bao-ve-project.md) — Kịch bản bảo vệ, 47 API, toàn bộ status, demo và câu hỏi phản biện
 - [`docs/business-flow-and-roles.md`](docs/business-flow-and-roles.md)
 - [`docs/schema-erd.md`](docs/schema-erd.md)
 - [`docs/erd.drawio`](docs/erd.drawio)

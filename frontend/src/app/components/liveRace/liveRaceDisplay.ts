@@ -36,6 +36,7 @@ export const resultOutcomeOptions: Array<{ value: ResultOutcome; label: string }
   { value: 'disqualified', label: 'Disqualified' },
 ];
 
+// Ghi chú: Đổi mã kết quả thi đấu thành nhãn dễ đọc trên giao diện.
 export const resultOutcomeLabel = (value?: string) =>
   resultOutcomeOptions.find((option) => option.value === value)?.label || 'Finished normally';
 
@@ -50,9 +51,11 @@ const leaderboardLaneColors = [
   '#14b8a6',
 ];
 
+// Ghi chú: Chọn màu áo đua ổn định theo số làn của runner.
 export const silkPaletteByLane = (lane?: number | null) =>
   leaderboardLaneColors[Math.max(0, Number(lane || 1) - 1) % leaderboardLaneColors.length];
 
+// Ghi chú: Chuyển thời gian về đích dạng chuỗi thành tổng số giây để so sánh.
 export const parseFinishTimeSeconds = (value?: string) => {
   const raw = String(value || '').trim();
   if (!raw) return Number.NaN;
@@ -76,6 +79,7 @@ export const parseFinishTimeSeconds = (value?: string) => {
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 };
 
+// Ghi chú: Tạo giá trị sắp xếp thời gian về đích, đẩy dữ liệu không hợp lệ xuống cuối.
 export const finishTimeSortValue = (value?: string) => {
   const parsed = parseFinishTimeSeconds(value);
   return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;

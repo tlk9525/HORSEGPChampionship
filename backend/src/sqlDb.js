@@ -2,6 +2,8 @@ import pg from 'pg';
 import { buildReadModel, readTableOrder } from './db/readModel.js';
 import { createBettingPersistence } from './db/persistence/bettingPersistence.js';
 import { writeBettingSnapshot } from './db/persistence/bettingSnapshotPersistence.js';
+import { applyCreditTransactionsIdempotent } from './db/persistence/creditPersistence.js';
+import { nowIso } from './db/persistence/persistenceHelpers.js';
 import { createRacePersistence } from './db/persistence/racePersistence.js';
 import { writeRaceSnapshot } from './db/persistence/raceSnapshotPersistence.js';
 import { createUserPersistence } from './db/persistence/userPersistence.js';
@@ -66,8 +68,7 @@ const requiredRuntimeTables = [
   'creditTransactions',
 ];
 
-// Betting schema is soft-created after core tables exist so existing DBs
-// without wallets/bets do not fail /api/spectator/* with "Request failed".
+// Tạo bổ sung schema betting sau các bảng lõi để database cũ vẫn phục vụ được API spectator.
 const ensureBettingSchema = async () => {
   await getPool().query(`
     CREATE TABLE IF NOT EXISTS "wallets" (
@@ -182,11 +183,6 @@ const ensureRuntimeSchema = async () => {
         `ALTER TABLE "races"
          ADD COLUMN IF NOT EXISTS "betLimit" NUMERIC(12, 2)`
       );
-      await getPool().query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS "uq_credit_transactions_starter_bonus_user"
-          ON "creditTransactions" ("userId")
-          WHERE "type" = 'starter_bonus'
-      `);
       await getPool().query(
         'ALTER TABLE "raceEntries" ADD COLUMN IF NOT EXISTS "resultOutcome" VARCHAR(32) NOT NULL DEFAULT \'finished\''
       );
@@ -346,97 +342,6 @@ const derivedRefereeAssignmentId = (raceId, refereeUserId) => {
   return `rra_${digest}`;
 };
 
-export class RaceStateConflictError extends Error {
-  constructor(message = 'Race state changed by another request') {
-    super(message);
-    this.name = 'RaceStateConflictError';
-    this.code = 'RACE_STATE_CONFLICT';
-  }
-}
-
-/**
- * Insert ledger rows first (ON CONFLICT DO NOTHING RETURNING).
- * Only credit/debit the wallet when the ledger insert actually lands.
- * balanceAfter is written from the live wallet RETURNING value.
- */
-const applyCreditTransactionsIdempotent = async (client, creditTransactions = []) => {
-  const walletBalances = {};
-  const appliedDeltaByUser = {};
-  const sorted = [...creditTransactions].sort((left, right) => {
-    const userCmp = String(left.userId).localeCompare(String(right.userId));
-    if (userCmp !== 0) return userCmp;
-    return String(left.id).localeCompare(String(right.id));
-  });
-
-  for (const transaction of sorted) {
-    const amount = Number(transaction.amount);
-    const updatedAt = transaction.createdAt || nowIso();
-    if (!Number.isFinite(amount) || amount === 0) continue;
-
-    await client.query(
-      `INSERT INTO "wallets" ("userId", "credits", "updatedAt")
-       VALUES ($1, 0, $2)
-       ON CONFLICT ("userId") DO NOTHING`,
-      [transaction.userId, updatedAt]
-    );
-
-    await client.query(
-      `SELECT "credits" FROM "wallets" WHERE "userId" = $1 FOR UPDATE`,
-      [transaction.userId]
-    );
-
-    const { rows: insertedRows } = await client.query(
-      `INSERT INTO "creditTransactions" (
-        "id", "userId", "type", "amount", "balanceAfter", "metadata", "createdAt"
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      ON CONFLICT ("id") DO NOTHING
-      RETURNING "id"`,
-      [
-        transaction.id,
-        transaction.userId,
-        transaction.type,
-        amount,
-        0,
-        transaction.metadata || null,
-        updatedAt,
-      ]
-    );
-
-    if (!insertedRows.length) {
-      continue;
-    }
-
-    const { rows: walletRows } = await client.query(
-      `UPDATE "wallets"
-       SET "credits" = "credits" + $2,
-           "updatedAt" = $3
-       WHERE "userId" = $1
-       RETURNING "credits"`,
-      [transaction.userId, amount, updatedAt]
-    );
-    const nextCredits = Number(walletRows[0]?.credits ?? 0);
-    if (nextCredits < 0) {
-      throw new Error(
-        `Insufficient credits while applying ${transaction.type} for ${transaction.userId}`
-      );
-    }
-
-    await client.query(
-      `UPDATE "creditTransactions"
-       SET "balanceAfter" = $2
-       WHERE "id" = $1`,
-      [transaction.id, nextCredits]
-    );
-
-    transaction.balanceAfter = nextCredits;
-    walletBalances[transaction.userId] = nextCredits;
-    appliedDeltaByUser[transaction.userId] =
-      (appliedDeltaByUser[transaction.userId] || 0) + amount;
-  }
-
-  return { walletBalances, appliedDeltaByUser };
-};
 const tableDeleteOrder = [
   'notifications',
   'sessions',
@@ -468,8 +373,15 @@ export const writeDb = async (db) => {
     (baseline.users || []).map((user) => [user.id, user])
   );
   // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến write rows.
-  const writeRows = async (tableName, columns, rows = [], keyColumn) => {
+  const writeRows = async (
+    tableName,
+    columns,
+    rows = [],
+    keyColumn,
+    { skipUpsert = false } = {},
+  ) => {
     persistedRows.set(tableName, rows);
+    if (skipUpsert) return;
     await upsertChangedRows(
       client,
       tableName,
@@ -482,6 +394,29 @@ export const writeDb = async (db) => {
 
   try {
     await client.query('BEGIN');
+
+    const baselineCreditTransactionIds = new Set(
+      (baseline.creditTransactions || []).map((transaction) => transaction.id),
+    );
+    const newCreditTransactions = (db.creditTransactions || []).filter(
+      (transaction) => !baselineCreditTransactionIds.has(transaction.id),
+    );
+    const { walletBalances } = await applyCreditTransactionsIdempotent(
+      client,
+      newCreditTransactions,
+    );
+    for (const [userId, credits] of Object.entries(walletBalances)) {
+      const user = (db.users || []).find((item) => item.id === userId);
+      if (user) user.credits = credits;
+
+      db.wallets = db.wallets || [];
+      const wallet = db.wallets.find((item) => item.userId === userId);
+      if (wallet) {
+        wallet.credits = credits;
+      } else {
+        db.wallets.push({ userId, credits, updatedAt: nowIso() });
+      }
+    }
 
     await writeUserSnapshot({ db, baselineUsersById, writeRows });
     await writeRaceSnapshot({ db, writeRows });

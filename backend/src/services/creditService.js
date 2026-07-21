@@ -38,10 +38,7 @@ const previousDateKey = (dateKey) => {
   return date.toISOString().slice(0, 10);
 };
 
-// PostgreSQL DATE values can arrive as Date objects representing midnight in
-// the database timezone. Convert those objects back through Vietnam time;
-// slicing String(date) would produce values such as "Thu Jul 16" and award the
-// same daily bonus again on every login.
+// Chuẩn hóa PostgreSQL DATE về ngày Việt Nam để không cấp lại daily bonus do lệch múi giờ.
 const storedRewardDateKey = (value) => {
   if (!value) return null;
   if (value instanceof Date) return vietnamDateKey(value);
@@ -124,12 +121,14 @@ const recordCreditTransaction = (
   return transaction;
 };
 
+// Tạo ledger ID ổn định cho một giao dịch credit gắn với bet.
 export const creditTransactionIdForBet = (type, betId) => `${type}:${betId}`;
 
-/** Stable ledger id so concurrent starter grants collide on PK instead of double-paying. */
+// Tạo ledger ID cố định để các request cấp starter bonus đồng thời không trả thưởng hai lần.
 export const creditTransactionIdForStarterBonus = (userId) =>
   `${CREDIT_TRANSACTION_TYPES.STARTER_BONUS}:${userId}`;
 
+// Tìm một credit transaction theo ID trong read model hiện tại.
 const findCreditTransactionById = (db, id) =>
   (db.creditTransactions || []).find((transaction) => transaction.id === id);
 
@@ -168,10 +167,7 @@ export const grantStarterCredits = (
   });
 };
 
-/**
- * Grant starter credits when a user becomes a spectator (registration or role change).
- * Idempotent: skips if the fixed starter_bonus:{userId} ledger entry already exists.
- */
+// Cấp starter credit khi user thành spectator và bỏ qua nếu ledger đã ghi nhận khoản thưởng.
 export const ensureSpectatorStarterCredits = (
   db,
   userId,

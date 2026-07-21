@@ -15,10 +15,7 @@ const winningEntry = (entries = []) =>
       entry.preRaceStatus !== 'absent'
   );
 
-/**
- * Parse race wall-clock date/time as Vietnam time (+07:00) so betting cutoff
- * matches how admins enter race schedules (not UTC).
- */
+// Chuyển ngày giờ race theo múi giờ Việt Nam sang timestamp để tính mốc đóng cược chính xác.
 export const raceStartMs = (race) => {
   const date = String(race?.date || race?.raceDate || '').slice(0, 10);
   const rawTime = String(race?.time || race?.raceTime || '');
@@ -41,20 +38,14 @@ export const isBettableEntry = (entry) =>
       entry.preRaceStatus !== 'absent'
   );
 
-/**
- * Max credits allowed for a single bet on this race.
- * Returns null when unlimited (unset, zero, or invalid stored value).
- */
+// Lấy mức credit tối đa cho một bet, hoặc null nếu race không giới hạn mức cược.
 export const raceBetLimit = (race) => {
   const limit = Number(race?.betLimit);
   if (!Number.isFinite(limit) || limit <= 0) return null;
   return Math.floor(limit);
 };
 
-/**
- * Parse an admin-supplied bet limit.
- * Empty / null → unlimited (null). Otherwise must be a positive whole number.
- */
+// Chuẩn hóa bet limit do admin nhập và chỉ chấp nhận số nguyên dương hoặc giá trị trống.
 export const parseBetLimitInput = (value) => {
   if (value === null || value === undefined || value === '') {
     return { ok: true, betLimit: null };

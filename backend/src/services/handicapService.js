@@ -129,8 +129,7 @@ const ratingSnapshotValue = (entry) => {
     : null;
 };
 
-// Rating compares the actual finishing score with the score expected from
-// ratingSnapshot against every other classified starter in the field.
+// Tính rating sau race bằng cách so kết quả thực tế với kỳ vọng từ rating snapshot của cả field.
 export const computePostRaceRating = (entry, fieldEntries = []) => {
   const previousRating = ratingSnapshotValue(entry);
   const position = Number(entry?.position);
