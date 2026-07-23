@@ -22,7 +22,7 @@ export const createPublicRoutes = (getDb) => {
 
     const db = await getDb(includeTables ? { includeTables } : undefined);
     const user = await authenticate(c.req.raw, db);
-    return c.json(buildBootstrapPayload(db, user));
+    return c.json(buildBootstrapPayload(db, user, scope));
   };
 
   // Redirect trang gốc về frontend

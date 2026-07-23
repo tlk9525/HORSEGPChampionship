@@ -85,6 +85,7 @@ const bootstrapScopes = {
 
 const authenticationTables = ['users', 'sessions', 'systemSettings'];
 const publicRaceStatuses = new Set(PUBLIC_RACE_STATUSES);
+const replayTimelineScopes = new Set(['full', 'race', 'live']);
 
 // Xác định tập bảng tối thiểu cần đọc cho từng bootstrap scope.
 export const bootstrapTablesForScope = (scope) => {
@@ -191,15 +192,23 @@ const visibleHorseRaceRegistrations = (db, user) => {
   return [];
 };
 
+// Chỉ gửi timeline nặng cho màn hình phát lại/trực tiếp; các scope khác giữ nguyên race contract.
+const racesForScope = (races, scope) => {
+  if (replayTimelineScopes.has(scope)) return races;
+
+  return races.map(({ replayTimeline: _replayTimeline, ...race }) => race);
+};
+
 // Dựng bootstrap payload đã lọc quyền cùng các giới hạn cấu hình cho frontend.
-export const buildBootstrapPayload = (db, user) => {
+export const buildBootstrapPayload = (db, user, scope = 'full') => {
   const raceEntries = visibleRaceEntries(db, user);
   const settings = systemSettingsFromDb(db);
+  const races = visibleRaces(db, user);
 
   return {
     tournaments: db.tournaments,
     horses: visibleHorses(db, user, raceEntries),
-    races: visibleRaces(db, user),
+    races: racesForScope(races, scope),
     jockeyProfiles: publicJockeyProfiles(db, {
       includeEmail: user?.role === USER_ROLES.ADMIN,
     }),
