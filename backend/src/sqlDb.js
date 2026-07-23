@@ -333,15 +333,6 @@ const upsertChangedRows = async (
   }
 };
 
-// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến derived referee assignment id.
-const derivedRefereeAssignmentId = (raceId, refereeUserId) => {
-  const digest = createHash('sha1')
-    .update(`${raceId}:${refereeUserId}`)
-    .digest('hex')
-    .slice(0, 24);
-  return `rra_${digest}`;
-};
-
 const tableDeleteOrder = [
   'notifications',
   'sessions',

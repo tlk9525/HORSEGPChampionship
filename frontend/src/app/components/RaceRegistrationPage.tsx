@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Send } from 'lucide-react';
 import {
   HorseRecord,
@@ -30,6 +30,7 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
   const [jockeys, setJockeys] = useState<JockeyProfileRecord[]>([]);
   const [horseRegistrations, setHorseRegistrations] = useState<HorseRaceRegistration[]>([]);
   const [message, setMessage] = useState('');
+  const registrationLoadId = useRef(0);
   const [form, setForm] = useState({
     horseId: '',
     registrationId: '',
@@ -53,7 +54,9 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
   );
 
   // Ghi chú: Hàm này tải nghiệp vụ liên quan đến load registration data.
-  const loadRegistrationData = () => {
+  const loadRegistrationData = useCallback(() => {
+    const loadId = ++registrationLoadId.current;
+
     if (!raceId) {
       setMessage('Please select a race first.');
       return;
@@ -61,6 +64,8 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
 
     getRaceRegistration(raceId)
       .then((data) => {
+        if (loadId !== registrationLoadId.current) return;
+
         const availableHorses = data.horses || [];
         const availableJockeys = data.jockeyProfiles || [];
         const availableRegistrations = data.horseRaceRegistrations || [];
@@ -90,14 +95,20 @@ export default function RaceRegistrationPage({ onNavigate }: RaceRegistrationPag
             : availableJockeys[0]?.userId || '',
         }));
       })
-      .catch((error) =>
-        setMessage(error instanceof Error ? error.message : 'Unable to load registration data')
-      );
-  };
+      .catch((error) => {
+        if (loadId !== registrationLoadId.current) return;
+        setMessage(error instanceof Error ? error.message : 'Unable to load registration data');
+      });
+  }, [raceId]);
 
   useEffect(() => {
+    setMessage('');
     loadRegistrationData();
-  }, []);
+
+    return () => {
+      registrationLoadId.current += 1;
+    };
+  }, [loadRegistrationData]);
 
   const approvedHorseRegistrations = horseRegistrations.filter(
     (registration) => registration.status === 'approved' && !registration.jockeyUserId
