@@ -18,7 +18,6 @@ export const register = async (
   request<{
     user: AuthUser;
     requiresApproval?: boolean;
-    requiresEmailVerification?: boolean;
     message?: string;
   }>('/register', {
     method: 'POST',
@@ -71,14 +70,3 @@ export const completePasswordReset = async (
       body: JSON.stringify({ newPassword }),
     },
   );
-
-export const verifyEmail = async (token: string) =>
-  request<{ ok: boolean; message?: string }>(
-    `/verify-email?token=${encodeURIComponent(token)}`,
-  );
-
-export const resendVerificationEmail = async (email: string) =>
-  request<{ ok: boolean; message?: string }>('/verify-email/resend', {
-    method: 'POST',
-    body: JSON.stringify({ email }),
-  });

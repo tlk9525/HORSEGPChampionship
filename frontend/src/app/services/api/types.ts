@@ -17,7 +17,6 @@ export interface AuthUser {
   loginStreak?: number;
   lastLoginRewardDate?: string | null;
   dailyReward?: DailyReward;
-  emailVerifiedAt?: string | null;
 }
 
 export interface BetRecord {

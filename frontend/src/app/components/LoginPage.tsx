@@ -10,7 +10,6 @@ import {
   Check,
   X,
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import {
   AuthUser,
   UserRole,
@@ -46,7 +45,6 @@ export default function LoginPage({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showVerificationHelp, setShowVerificationHelp] = useState(false);
   const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
 
   const passwordRequirements = [
@@ -69,7 +67,6 @@ export default function LoginPage({
   const submit = async () => {
     setError('');
     setNotice('');
-    setShowVerificationHelp(false);
     setIsSubmitting(true);
 
     try {
@@ -83,20 +80,6 @@ export default function LoginPage({
         }
 
         const result = await register(name, email, password, role);
-
-        if (
-          result.requiresEmailVerification ||
-          (role === 'spectator' && !result.user.emailVerifiedAt)
-        ) {
-          setNotice(
-            'Account created. Check your email and verify your address before placing a bet.'
-          );
-          setShowVerificationHelp(true);
-          setIsRegister(false);
-          setPassword('');
-          setConfirmPassword('');
-          return;
-        }
 
         if (result.requiresApproval || result.user.status !== 'active') {
           setNotice(
@@ -380,14 +363,6 @@ export default function LoginPage({
               {notice && (
                 <div className="rounded-xl border border-[#d4af37]/40 bg-[#d4af37]/10 px-4 py-3 text-[#f6d77a] text-sm">
                   {notice}
-                  {showVerificationHelp && (
-                    <Link
-                      to="/verify-email"
-                      className="mt-2 block font-semibold underline underline-offset-4 hover:text-white"
-                    >
-                      Didn&apos;t receive it? Resend the verification email
-                    </Link>
-                  )}
                 </div>
               )}
 

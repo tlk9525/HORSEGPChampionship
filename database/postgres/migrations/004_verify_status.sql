@@ -1,5 +1,0 @@
-ALTER TABLE "users"
-ADD COLUMN IF NOT EXISTS "emailVerifiedAt" TIMESTAMPTZ,
-ADD COLUMN IF NOT EXISTS "emailVerificationTokenHash" VARCHAR(64),
-ADD COLUMN IF NOT EXISTS "emailVerificationExpiresAt" TIMESTAMPTZ,
-ADD COLUMN IF NOT EXISTS "emailVerificationSentAt" TIMESTAMPTZ;
