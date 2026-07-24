@@ -354,7 +354,7 @@ npm run check
 | `API_HOST` | `127.0.0.1` | Host backend |
 | `FRONTEND_URL` | `http://127.0.0.1:5173/` | URL frontend |
 | `VITE_API_URL` | `http://127.0.0.1:4000/api` | API URL cho frontend |
-| `MAX_OWNER_HORSES` | `10` | Số ngựa tối đa của owner |
+| `MAX_OWNER_HORSES` | `20` | Số ngựa tối đa của owner |
 | `MAX_RACE_FIELD_SIZE` | `10` | Số entry tối đa của race |
 | `MIN_READIED_PARTICIPANTS` | `5` | Số ngựa tối thiểu phải được referee đánh dấu Ready trước khi start race |
 | `MAX_TOURNAMENT_RACES` | `10` | Số race tối đa trong một giải |
