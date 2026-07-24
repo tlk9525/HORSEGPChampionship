@@ -17,6 +17,7 @@ import {
   login,
   register,
 } from '../services/api';
+import PasswordRecoveryModal from './PasswordRecoveryModal';
 
 interface LoginPageProps {
   initialMode?: 'login' | 'register';
@@ -46,6 +47,7 @@ export default function LoginPage({
   const [notice, setNotice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showVerificationHelp, setShowVerificationHelp] = useState(false);
+  const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
 
   const passwordRequirements = [
     { label: 'At least 8 characters', met: password.length >= 8 },
@@ -406,6 +408,7 @@ export default function LoginPage({
 
                   <button
                     type="button"
+                    onClick={() => setShowPasswordRecovery(true)}
                     className="text-[#d4af37] hover:text-red-400 transition-colors"
                   >
                     Forgot Password?
@@ -459,6 +462,12 @@ export default function LoginPage({
           </div>
         </div>
       </div>
+      {showPasswordRecovery && (
+        <PasswordRecoveryModal
+          initialEmail={email}
+          onClose={() => setShowPasswordRecovery(false)}
+        />
+      )}
     </div>
   );
 }

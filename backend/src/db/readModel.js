@@ -46,6 +46,10 @@ export const readTableOrder = {
     { column: 'createdAt', direction: 'DESC' },
     { column: 'token' },
   ],
+  passwordResetRequests: [
+    { column: 'requestedAt', direction: 'DESC' },
+    { column: 'id' },
+  ],
   bets: [
     { column: 'createdAt', direction: 'DESC' },
     { column: 'id' },
@@ -106,6 +110,7 @@ export const buildReadModel = (rowsByTable = {}) => {
     refereeReports = [],
     notifications = [],
     sessions = [],
+    passwordResetRequests = [],
     bets = [],
     wallets = [],
     creditTransactions = [],
@@ -186,6 +191,7 @@ export const buildReadModel = (rowsByTable = {}) => {
     raceActionLogs,
     refereeReports,
     sessions,
+    passwordResetRequests,
     bets: bets.map((bet) => ({
       ...bet,
       amount: Number(bet.amount),

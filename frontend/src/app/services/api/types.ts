@@ -17,6 +17,7 @@ export interface AuthUser {
   loginStreak?: number;
   lastLoginRewardDate?: string | null;
   dailyReward?: DailyReward;
+  emailVerifiedAt?: string | null;
 }
 
 export interface BetRecord {
@@ -49,7 +50,13 @@ export interface SpectatorWallet {
 
 export interface ApprovalItem {
   id: string;
-  entityType: 'horse' | 'account' | 'jockeyRace' | 'horseRace' | 'pairing';
+  entityType:
+    | 'horse'
+    | 'account'
+    | 'passwordReset'
+    | 'jockeyRace'
+    | 'horseRace'
+    | 'pairing';
   type: string;
   name: string;
   detail: string;
