@@ -735,6 +735,32 @@ export const createAdminRoutes = (
         decision === 'approved' ? 'Admin approved your account. You can now log in.' : 'Admin rejected your account request.');
     }
 
+    if (entityType === 'passwordReset') {
+      const request = (db.passwordResetRequests || []).find(
+        (item) => item.id === id && item.status === 'pending'
+      );
+      if (!request) {
+        return c.json({ message: 'Password reset approval request not found' }, 404);
+      }
+      const reviewedAt = new Date();
+      request.status = decision;
+      request.reviewedAt = reviewedAt.toISOString();
+      request.reviewedBy = c.get('user').id;
+      request.expiresAt = new Date(
+        reviewedAt.getTime() + 24 * 60 * 60 * 1000
+      ).toISOString();
+      createNotification(
+        db,
+        request.userId,
+        decision === 'approved'
+          ? 'Password reset approved'
+          : 'Password reset rejected',
+        decision === 'approved'
+          ? 'Admin approved your request. Use your recovery code within 24 hours to choose a new password.'
+          : 'Admin rejected your password reset request.'
+      );
+    }
+
     if (entityType === 'jockeyRace') {
       const registration = (db.jockeyRaceRegistrations || []).find(
         (item) => item.id === id && item.status === 'pending'

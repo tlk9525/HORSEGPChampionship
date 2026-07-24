@@ -7,7 +7,6 @@ import {
   X,
   TrendingUp,
   Circle,
-  LogOut,
   Coins,
 } from 'lucide-react';
 import {
@@ -17,6 +16,7 @@ import {
   markNotificationRead,
 } from '../services/api';
 import { messageTone } from '../utils/messageTone';
+import AccountMenu from './AccountMenu';
 
 interface NavbarProps {
   currentPage: string;
@@ -276,23 +276,7 @@ export default function Navbar({
                     <span className="text-xs text-[#d8d2c4]">Credits</span>
                   </div>
                 )}
-                <div className="text-right">
-                  <div className="text-white text-sm font-bold">
-                    {currentUser.name}
-                  </div>
-
-                  <div className="text-[#d8d2c4] text-xs uppercase">
-                    {currentUser.role}
-                  </div>
-                </div>
-
-                <button
-                  onClick={onLogout}
-                  className="p-2 bg-white/5 text-white rounded-lg hover:bg-white/10 transition-all"
-                  aria-label="Logout"
-                >
-                  <LogOut className="w-5 h-5" />
-                </button>
+                <AccountMenu currentUser={currentUser} onLogout={onLogout} />
               </div>
             ) : (
               <button
@@ -352,15 +336,7 @@ export default function Navbar({
 
               {/* MOBILE LOGIN */}
               {currentUser ? (
-                <button
-                  onClick={() => {
-                    onLogout();
-                    setIsMenuOpen(false);
-                  }}
-                  className="mt-2 px-4 py-3 bg-white/10 text-white rounded-lg hover:bg-white/15 transition-all font-semibold"
-                >
-                  Logout {currentUser.name}
-                </button>
+                <AccountMenu currentUser={currentUser} onLogout={onLogout} mobile />
               ) : (
                 <button
                   onClick={() => {

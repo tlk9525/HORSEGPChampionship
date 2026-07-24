@@ -393,6 +393,34 @@ export const formatApprovals = (db) => [
           ? approvalWarnings(db, { jockeyUserId: user.id })
           : [],
     })),
+  ...(db.passwordResetRequests || [])
+    .filter((request) => request.status === 'pending')
+    .map((request) => {
+      const user = db.users.find((item) => item.id === request.userId);
+      return {
+        id: request.id,
+        entityType: 'passwordReset',
+        type: 'Password Reset Request',
+        name: user?.name || 'Unknown user',
+        detail: `Email: ${user?.email || 'Unavailable'}`,
+        date: request.requestedAt,
+        targetUserId: request.userId,
+        reviewSections: [
+          {
+            title: 'Account recovery',
+            fields: [
+              approvalField('Full Name', user?.name),
+              approvalField('Email', user?.email),
+              approvalField('Role', user?.role),
+              approvalField('Requested At', request.requestedAt),
+            ],
+          },
+        ],
+        warnings: [
+          'Approve only after confirming the requester owns this account.',
+        ],
+      };
+    }),
   ...(db.jockeyRaceRegistrations || [])
     .filter((registration) => registration.status === 'pending')
     .map((registration) => ({

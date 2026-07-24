@@ -70,6 +70,22 @@ export const writeUserSnapshot = async ({
   );
 
   await writeRows(
+    'passwordResetRequests',
+    [
+      'id',
+      'userId',
+      'tokenHash',
+      'status',
+      'requestedAt',
+      'reviewedAt',
+      'reviewedBy',
+      'expiresAt',
+      'completedAt',
+    ],
+    db.passwordResetRequests || [],
+  );
+
+  await writeRows(
     'systemSettings',
     ['key', 'value', 'updatedBy', 'updatedAt'],
     db.systemSettings || [],
