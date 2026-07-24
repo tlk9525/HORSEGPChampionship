@@ -103,6 +103,7 @@ export default function App() {
         currentUser={currentUser}
         onLogout={handleLogout}
         onNavigate={navigate}
+        onUserUpdate={setCurrentUser}
       />
 
       {/* PAGE CONTENT */}

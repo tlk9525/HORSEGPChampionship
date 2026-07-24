@@ -7,16 +7,18 @@ import {
   EyeOff,
   KeyRound,
   LogOut,
+  Pencil,
   ShieldCheck,
   UserRound,
   X,
 } from 'lucide-react';
 
-import { AuthUser, changePassword } from '../services/api';
+import { AuthUser, changePassword, updateAccountName } from '../services/api';
 
 interface AccountMenuProps {
   currentUser: AuthUser;
   onLogout: () => void;
+  onUserUpdate: (user: AuthUser) => void;
   mobile?: boolean;
 }
 
@@ -34,11 +36,17 @@ const passwordChecks = (password: string) => [
 export default function AccountMenu({
   currentUser,
   onLogout,
+  onUserUpdate,
   mobile = false,
 }: AccountMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showAccountInfo, setShowAccountInfo] = useState(false);
+  const [showNameModal, setShowNameModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [displayName, setDisplayName] = useState(currentUser.name);
+  const [nameMessage, setNameMessage] = useState('');
+  const [nameError, setNameError] = useState('');
+  const [isSavingName, setIsSavingName] = useState(false);
   const [showPasswords, setShowPasswords] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -66,6 +74,7 @@ export default function AccountMenu({
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsOpen(false);
+        setShowNameModal(false);
         setShowPasswordModal(false);
       }
     };
@@ -76,6 +85,40 @@ export default function AccountMenu({
       document.removeEventListener('keydown', closeOnEscape);
     };
   }, []);
+
+  const openNameModal = () => {
+    setIsOpen(false);
+    setShowNameModal(true);
+    setDisplayName(currentUser.name);
+    setNameMessage('');
+    setNameError('');
+  };
+
+  const submitNameChange = async () => {
+    const normalizedName = displayName.trim().replace(/\s+/g, ' ');
+    setNameMessage('');
+    setNameError('');
+    if (normalizedName.length < 2) {
+      setNameError('Name must contain at least 2 characters.');
+      return;
+    }
+    if (normalizedName.length > 100) {
+      setNameError('Name must not exceed 100 characters.');
+      return;
+    }
+
+    setIsSavingName(true);
+    try {
+      const result = await updateAccountName(normalizedName);
+      onUserUpdate(result.user);
+      setDisplayName(result.user.name);
+      setNameMessage(result.message);
+    } catch (err) {
+      setNameError(err instanceof Error ? err.message : 'Unable to update name');
+    } finally {
+      setIsSavingName(false);
+    }
+  };
 
   const openPasswordModal = () => {
     setIsOpen(false);
@@ -196,6 +239,16 @@ export default function AccountMenu({
 
               <button
                 type="button"
+                onClick={openNameModal}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-gray-200 transition-colors hover:bg-white/5"
+                role="menuitem"
+              >
+                <Pencil className="h-5 w-5 text-[#d4af37]" />
+                <span className="font-semibold">Change name</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={openPasswordModal}
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-gray-200 transition-colors hover:bg-white/5"
                 role="menuitem"
@@ -217,6 +270,82 @@ export default function AccountMenu({
           </div>
         )}
       </div>
+
+      {showNameModal &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[10030] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="change-name-title"
+          >
+            <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#0b223d] p-6 shadow-2xl sm:p-8">
+              <div className="mb-6 flex items-start justify-between gap-4">
+                <div>
+                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-[#d4af37]/15 text-[#d4af37]">
+                    <Pencil className="h-5 w-5" />
+                  </div>
+                  <h2 id="change-name-title" className="text-2xl font-black text-white">
+                    Change your name
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-400">
+                    This name appears in your profile and throughout the system.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowNameModal(false)}
+                  className="rounded-lg p-2 text-gray-400 hover:bg-white/10 hover:text-white"
+                  aria-label="Close change name dialog"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold text-gray-300">
+                  Display name
+                </span>
+                <input
+                  type="text"
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  maxLength={100}
+                  autoFocus
+                  className="h-12 w-full rounded-xl border border-white/10 bg-[#071a2f] px-4 text-white outline-none transition-colors focus:border-[#d4af37]"
+                />
+                <span className="mt-2 block text-right text-xs text-gray-500">
+                  {displayName.trim().length}/100
+                </span>
+              </label>
+
+              {nameError && (
+                <p className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                  {nameError}
+                </p>
+              )}
+              {nameMessage && (
+                <p className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                  {nameMessage}
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={submitNameChange}
+                disabled={
+                  isSavingName ||
+                  displayName.trim().length < 2 ||
+                  displayName.trim() === currentUser.name
+                }
+                className="mt-5 h-12 w-full rounded-xl bg-[#d4af37] font-bold text-[#071a2f] transition-colors hover:bg-[#e4c45b] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isSavingName ? 'Saving name...' : 'Save name'}
+              </button>
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {showPasswordModal &&
         createPortal(

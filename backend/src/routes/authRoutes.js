@@ -232,6 +232,34 @@ export const createAuthRoutes = (
   });
 
   // Đăng xuất, xóa phiên làm việc khỏi database
+  app.patch('/account/name', async (c) => {
+    const db = await getDb();
+    const authenticatedUser = await authenticate(c.req.raw, db);
+    if (!authenticatedUser) {
+      return c.json({ message: 'Authentication required' }, 401);
+    }
+
+    const { name } = await c.req.json();
+    const normalizedName = String(name || '').trim().replace(/\s+/g, ' ');
+    if (normalizedName.length < 2) {
+      return c.json({ message: 'Name must contain at least 2 characters' }, 400);
+    }
+    if (normalizedName.length > 100) {
+      return c.json({ message: 'Name must not exceed 100 characters' }, 400);
+    }
+
+    const user = db.users.find((item) => item.id === authenticatedUser.id);
+    if (!user) return c.json({ message: 'Account not found' }, 404);
+
+    user.name = normalizedName;
+    user.updatedAt = new Date().toISOString();
+    await writeDb(db);
+    return c.json({
+      user: publicUser(user),
+      message: 'Name updated successfully',
+    });
+  });
+
   // Signed-in users can change their password after confirming the current one.
   app.post('/change-password', async (c) => {
     const db = await getDb();

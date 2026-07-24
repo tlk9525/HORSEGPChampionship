@@ -23,6 +23,7 @@ interface NavbarProps {
   currentUser: AuthUser | null;
   onLogout: () => void;
   onNavigate: (page: string) => void;
+  onUserUpdate: (user: AuthUser) => void;
 }
 
 // Ghi chú: Hàm này render thanh điều hướng theo trạng thái đăng nhập và role.
@@ -31,6 +32,7 @@ export default function Navbar({
   currentUser,
   onLogout,
   onNavigate,
+  onUserUpdate,
 }: NavbarProps) {
 
   const [isMenuOpen, setIsMenuOpen] =
@@ -276,7 +278,11 @@ export default function Navbar({
                     <span className="text-xs text-[#d8d2c4]">Credits</span>
                   </div>
                 )}
-                <AccountMenu currentUser={currentUser} onLogout={onLogout} />
+                <AccountMenu
+                  currentUser={currentUser}
+                  onLogout={onLogout}
+                  onUserUpdate={onUserUpdate}
+                />
               </div>
             ) : (
               <button
@@ -336,7 +342,12 @@ export default function Navbar({
 
               {/* MOBILE LOGIN */}
               {currentUser ? (
-                <AccountMenu currentUser={currentUser} onLogout={onLogout} mobile />
+                <AccountMenu
+                  currentUser={currentUser}
+                  onLogout={onLogout}
+                  onUserUpdate={onUserUpdate}
+                  mobile
+                />
               ) : (
                 <button
                   onClick={() => {
