@@ -1,6 +1,6 @@
 # Hệ thống quản lý giải đua ngựa
 
-Ứng dụng web quản lý giải đua ngựa theo vai trò. Hệ thống cho phép admin tạo giải và cuộc đua, owner đăng ký ngựa, jockey đăng ký hoặc nhận lời mời, referee kiểm tra trước giờ chạy và ghi kết quả, sau đó admin duyệt kết quả chính thức để cập nhật rating.
+Ứng dụng web quản lý giải đua ngựa theo vai trò. Hệ thống cho phép admin tạo giải và cuộc đua, owner đăng ký ngựa, jockey đăng ký hoặc nhận lời mời, referee kiểm tra và ghi kết quả, spectator theo dõi hoặc đặt cược, sau đó admin duyệt kết quả chính thức để cập nhật rating và payout.
 
 ## Tổng quan nhanh
 
@@ -9,7 +9,7 @@
 - Database: PostgreSQL.
 - Auth: session cookie `HttpOnly`.
 - Realtime: Server-Sent Events cho màn hình live race.
-- Deployment: frontend dùng `vercel.json` rewrite `/api` sang backend render.
+- Deployment: frontend trên Vercel rewrite `/api/:path*` sang backend Render.
 
 ## Mục lục
 
@@ -24,6 +24,7 @@
 - [Biến môi trường](#biến-môi-trường)
 - [Scripts](#scripts)
 - [API chính](#api-chính)
+- [Giới hạn hiện tại](#giới-hạn-hiện-tại)
 - [Tài liệu liên quan](#tài-liệu-liên-quan)
 
 ## Tính năng
@@ -33,6 +34,7 @@
 - Ghép cặp owner - jockey theo từng race hoặc qua lời mời.
 - Phân quyền rõ theo 5 vai trò: admin, owner, jockey, referee, spectator.
 - Theo dõi cuộc đua trực tiếp bằng SSE.
+- Spectator nhận credit, đặt/hủy cược trước giờ race và nhận payout khi có kết quả chính thức.
 - Tính rating và handicap theo luật nội bộ của dự án.
 - Xem hồ sơ ngựa, hồ sơ jockey, lịch sử race và kết quả công khai.
 - Gửi thông báo nội bộ khi có đăng ký, phê duyệt, hay đổi trạng thái.
@@ -42,7 +44,7 @@
 Luồng dữ liệu chính của app:
 
 1. Browser tải React frontend.
-2. Frontend gọi `/api/bootstrap` để lấy dữ liệu tổng hợp ban đầu.
+2. Mỗi màn hình gọi `/api/bootstrap/:scope` để chỉ tải read model cần thiết.
 3. Người dùng thao tác trên UI theo vai trò.
 4. Frontend gọi API Hono để ghi vào PostgreSQL.
 5. Một số thay đổi phát SSE để cập nhật màn live race.
@@ -58,7 +60,11 @@ Backend được chia theo lớp:
 
 - `routes/`: API theo domain hoặc theo vai trò.
 - `services/`: nghiệp vụ dùng chung.
-- `sqlDb.js`: đọc/ghi PostgreSQL và chuẩn hoá dữ liệu trả về cho frontend.
+- `db/readModel.js`: chuẩn hoá row PostgreSQL thành read model cho route/frontend.
+- `db/persistence/`: ghi snapshot hoặc transaction nhỏ theo domain `race`, `user`, `betting`.
+- `sqlDb.js`: kết nối PostgreSQL, đọc bảng theo scope và điều phối transaction.
+
+`GET /api/bootstrap` vẫn được giữ để tương thích. Frontend hiện dùng các scope `tournaments`, `race`, `horses`, `jockeys`, `live`, `results`, `betting` và `admin`; backend chỉ query những bảng cần cho scope đó.
 
 ## Công nghệ
 
@@ -75,88 +81,79 @@ Backend được chia theo lớp:
 
 ```text
 Horse Racing Tournament Website/
-├── frontend/                         # Phần giao diện React chạy trên trình duyệt.
-│   ├── index.html                    # File HTML gốc để Vite gắn React app vào.
-│   ├── vite.config.ts                # Cấu hình Vite: build, dev server và plugin React.
-│   ├── tailwind.config.js            # Cấu hình Tailwind CSS cho style toàn frontend.
-│   └── src/                          # Source chính của frontend.
-│       ├── App.tsx                   # Shell chính: auth guard, layout và khung render app.
-│       ├── main.tsx                  # Điểm khởi động React, mount App vào index.html.
-│       └── app/                      # Code nghiệp vụ frontend sau khi tách khỏi root src.
-│           ├── AppRoutes.tsx         # Định nghĩa toàn bộ route/page được render theo trạng thái.
-│           ├── routing.ts            # Map page, role được phép vào và helper redirect.
-│           ├── components/           # Các màn hình và component giao diện theo nghiệp vụ.
-│           │   ├── AdminPanel.tsx             # Dashboard admin: duyệt hồ sơ, quản lý race, user, settings.
-│           │   ├── CreateRacePage.tsx         # Form tạo race mới trong tournament.
-│           │   ├── EditRacePage.tsx           # Form sửa race chưa công bố hoặc reset race bị huỷ.
-│           │   ├── Footer.tsx                 # Footer chung của website.
-│           │   ├── HorseDetails.tsx           # Trang chi tiết hồ sơ ngựa, rating và lịch sử race.
-│           │   ├── HorseDirectoryPage.tsx     # Danh sách ngựa công khai để xem và lọc.
-│           │   ├── HorseManagement.tsx        # Khu owner quản lý ngựa của mình.
-│           │   ├── JockeyDirectoryPage.tsx    # Danh sách jockey công khai.
-│           │   ├── JockeyPage.tsx             # Portal jockey: hồ sơ, đăng ký race, lời mời.
-│           │   ├── LandingPage.tsx            # Trang chủ giới thiệu nhanh giải và luồng chính.
-│           │   ├── LiveRace.tsx               # Màn race đang chạy, nhận cập nhật live qua SSE.
-│           │   ├── LoginPage.tsx              # Giao diện đăng nhập và đăng ký tài khoản.
-│           │   ├── Navbar.tsx                 # Thanh điều hướng theo vai trò người dùng.
-│           │   ├── RaceDetails.tsx            # Chi tiết một race: entry, trạng thái, kết quả.
-│           │   ├── RaceRegistrationPage.tsx   # Owner đăng ký ngựa vào race và chọn/mời jockey.
-│           │   ├── RaceSimulationDemo.tsx     # Màn mô phỏng race demo để kiểm thử/giải thích race.
-│           │   ├── RegisterHorsePage.tsx      # Form owner tạo hồ sơ ngựa mới.
-│           │   ├── ResultsPage.tsx            # Trang xem kết quả race đã hoàn tất.
-│           │   ├── TournamentDetails.tsx      # Chi tiết tournament và các race thuộc tournament.
-│           │   └── TournamentPage.tsx         # Danh sách tournament và thao tác quản lý cơ bản.
-│           ├── services/             # Lớp gọi API từ frontend xuống backend.
-│           │   └── api.ts            # Khai báo type dữ liệu và hàm request cho toàn frontend.
-│           └── utils/                # Helper dùng chung ở frontend.
-│               ├── domain.ts         # Hàm lấy tên/ngữ nghĩa domain như owner, jockey, race.
-│               ├── messageTone.ts    # Chọn màu thông báo theo nội dung success/error/warning.
-│               ├── raceSimulation.ts # Logic mô phỏng race và rủi ro non-finish phía frontend.
-│               └── rating.ts         # Helper tính/lấy rating ngựa ở frontend.
+├── frontend/
+│   ├── index.html
+│   ├── vite.config.ts
+│   └── src/
+│       ├── App.tsx                         # Shell, auth guard và layout chung.
+│       ├── main.tsx                        # Entry React.
+│       └── app/
+│           ├── AppRoutes.tsx               # Route tree; URL là nguồn chính cho entity detail.
+│           ├── routing.ts                  # Page/role mapping và redirect helper.
+│           ├── components/
+│           │   ├── admin/                  # Modal settings và betting của Admin.
+│           │   ├── liveRace/               # Track, leaderboard và helper hiển thị live.
+│           │   └── *.tsx                   # Các trang tournament, race, horse, jockey...
+│           ├── services/
+│           │   ├── api.ts                  # Barrel giữ tương thích import cho frontend.
+│           │   └── api/
+│           │       ├── types.ts            # Type dùng chung của API/read model.
+│           │       ├── client.ts           # HTTP client và bootstrap cache theo scope.
+│           │       └── *Api.ts             # API theo auth, admin, owner, jockey, referee...
+│           └── utils/                      # Rating, lịch race, simulation và helper UI.
 │
-├── backend/                          # Phần API Node.js/Hono và nghiệp vụ server.
-│   └── src/                          # Source chính của backend.
-│       ├── app.js                    # Tạo Hono app, gắn middleware và route.
-│       ├── index.js                  # Entry backend: đọc env, mở DB, start server.
-│       ├── sqlDb.js                  # Lớp đọc/ghi PostgreSQL và chuẩn hoá dữ liệu trả về.
-│       ├── config/                   # Cấu hình hằng số dùng chung backend.
-│       │   └── constants.js          # Giới hạn race, session, role, cookie và env mặc định.
-│       ├── routes/                   # API endpoint chia theo vai trò/domain.
-│       │   ├── adminRoutes.js        # API admin: tournament, race, approvals, user, settings.
-│       │   ├── authRoutes.js         # API đăng nhập, đăng ký, logout và session hiện tại.
-│       │   ├── jockeyRoutes.js       # API cho jockey: hồ sơ, race registration, invitation.
-│       │   ├── notificationRoutes.js # API đọc và đánh dấu thông báo.
-│       │   ├── ownerRoutes.js        # API cho owner: ngựa, đăng ký race, chọn jockey.
-│       │   ├── publicRoutes.js       # API public/bootstrap cho dữ liệu hiển thị chung.
-│       │   └── refereeRoutes.js      # API referee: check-in, incident, submit result.
-│       └── services/                 # Nghiệp vụ dùng lại giữa nhiều route.
-│           ├── authService.js        # Xử lý session cookie, public user và kiểm tra role.
-│           ├── domainService.js      # Helper domain: tên entity, entry race, approval review.
-│           ├── handicapService.js    # Tính rating, eligibility range và handicap.
-│           ├── liveRaceEvents.js     # Phát SSE để màn live race cập nhật realtime.
-│           ├── notificationService.js # Tạo thông báo cho admin/referee/owner/jockey.
-│           ├── raceAuditService.js   # Ghi log hành động quan trọng trên race.
-│           └── raceReplayTimeline.js # Dựng timeline replay chính thức/provisional cho race.
-├── backend/test/                     # Test backend bằng node:test.
-│   └── *.test.js                     # Test flow admin, owner, jockey, referee và service.
+├── backend/
+│   ├── src/
+│   │   ├── app.js                          # Middleware và gắn các route Hono.
+│   │   ├── index.js                        # Entry backend và dependency wiring.
+│   │   ├── sqlDb.js                        # Kết nối, scoped read và điều phối write transaction.
+│   │   ├── config/constants.js             # Role, session, race và env constants.
+│   │   ├── db/
+│   │   │   ├── readModel.js                # PostgreSQL row -> read model.
+│   │   │   └── persistence/
+│   │   │       ├── racePersistence.js      # Row-level transaction cho race/referee/admin.
+│   │   │       ├── raceSnapshotPersistence.js
+│   │   │       ├── userPersistence.js      # Account, login, session và settings.
+│   │   │       ├── userSnapshotPersistence.js
+│   │   │       ├── bettingPersistence.js   # Đặt/hủy cược nguyên tử.
+│   │   │       ├── bettingSnapshotPersistence.js
+│   │   │       └── persistenceHelpers.js
+│   │   ├── routes/
+│   │   │   ├── admin/
+│   │   │   │   ├── adminConfigurationRoutes.js
+│   │   │   │   ├── adminRaceLifecycleRoutes.js
+│   │   │   │   └── adminRaceRules.js
+│   │   │   ├── adminRoutes.js              # Tournament, race CRUD và approvals.
+│   │   │   ├── authRoutes.js
+│   │   │   ├── jockeyRoutes.js
+│   │   │   ├── notificationRoutes.js
+│   │   │   ├── ownerRoutes.js
+│   │   │   ├── publicRoutes.js             # Health, scoped bootstrap và live SSE.
+│   │   │   ├── refereeRoutes.js
+│   │   │   └── spectatorRoutes.js
+│   │   └── services/
+│   │       ├── bootstrapService.js         # Scope -> bảng và visibility payload.
+│   │       ├── handicapService.js          # Rating, eligibility và assigned weight.
+│   │       ├── bettingService.js           # Pot, cutoff, settlement và refund.
+│   │       ├── liveRaceEvents.js           # SSE live race.
+│   │       └── *.js                        # Auth, credit, notification, audit, replay...
 │
-├── database/postgres/                # SQL để tạo và cập nhật database PostgreSQL.
-│   ├── migrations/                   # Các file migration thay đổi schema theo thời gian.
-│   ├── schema.sql                    # Schema chính: tạo bảng, constraint và index.
-│   └── seed.sql                      # Dữ liệu mẫu để chạy demo/local.
-├── docs/                             # Tài liệu phân tích và thiết kế hệ thống.
-│   ├── business-flow-and-roles.md    # Mô tả luồng nghiệp vụ và quyền từng vai trò.
-│   ├── erd.drawio                    # Sơ đồ ERD dạng draw.io.
-│   ├── horse-racing-erd-explanation.xlsx # Bảng giải thích entity/relationship trong ERD.
-│   ├── schema-erd.md                 # Tài liệu ERD/schema dạng markdown.
-│   ├── STD.drawio                    # State transition diagram tổng quát.
-│   ├── race-state-diagram.drawio     # State diagram riêng cho vòng đời race.
-│   ├── tournament-state-diagram.drawio # State diagram riêng cho tournament.
-│   └── horse-racing-status-reference.docx # Tài liệu tham chiếu các trạng thái.
-├── scripts/                          # Script tiện ích chạy ngoài app.
-│   └── run-postgres-file.mjs         # Chạy file SQL vào PostgreSQL theo env hiện tại.
-└── package.json                      # Metadata dự án, dependencies và npm scripts.
+├── database/postgres/
+│   ├── schema.sql                          # Schema PostgreSQL chính.
+│   ├── seed.sql                            # Dữ liệu demo.
+│   └── migrations/                         # Migration betting, credit, rating và race class.
+├── docs/                                   # Business flow, ERD và state diagram.
+├── scripts/run-postgres-file.mjs
+├── package.json
+└── vercel.json
 ```
+
+> **Lưu ý về persistence:** các file này không đại diện cho database riêng và cũng không ghi dữ liệu hai lần.
+>
+> - `*Persistence.js` xử lý một nghiệp vụ cụ thể bằng transaction nhỏ, ví dụ đăng nhập, đặt/hủy cược hoặc hoàn tất kết quả race.
+> - `*SnapshotPersistence.js` chỉ chuẩn hóa dữ liệu theo từng domain cho fallback `writeDb`; `writeDb` vẫn là nơi mở transaction, so sánh snapshot, gọi ba nhóm writer và commit/rollback.
+> - Không gom toàn bộ mapping trở lại `sqlDb.js` vì file này sẽ lại chứa danh sách cột và giá trị mặc định của hơn 20 bảng. Việc tách theo `race`, `user`, `betting` giúp sửa một domain mà không phải chạm vào domain khác.
+> - Chưa thể xóa nhóm snapshot vì một số route cũ vẫn gọi `writeDb`. Khi tất cả route đã chuyển sang row-level persistence, có thể loại bỏ fallback `writeDb` và các file `*SnapshotPersistence.js`.
 
 ## Vai trò người dùng
 
@@ -166,7 +163,7 @@ Horse Racing Tournament Website/
 | Owner | Tạo hồ sơ ngựa, đăng ký ngựa vào race đang mở, chọn hoặc mời jockey |
 | Jockey | Công bố hồ sơ, đăng ký khả dụng, chấp nhận hoặc từ chối lời mời |
 | Referee | Kiểm tra trước race, ghi kết quả nháp, nộp cho admin duyệt |
-| Spectator | Xem giải, race card, hồ sơ công khai, trạng thái live và kết quả |
+| Spectator | Xem dữ liệu công khai, nhận credit, đặt/hủy cược, theo dõi live và kết quả |
 
 ## Quy trình nghiệp vụ
 
@@ -184,14 +181,15 @@ Luồng chính:
 8. Admin duyệt đăng ký hoặc duyệt cặp owner - jockey.
 9. Khi đóng đăng ký, hệ thống snapshot rating, tính handicap và xếp lane.
 10. Admin công bố danh sách xuất phát.
-11. Referee kiểm tra từng entry trước giờ chạy.
-12. Referee đánh dấu ready, absent, incident hoặc scratched.
-13. Admin bắt đầu race khi điều kiện hợp lệ.
-14. Admin kết thúc race.
-15. Referee nhập kết quả nháp.
-16. Admin duyệt kết quả chính thức.
-17. Hệ thống cập nhật rating sau race.
-18. Race chuyển sang completed.
+11. Spectator có thể đặt hoặc hủy cược trước thời điểm đóng cược.
+12. Referee kiểm tra từng entry trước giờ chạy.
+13. Referee đánh dấu ready, absent, incident hoặc scratched.
+14. Admin bắt đầu race khi điều kiện hợp lệ.
+15. Admin kết thúc race.
+16. Referee nhập và nộp kết quả nháp.
+17. Admin duyệt kết quả chính thức.
+18. Hệ thống cập nhật rating, settle bet và phát payout/refund.
+19. Race chuyển sang completed.
 
 ### Trạng thái
 
@@ -202,6 +200,7 @@ Luồng chính:
 | Entry xuất phát | `approved`, `scratched` |
 | Kiểm tra trước race | `pending`, `ready-for-referee`, `ready`, `absent`, `incident`, `scratched` |
 | Kết quả | `draft`, `submitted`, `official`, `disqualified` |
+| Cược | `pending`, `won`, `lost`, `cancelled`, `refunded` |
 
 Ghi chú triển khai:
 
@@ -305,6 +304,8 @@ Sau khi copy, chỉnh `POSTGRES_USER` và `POSTGRES_PASSWORD` theo PostgreSQL lo
 npm run db:init
 ```
 
+`db:init` dùng cho database mới: chạy schema, toàn bộ migration theo thứ tự rồi seed dữ liệu. Với database đang có dữ liệu, nên chạy riêng migration còn thiếu thay vì khởi tạo lại toàn bộ.
+
 Hoặc chạy bằng biến môi trường inline:
 
 ```bash
@@ -347,6 +348,8 @@ npm run check
 | `POSTGRES_DATABASE` | `horse_racing` | Tên database |
 | `POSTGRES_USER` | `postgres` | User DB |
 | `POSTGRES_PASSWORD` | `postgres` | Password DB |
+| `DATABASE_URL` | Không đặt | Chuỗi kết nối PostgreSQL cho Neon/Render hoặc môi trường deploy |
+| `POSTGRES_SSL` | `false` | Bật SSL cho kết nối PostgreSQL từ xa |
 | `API_PORT` | `4000` | Port backend |
 | `API_HOST` | `127.0.0.1` | Host backend |
 | `FRONTEND_URL` | `http://127.0.0.1:5173/` | URL frontend |
@@ -355,6 +358,7 @@ npm run check
 | `MAX_RACE_FIELD_SIZE` | `10` | Số entry tối đa của race |
 | `MIN_READIED_PARTICIPANTS` | `5` | Số ngựa tối thiểu phải được referee đánh dấu Ready trước khi start race |
 | `MAX_TOURNAMENT_RACES` | `10` | Số race tối đa trong một giải |
+| `DEFAULT_RACE_BET_LIMIT` | `50` | Mức credit tối đa mặc định cho một bet khi tạo race |
 | `SESSION_DAYS` | `7` | Thời hạn session |
 | `SESSION_COOKIE_NAME` | `horse-racing-session` | Tên cookie đăng nhập |
 | `COOKIE_SECURE` | Production: `true` | Chỉ gửi cookie qua HTTPS |
@@ -369,14 +373,20 @@ npm run check
 | `npm run start` | Alias của `npm run api` |
 | `npm run db:init` | Tạo schema và seed dữ liệu |
 | `npm run db:schema` | Chỉ tạo schema |
+| `npm run db:migrate-betting` | Tạo/cập nhật bảng wallet và bet |
+| `npm run db:migrate-credit` | Tạo credit ledger; chạy sau migration betting |
+| `npm run db:migrate-rating-ranges` | Thêm rating range theo race |
+| `npm run db:migrate-race-classes` | Tạo catalog race class |
+| `npm run db:migrate-dynamic-race-class-weights` | Cập nhật weight range động theo race class |
+| `npm run db:migrate-bet-limit` | Thêm giới hạn tiền cược theo race |
+| `npm run db:migrate-starter-bonus-unique` | Bảo đảm starter bonus chỉ cấp một lần cho mỗi user |
 | `npm run db:seed` | Chỉ seed dữ liệu |
-| `npm test` | Chạy test backend |
 | `npm run typecheck` | Kiểm tra TypeScript |
 | `npm run build` | Build frontend production |
 | `npm run preview` | Xem bản build |
-| `npm run check` | Typecheck + test + build |
+| `npm run check` | Typecheck + build |
 
-`npm run check` là lệnh nên chạy trước khi demo hoặc deploy vì nó bao gồm TypeScript, toàn bộ test backend và build frontend production.
+`npm run check` là lệnh nên chạy trước khi demo hoặc deploy. Bản source hiện tại chưa có backend automated test suite, vì vậy lệnh này mới bao gồm TypeScript và frontend production build.
 
 ## API chính
 
@@ -393,15 +403,20 @@ npm run check
 
 | Method | Path | Mô tả |
 |---|---|---|
-| `GET` | `/api/bootstrap` | Dữ liệu khởi động |
+| `GET` | `/api/bootstrap` | Read model đầy đủ, giữ để tương thích |
+| `GET` | `/api/bootstrap/:scope` | Read model theo màn hình, chỉ đọc bảng cần thiết |
 | `GET` | `/api/health` | Health check |
 | `GET` | `/api/live/races/:id/events` | SSE cho live race |
+
+Scope hợp lệ: `tournaments`, `race`, `horses`, `jockeys`, `live`, `results`, `betting`, `admin`. Scope không hợp lệ trả về `404`.
 
 ### Admin
 
 | Method | Path | Mô tả |
 |---|---|---|
 | `GET` | `/api/admin/approvals` | Danh sách chờ duyệt |
+| `GET` | `/api/admin/betting` | Thống kê betting và credit cho Admin |
+| `PATCH` | `/api/admin/races/:id/bet-limit` | Cập nhật giới hạn credit cho một bet của race |
 | `POST` | `/api/admin/approvals/:type/:id` | Duyệt / từ chối |
 | `POST` | `/api/admin/tournaments` | Tạo giải |
 | `PATCH` | `/api/admin/tournaments/:id` | Cập nhật giải |
@@ -411,6 +426,16 @@ npm run check
 | `PATCH` | `/api/admin/races/:id` | Sửa race chưa công bố |
 | `DELETE` | `/api/admin/races/:id` | Xóa race chưa công bố |
 | `POST` | `/api/admin/races/:id/:action` | Đóng đăng ký, công bố, bắt đầu, kết thúc, hoàn tất |
+| `GET` | `/api/admin/users` | Danh sách tài khoản |
+| `PATCH` | `/api/admin/users/:id` | Cập nhật tài khoản |
+| `DELETE` | `/api/admin/users/:id` | Xóa tài khoản hợp lệ |
+| `GET` | `/api/admin/settings` | Cấu hình hệ thống |
+| `PATCH` | `/api/admin/settings` | Cập nhật cấu hình hệ thống |
+| `GET` | `/api/admin/race-classes` | Danh sách race class |
+| `POST` | `/api/admin/race-classes` | Tạo race class |
+| `PATCH` | `/api/admin/race-classes/:id` | Cập nhật race class |
+
+Action lifecycle hợp lệ: `close-registration`, `publish`, `start-race`, `finish-race`, `complete-results`, `cancel-race`, `reset-race`.
 
 ### Owner
 
@@ -442,6 +467,15 @@ npm run check
 | `POST` | `/api/referee/race-entries/:id/readiness/scratched` | Đánh dấu scratched |
 | `POST` | `/api/referee/race-entries/:id/result` | Ghi kết quả entry |
 
+### Spectator và betting
+
+| Method | Path | Mô tả |
+|---|---|---|
+| `GET` | `/api/spectator/wallet` | Credit, streak, daily reward và lịch sử cược |
+| `GET` | `/api/spectator/pots` | Tổng pot theo race và entry |
+| `POST` | `/api/spectator/bets` | Đặt cược bằng transaction khóa wallet |
+| `POST` | `/api/spectator/bets/:id/cancel` | Hủy cược pending và hoàn credit |
+
 ### Thông báo
 
 | Method | Path | Mô tả |
@@ -449,12 +483,21 @@ npm run check
 | `GET` | `/api/notifications` | Danh sách thông báo |
 | `POST` | `/api/notifications/:id/read` | Đánh dấu đã đọc |
 
+## Giới hạn hiện tại
+
+- SSE đang dùng listener trong process. Khi chạy nhiều backend instance cần Redis Pub/Sub hoặc message broker để đồng bộ sự kiện.
+- `GET /api/bootstrap` đầy đủ vẫn có thể nặng với database lớn; frontend đã dùng scoped bootstrap nhưng các danh sách dài vẫn nên bổ sung phân trang.
+- `writeDb` là fallback đồng bộ snapshot trong một transaction. Các luồng quan trọng đã dùng row-level persistence, nhưng route mới nên ưu tiên transaction nhỏ thay vì gọi fallback này.
+- Backend automated test suite không còn trong cấu trúc hiện tại. Cần khôi phục regression test và bổ sung E2E cho các luồng đăng nhập, đăng ký race, referee và betting trước khi mở rộng production.
+
 ## Tài liệu liên quan
 
+- [`docs/bao-ve-project.md`](docs/bao-ve-project.md) — Kịch bản bảo vệ, 47 API, toàn bộ status, demo và câu hỏi phản biện
 - [`docs/business-flow-and-roles.md`](docs/business-flow-and-roles.md)
 - [`docs/schema-erd.md`](docs/schema-erd.md)
 - [`docs/erd.drawio`](docs/erd.drawio)
 - [`docs/STD.drawio`](docs/STD.drawio)
 - [`docs/race-state-diagram.drawio`](docs/race-state-diagram.drawio)
 - [`docs/tournament-state-diagram.drawio`](docs/tournament-state-diagram.drawio)
+- [`docs/simulation-random-ranking-explanation.md`](docs/simulation-random-ranking-explanation.md)
 - [`vercel.json`](vercel.json)

@@ -76,6 +76,27 @@ CREATE TABLE "horses" (
 CREATE INDEX "idx_horses_owner" ON "horses" ("ownerUserId");
 CREATE INDEX "idx_horses_status" ON "horses" ("status");
 
+CREATE TABLE "raceClasses" (
+  "id" VARCHAR(64) PRIMARY KEY,
+  "name" VARCHAR(128) NOT NULL,
+  "ratingMin" NUMERIC(6, 2) NOT NULL,
+  "ratingMax" NUMERIC(6, 2) NOT NULL,
+  "handicapMin" NUMERIC(6, 2) NOT NULL,
+  "handicapMax" NUMERIC(6, 2) NOT NULL,
+  "sortOrder" INTEGER NOT NULL DEFAULT 0,
+  "isActive" BOOLEAN NOT NULL DEFAULT TRUE,
+  "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  "updatedBy" VARCHAR(64),
+  CONSTRAINT "chk_race_classes_rating"
+    CHECK ("ratingMin" >= 0 AND "ratingMax" <= 140 AND "ratingMin" <= "ratingMax"),
+  CONSTRAINT "chk_race_classes_weight"
+    CHECK ("handicapMin" > 0 AND "handicapMin" <= "handicapMax")
+);
+
+CREATE UNIQUE INDEX "uq_race_classes_name_ci"
+  ON "raceClasses" (LOWER("name"));
+
 CREATE TABLE "races" (
   "id" VARCHAR(64) PRIMARY KEY,
   "tournamentId" VARCHAR(64) ,
@@ -90,8 +111,8 @@ CREATE TABLE "races" (
   "raceClass" VARCHAR(128),
   "ratingMin" NUMERIC(6, 2) NOT NULL DEFAULT 0,
   "ratingMax" NUMERIC(6, 2) NOT NULL DEFAULT 140,
-  "handicapMin" NUMERIC(6, 2) NOT NULL DEFAULT 110,
-  "handicapMax" NUMERIC(6, 2) NOT NULL DEFAULT 135,
+  "handicapMin" NUMERIC(6, 2) NOT NULL,
+  "handicapMax" NUMERIC(6, 2) NOT NULL,
   "totalPrize" NUMERIC(14, 2) NOT NULL DEFAULT 0,
   "status" VARCHAR(64) NOT NULL DEFAULT 'draft',
   "participants" INTEGER NOT NULL DEFAULT 0,
@@ -110,7 +131,9 @@ CREATE TABLE "races" (
     ON DELETE CASCADE,
   CONSTRAINT "fk_races_created_by"
     FOREIGN KEY ("createdBy") REFERENCES "users" ("id")
-    ON DELETE SET NULL
+    ON DELETE SET NULL,
+  CONSTRAINT "chk_races_weight"
+    CHECK ("handicapMin" > 0 AND "handicapMin" <= "handicapMax")
 );
 
 CREATE INDEX "idx_races_tournament" ON "races" ("tournamentId", "status");

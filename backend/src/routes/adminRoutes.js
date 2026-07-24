@@ -2,9 +2,9 @@ import { Hono } from 'hono';
 import { randomUUID } from 'node:crypto';
 import {
   ACTIVE_TOURNAMENT_STATUSES,
-  RACE_CLASS_WEIGHT_RANGES,
+  DEFAULT_RACE_BET_LIMIT,
 } from '../config/constants.js';
-import { publicUser, requireRole } from '../services/authService.js';
+import { requireRole } from '../services/authService.js';
 import {
   approvedRaceEntries,
   formatApprovals,
@@ -17,11 +17,8 @@ import {
   tournamentRaces,
 } from '../services/domainService.js';
 import {
-  MAX_CARRIED_WEIGHT_LB,
-  MIN_CARRIED_WEIGHT_LB,
-  computePostRaceRating,
-  computeRaceHandicap,
   officialHorseRating,
+  raceCarriedWeightRange,
   raceEligibilityRange,
 } from '../services/handicapService.js';
 import { broadcastRaceUpdate } from '../services/liveRaceEvents.js';
@@ -31,82 +28,29 @@ import {
   notifyAdmins,
 } from '../services/notificationService.js';
 import {
-  sanitizeSystemSettings,
-  settingsToRows,
   systemSettingsFromDb,
 } from '../services/systemSettingsService.js';
 import {
-  buildOfficialReplayTimeline,
-  buildProvisionalRaceTimeline,
-} from '../services/raceReplayTimeline.js';
-import { racePotTotal, refundRaceBets, settleRaceBets } from '../services/bettingService.js';
+  parseBetLimitInput,
+  raceBetLimit,
+  racePotTotal,
+  refundRaceBets,
+} from '../services/bettingService.js';
+import {
+  registerAdminConfigurationRoutes,
+  sortedRaceClasses,
+} from './admin/adminConfigurationRoutes.js';
+import { registerAdminRaceLifecycleRoutes } from './admin/adminRaceLifecycleRoutes.js';
+import {
+  isDateOnly,
+  raceFieldSize,
+  resolveExistingRaceSchedule,
+  validateRaceSchedule,
+} from './admin/adminRaceRules.js';
 
 // Helpers nội bộ
 const nonRejectedEntry = (entry) => entry.status !== 'rejected';
 
-const USER_ROLES = ['admin', 'owner', 'jockey', 'referee', 'spectator'];
-const USER_STATUSES = ['pending', 'active', 'rejected', 'suspended', 'locked'];
-
-// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho sortedPublicUsers.
-const sortedPublicUsers = (db) =>
-  [...(db.users || [])]
-    .sort((first, second) => {
-      const firstDate = new Date(first.createdAt || 0).getTime();
-      const secondDate = new Date(second.createdAt || 0).getTime();
-      return secondDate - firstDate || first.name.localeCompare(second.name);
-    })
-    .map(publicUser);
-
-// Ghi chú: Hàm này tính nhanh giá trị cấu hình activeAdminCount.
-const activeAdminCount = (db) =>
-  (db.users || []).filter((user) => user.role === 'admin' && user.status === 'active').length;
-
-// Ghi chú: Hàm này tính nhanh giá trị cấu hình raceFieldSize.
-const raceFieldSize = (db) => systemSettingsFromDb(db).maxHorsesPerRace;
-// Ghi chú: Hàm này lấy và chuẩn hóa dữ liệu cho minReadiedParticipants.
-const minReadiedParticipants = (db) => systemSettingsFromDb(db).minReadiedParticipants;
-// Ghi chú: Hàm này chuẩn hóa hoặc tính toán dữ liệu cho maxTournamentRaces.
-const maxTournamentRaces = (db) => systemSettingsFromDb(db).maxRacesPerTournament;
-
-// Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến tournament has ended.
-const tournamentHasEnded = (tournament, at = new Date()) => {
-  if (!tournament?.finalDate) return false;
-
-  const finalDate = String(tournament.finalDate).slice(0, 10);
-  const tournamentEndsAt = new Date(`${finalDate}T23:59:59.999Z`);
-
-  return (
-    Number.isFinite(tournamentEndsAt.getTime()) &&
-    at.getTime() > tournamentEndsAt.getTime()
-  );
-};
-
-// Ghi chú: Hàm này kiểm tra trạng thái nghiệp vụ liên quan đến is date only.
-const isDateOnly = (value) => {
-  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return false;
-
-  const [, year, month, day] = match;
-  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
-
-  return (
-    date.getUTCFullYear() === Number(year) &&
-    date.getUTCMonth() === Number(month) - 1 &&
-    date.getUTCDate() === Number(day)
-  );
-};
-
-// Ghi chú: Hàm này kiểm tra ngày race có nằm trong khoảng ngày của tournament.
-const validateRaceDateInTournament = (tournament, raceDate) => {
-  if (!isDateOnly(raceDate)) return 'Race date and time must be valid';
-  if (tournament?.startDate && raceDate < tournament.startDate) {
-    return 'Race date must be on or after tournament start date';
-  }
-  if (tournament?.finalDate && raceDate > tournament.finalDate) {
-    return 'Race date must be on or before tournament end date';
-  }
-  return null;
-};
 
 // Ghi chú: Hàm này xử lý nghiệp vụ liên quan đến registration pair.
 const registrationPair = (registration, invitation) => ({
@@ -172,7 +116,14 @@ const addPairToRace = (db, race, pair, createdAt) => {
   return true;
 };
 // Ghi chú: Hàm này tạo nhóm route admin routes cho backend.
-export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persistSystemSettings) => {
+export const createAdminRoutes = (
+  getDb,
+  writeDb,
+  persistAdminRaceAction,
+  persistSystemSettings,
+  persistCreatedTournament,
+  persistEnsureSpectatorStarterCredits
+) => {
   const app = new Hono();
 
   // Middleware xác thực — chỉ admin mới truy cập được
@@ -194,35 +145,56 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
   app.get('/betting', (c) => {
     const db = c.get('db');
     const bets = db.bets || [];
-    const raceIds = [...new Set(bets.map((bet) => bet.raceId))];
+    const betRaceIds = new Set(bets.map((bet) => bet.raceId));
+    const configurableStatuses = new Set([
+      'registration-open',
+      'registration-closed',
+      'published',
+      'in-progress',
+      'finished',
+      'completed',
+    ]);
+    const raceIds = [
+      ...new Set([
+        ...betRaceIds,
+        ...(db.races || [])
+          .filter((race) => configurableStatuses.has(race.status))
+          .map((race) => race.id),
+      ]),
+    ];
 
-    const raceSummaries = raceIds.map((raceId) => {
-      const race = db.races.find((item) => item.id === raceId);
-      const raceBets = bets.filter((bet) => bet.raceId === raceId);
-      const bettorIds = new Set(raceBets.map((bet) => bet.userId));
-      const pending = raceBets.filter((bet) => bet.status === 'pending');
-      const won = raceBets.filter((bet) => bet.status === 'won');
-      const lost = raceBets.filter((bet) => bet.status === 'lost');
-      const refunded = raceBets.filter((bet) => bet.status === 'refunded');
+    const raceSummaries = raceIds
+      .map((raceId) => {
+        const race = db.races.find((item) => item.id === raceId);
+        if (!race) return null;
+        const raceBets = bets.filter((bet) => bet.raceId === raceId);
+        const bettorIds = new Set(raceBets.map((bet) => bet.userId));
+        const pending = raceBets.filter((bet) => bet.status === 'pending');
+        const won = raceBets.filter((bet) => bet.status === 'won');
+        const lost = raceBets.filter((bet) => bet.status === 'lost');
+        const refunded = raceBets.filter((bet) => bet.status === 'refunded');
 
-      return {
-        raceId,
-        raceName: race?.name || raceId,
-        raceStatus: race?.status || 'unknown',
-        totalBets: raceBets.length,
-        uniqueBettors: bettorIds.size,
-        poolTotal: racePotTotal(db, raceId),
-        totalWagered: raceBets.reduce((sum, bet) => sum + Number(bet.amount || 0), 0),
-        totalPaidOut: won.reduce((sum, bet) => sum + Number(bet.payout || 0), 0),
-        totalRefunded: refunded.reduce((sum, bet) => sum + Number(bet.payout || 0), 0),
-        counts: {
-          pending: pending.length,
-          won: won.length,
-          lost: lost.length,
-          refunded: refunded.length,
-        },
-      };
-    });
+        return {
+          raceId,
+          raceName: race.name || raceId,
+          raceStatus: race.status || 'unknown',
+          betLimit: raceBetLimit(race),
+          totalBets: raceBets.length,
+          uniqueBettors: bettorIds.size,
+          poolTotal: racePotTotal(db, raceId),
+          totalWagered: raceBets.reduce((sum, bet) => sum + Number(bet.amount || 0), 0),
+          totalPaidOut: won.reduce((sum, bet) => sum + Number(bet.payout || 0), 0),
+          totalRefunded: refunded.reduce((sum, bet) => sum + Number(bet.payout || 0), 0),
+          counts: {
+            pending: pending.length,
+            won: won.length,
+            lost: lost.length,
+            refunded: refunded.length,
+          },
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => String(a.raceName).localeCompare(String(b.raceName)));
 
     const spectators = db.users
       .filter((user) => user.role === 'spectator')
@@ -246,86 +218,49 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
     return c.json({ raceSummaries, spectators });
   });
 
-  app.get('/users', (c) => {
+  app.patch('/races/:raceId/bet-limit', async (c) => {
     const db = c.get('db');
-    return c.json({ users: sortedPublicUsers(db) });
-  });
+    const race = db.races.find((item) => item.id === c.req.param('raceId'));
+    if (!race) return c.json({ message: 'Race not found' }, 404);
 
-  app.get('/settings', (c) => {
-    const db = c.get('db');
-    return c.json({ settings: systemSettingsFromDb(db) });
-  });
-
-  app.patch('/settings', async (c) => {
-    const db = c.get('db');
-    const user = c.get('user');
-    const current = systemSettingsFromDb(db);
-    const input = await c.req.json();
-    const settings = sanitizeSystemSettings(input, current);
-    const now = new Date().toISOString();
-
-    const settingsRows = settingsToRows(settings, user.id, now);
-
-    if (persistSystemSettings) {
-      await persistSystemSettings(settingsRows);
-    } else {
-      db.systemSettings = settingsRows;
-      await writeDb(db);
+    if (['completed', 'cancelled'].includes(race.status)) {
+      return c.json(
+        { message: 'Bet limit cannot be changed after a race is completed or cancelled.' },
+        400
+      );
     }
 
-    return c.json({ settings });
-  });
-
-  app.patch('/users/:id', async (c) => {
-    const currentUser = c.get('user');
-    const db = c.get('db');
-    const id = c.req.param('id');
-    const { role, status } = await c.req.json();
-    const target = (db.users || []).find((user) => user.id === id);
-
-    if (!target) return c.json({ message: 'User not found' }, 404);
-    if (!USER_ROLES.includes(role)) return c.json({ message: 'Invalid role' }, 400);
-    if (!USER_STATUSES.includes(status)) return c.json({ message: 'Invalid status' }, 400);
-    if (target.id === currentUser.id && (role !== 'admin' || status !== 'active')) {
-      return c.json({ message: 'You cannot remove your own active admin access' }, 400);
-    }
-    if (
-      target.role === 'admin' &&
-      target.status === 'active' &&
-      (role !== 'admin' || status !== 'active') &&
-      activeAdminCount(db) <= 1
-    ) {
-      return c.json({ message: 'At least one active admin is required' }, 400);
+    const body = await c.req.json();
+    const parsed = parseBetLimitInput(body?.betLimit);
+    if (!parsed.ok) {
+      return c.json({ message: parsed.message }, 400);
     }
 
-    target.role = role;
-    target.status = status;
-    target.updatedAt = new Date().toISOString();
+    race.betLimit = parsed.betLimit;
+    race.updatedAt = new Date().toISOString();
+    recordRaceAction(db, {
+      raceId: race.id,
+      userId: c.get('user').id,
+      action: 'set-bet-limit',
+      fromStatus: race.status,
+      toStatus: race.status,
+      details:
+        parsed.betLimit === null
+          ? 'Cleared race bet limit (unlimited)'
+          : `Set race bet limit to ${parsed.betLimit} credits`,
+    });
 
     await writeDb(db);
-    return c.json({ user: publicUser(target), users: sortedPublicUsers(db) });
+    broadcastRaceUpdate(race.id);
+    return c.json({ race, betLimit: race.betLimit });
   });
 
-  app.delete('/users/:id', async (c) => {
-    const currentUser = c.get('user');
-    const db = c.get('db');
-    const id = c.req.param('id');
-    const target = (db.users || []).find((user) => user.id === id);
-
-    if (!target) return c.json({ message: 'User not found' }, 404);
-    if (target.id === currentUser.id) {
-      return c.json({ message: 'You cannot disable your own account' }, 400);
-    }
-    if (target.role === 'admin' && target.status === 'active' && activeAdminCount(db) <= 1) {
-      return c.json({ message: 'At least one active admin is required' }, 400);
-    }
-
-    target.status = 'suspended';
-    target.updatedAt = new Date().toISOString();
-
-    await writeDb(db);
-    return c.json({ user: publicUser(target), users: sortedPublicUsers(db) });
+  registerAdminConfigurationRoutes(app, {
+    writeDb,
+    persistSystemSettings,
+    persistEnsureSpectatorStarterCredits,
   });
+  registerAdminRaceLifecycleRoutes(app, { writeDb, persistAdminRaceAction });
 
   // Lấy dữ liệu trang tạo cuộc đua: giải, các cuộc đua hiện có, danh sách trọng tài
   app.get('/race-builder', (c) => {
@@ -340,6 +275,7 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
       ),
       races: db.races || [],
       referees,
+      raceClasses: sortedRaceClasses(db, { activeOnly: true }),
       maxRacesPerTournament: settings.maxRacesPerTournament,
       defaultDistanceMeters: settings.defaultDistanceMeters,
       closeRegistrationHours: settings.closeRegistrationHours,
@@ -385,10 +321,21 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
     };
 
     db.tournaments.unshift(tournament);
+    const previousNotificationIds = new Set(
+      (db.notifications || []).map((notification) => notification.id)
+    );
     notifyAdmins(db, 'Tournament created',
       `${tournament.name} has been created. Race registration opens on each race schedule.`);
 
-    await writeDb(db);
+    const createdNotifications = (db.notifications || []).filter(
+      (notification) => !previousNotificationIds.has(notification.id)
+    );
+
+    if (persistCreatedTournament) {
+      await persistCreatedTournament(tournament, createdNotifications);
+    } else {
+      await writeDb(db);
+    }
     return c.json({ tournament, tournaments: db.tournaments, notifications: db.notifications || [] }, 201);
   });
 
@@ -479,6 +426,13 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
       (log) => !raceIds.has(log.raceId)
     );
 
+    // Refund pending bets before races/entries are removed (CASCADE would
+    // otherwise delete bet rows and leave stakes deducted from wallets).
+    for (const raceId of raceIds) {
+      refundRaceBets(db, raceId, `${tournament.name} was deleted`);
+    }
+    db.bets = (db.bets || []).filter((bet) => !raceIds.has(bet.raceId));
+
     notifyAdmins(db, 'Tournament deleted', `${tournament.name} was deleted by ${user.name}.`);
 
     await writeDb(db);
@@ -497,7 +451,7 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
     const db = c.get('db');
     const {
       tournamentId, raceNumber, name, round, date, time, venue, distance, surface,
-      raceClass, ratingMin, ratingMax, handicapMin, handicapMax, totalPrize, refereeUserId, refereeUserIds,
+      raceClassId, raceClass, totalPrize, betLimit, refereeUserId, refereeUserIds,
       registrationOpensAt: reqRegOpens, registrationClosesAt: reqRegCloses,
     } = await c.req.json();
 
@@ -547,31 +501,31 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
     );
     const registrationClosesAt = reqRegCloses ? new Date(reqRegCloses) : defaultRegistrationClosesAt;
 
-    if (!Number.isFinite(raceStartsAt.getTime())) {
-      return c.json({ message: 'Race date and time must be valid' }, 400);
-    }
-    const raceDateError = validateRaceDateInTournament(tournament, date);
-    if (raceDateError) {
-      return c.json({ message: raceDateError }, 400);
-    }
-    if (
-      !Number.isFinite(registrationOpensAt.getTime()) ||
-      !Number.isFinite(registrationClosesAt.getTime())
-    ) {
-      return c.json({ message: 'Registration open and close times must be valid' }, 400);
-    }
-    if (registrationOpensAt >= registrationClosesAt) {
-      return c.json({ message: 'Registration close time must be after open time' }, 400);
-    }
-    if (registrationClosesAt > raceStartsAt) {
-      return c.json({ message: 'Registration must close before the race starts' }, 400);
+    const scheduleError = validateRaceSchedule({
+      tournament,
+      raceDate: date,
+      raceStartsAt,
+      registrationOpensAt,
+      registrationClosesAt,
+    });
+    if (scheduleError) {
+      return c.json({ message: scheduleError }, 400);
     }
     const distanceMeters = Number(distance);
-    const classWeightRange = RACE_CLASS_WEIGHT_RANGES[raceClass] || RACE_CLASS_WEIGHT_RANGES.Open;
-    const minRating = Number(ratingMin ?? 0);
-    const maxRating = Number(ratingMax ?? 140);
-    const minHandicap = Number(handicapMin ?? classWeightRange.minWeightLb);
-    const maxHandicap = Number(handicapMax ?? classWeightRange.topWeightLb);
+    const selectedRaceClass = (db.raceClasses || []).find(
+      (item) =>
+        item.isActive !== false &&
+        (item.id === raceClassId ||
+          (!raceClassId &&
+            String(item.name).toLowerCase() === String(raceClass || '').toLowerCase()))
+    );
+    if (!selectedRaceClass) {
+      return c.json({ message: 'Select an active race class from the catalog' }, 400);
+    }
+    const minRating = Number(selectedRaceClass.ratingMin);
+    const maxRating = Number(selectedRaceClass.ratingMax);
+    const minHandicap = Number(selectedRaceClass.handicapMin);
+    const maxHandicap = Number(selectedRaceClass.handicapMax);
     if (!Number.isFinite(distanceMeters) || distanceMeters < 400 || distanceMeters > 10000) {
       return c.json({ message: 'Race distance must be between 400m and 10,000m' }, 400);
     }
@@ -584,15 +538,9 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
     ) {
       return c.json({ message: 'Rating range must be between 0 and 140' }, 400);
     }
-    if (
-      !Number.isFinite(minHandicap) ||
-      !Number.isFinite(maxHandicap) ||
-      minHandicap < MIN_CARRIED_WEIGHT_LB ||
-      maxHandicap > MAX_CARRIED_WEIGHT_LB ||
-      maxHandicap < minHandicap
-    ) {
+    if (!raceCarriedWeightRange(selectedRaceClass)) {
       return c.json(
-        { message: `Assigned weight must be between ${MIN_CARRIED_WEIGHT_LB}lb and ${MAX_CARRIED_WEIGHT_LB}lb` },
+        { message: 'Selected race class has an invalid assigned-weight range' },
         400
       );
     }
@@ -605,13 +553,23 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
       return c.json({ message: `${raceNumber} already exists in this tournament` }, 409);
     }
 
+    const parsedBetLimit =
+      betLimit === undefined
+        ? { ok: true, betLimit: DEFAULT_RACE_BET_LIMIT > 0 ? DEFAULT_RACE_BET_LIMIT : null }
+        : parseBetLimitInput(betLimit);
+    if (!parsedBetLimit.ok) {
+      return c.json({ message: parsedBetLimit.message }, 400);
+    }
+
     const race = {
       id: randomUUID(), tournamentId: tournament.id, raceNumber: raceNumber || '',
       name, round: round || '', date, time, venue,
-      distance: `${distanceMeters}m`, surface, raceClass,
+      distance: `${distanceMeters}m`, surface, raceClass: selectedRaceClass.name,
       ratingMin: Math.round(minRating), ratingMax: Math.round(maxRating),
       handicapMin: minHandicap, handicapMax: maxHandicap,
-      totalPrize: Number(totalPrize) || 0, status: 'registration-open',
+      totalPrize: Number(totalPrize) || 0,
+      betLimit: parsedBetLimit.betLimit,
+      status: 'registration-open',
       participants: 0, ownerConfirmed: 0, jockeyConfirmed: 0,
       registrationOpensAt: registrationOpensAt.toISOString(),
       registrationClosesAt: registrationClosesAt.toISOString(),
@@ -660,31 +618,16 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
       return c.json({ message: 'Race name, date, time and registration window are required' }, 400);
     }
 
-    const tournament = db.tournaments.find((item) => item.id === race.tournamentId);
-    if (!tournament) {
-      return c.json({ message: 'Race tournament not found' }, 400);
+    const schedule = resolveExistingRaceSchedule(db, race, {
+      date,
+      time,
+      registrationOpensAt,
+      registrationClosesAt,
+    });
+    if (schedule.error) {
+      return c.json({ message: schedule.error }, 400);
     }
-
-    const regOpens = new Date(registrationOpensAt);
-    const regCloses = new Date(registrationClosesAt);
-    const raceStartsAt = new Date(`${date}T${time}`);
-    if (
-      !Number.isFinite(regOpens.getTime()) ||
-      !Number.isFinite(regCloses.getTime()) ||
-      !Number.isFinite(raceStartsAt.getTime())
-    ) {
-      return c.json({ message: 'Race and registration times must be valid' }, 400);
-    }
-    if (regOpens >= regCloses) {
-      return c.json({ message: 'Registration close time must be after open time' }, 400);
-    }
-    if (regCloses > raceStartsAt) {
-      return c.json({ message: 'Registration must close before the race starts' }, 400);
-    }
-    const raceDateError = validateRaceDateInTournament(tournament, date);
-    if (raceDateError) {
-      return c.json({ message: raceDateError }, 400);
-    }
+    const { regOpens, regCloses } = schedule;
 
     race.name = String(name).trim();
     race.date = date;
@@ -757,540 +700,6 @@ export const createAdminRoutes = (getDb, writeDb, persistAdminRaceAction, persis
     return c.json({ ok: true, raceId });
   });
 
-  // Admin chuẩn bị race, publish race và duyệt kết quả cuối cùng.
-  app.post('/races/:raceId/:action', async (c) => {
-    const db = c.get('db');
-    const raceId = c.req.param('raceId');
-    const action = c.req.param('action');
-    const validActions = [
-      'close-registration',
-      'publish',
-      'start-race',
-      'finish-race',
-      'complete-results',
-      'cancel-race',
-      'reset-race',
-    ];
-
-    if (!validActions.includes(action)) return c.json({ message: 'Invalid action' }, 400);
-
-    const race = db.races.find((item) => item.id === raceId);
-    if (!race) return c.json({ message: 'Race not found' }, 404);
-
-    const entries = (db.raceEntries || []).filter(
-      (entry) => entry.raceId === race.id && entry.status === 'approved'
-    );
-    const approvedPairEntries = entries.filter(
-      (entry) => entry.horseId && entry.jockeyUserId
-    );
-    const approvedHorseCount = new Set(
-      approvedPairEntries.map((entry) => entry.horseId)
-    ).size;
-    const approvedJockeyCount = new Set(
-      approvedPairEntries.map((entry) => entry.jockeyUserId)
-    ).size;
-    const approvedPairCount = Math.min(
-      approvedPairEntries.length,
-      approvedHorseCount,
-      approvedJockeyCount
-    );
-    const fromStatus = race.status;
-    const existingNotificationIds = new Set(
-      (db.notifications || []).map((notification) => notification.id)
-    );
-    const existingActionLogIds = new Set(
-      (db.raceActionLogs || []).map((log) => log.id)
-    );
-    const existingCreditTransactionIds = new Set(
-      (db.creditTransactions || []).map((transaction) => transaction.id)
-    );
-    const assignedRefereeIds = raceRefereeIds(db, race);
-    let affectedTournament = null;
-    let affectedHorses = [];
-    let settledBets = [];
-    let affectedSpectators = [];
-
-    if (action === 'reset-race') {
-      if (race.status !== 'cancelled') {
-        return c.json({ message: 'Only a cancelled race can be reset' }, 400);
-      }
-
-      const { date, time, registrationOpensAt, registrationClosesAt } = await c.req.json();
-      if (!date || !time || !registrationOpensAt || !registrationClosesAt) {
-        return c.json({ message: 'Race date, start time and registration window are required' }, 400);
-      }
-
-      const tournament = db.tournaments.find((item) => item.id === race.tournamentId);
-      if (!tournament) {
-        return c.json({ message: 'Race tournament not found' }, 400);
-      }
-
-      const regOpens = new Date(registrationOpensAt);
-      const regCloses = new Date(registrationClosesAt);
-      const raceStartsAt = new Date(`${date}T${time}`);
-      if (
-        !Number.isFinite(regOpens.getTime()) ||
-        !Number.isFinite(regCloses.getTime()) ||
-        !Number.isFinite(raceStartsAt.getTime())
-      ) {
-        return c.json({ message: 'Race and registration times must be valid' }, 400);
-      }
-      if (regOpens >= regCloses) {
-        return c.json({ message: 'Registration close time must be after open time' }, 400);
-      }
-      if (regCloses > raceStartsAt) {
-        return c.json({ message: 'Registration must close before the race starts' }, 400);
-      }
-      const raceDateError = validateRaceDateInTournament(tournament, date);
-      if (raceDateError) {
-        return c.json({ message: raceDateError }, 400);
-      }
-
-      const allRaceEntries = (db.raceEntries || []).filter((entry) => entry.raceId === race.id);
-      const entryIds = new Set(allRaceEntries.map((entry) => entry.id));
-      const recipientIds = new Set();
-      allRaceEntries.forEach((entry) => {
-        const horse = db.horses.find((item) => item.id === entry.horseId);
-        if (horse?.ownerUserId) recipientIds.add(horse.ownerUserId);
-        if (entry.jockeyUserId) recipientIds.add(entry.jockeyUserId);
-      });
-      (db.horseRaceRegistrations || [])
-        .filter((registration) => registration.raceId === race.id)
-        .forEach((registration) => {
-          if (registration.ownerUserId) recipientIds.add(registration.ownerUserId);
-          if (registration.jockeyUserId) recipientIds.add(registration.jockeyUserId);
-        });
-      (db.jockeyRaceRegistrations || [])
-        .filter((registration) => registration.raceId === race.id)
-        .forEach((registration) => {
-          if (registration.jockeyUserId) recipientIds.add(registration.jockeyUserId);
-        });
-      (db.jockeyInvitations || [])
-        .filter((invitation) => invitation.raceId === race.id)
-        .forEach((invitation) => {
-          if (invitation.ownerUserId) recipientIds.add(invitation.ownerUserId);
-          if (invitation.jockeyUserId) recipientIds.add(invitation.jockeyUserId);
-        });
-      assignedRefereeIds.forEach((refereeId) => recipientIds.add(refereeId));
-      db.users
-        .filter((item) => ['admin', 'spectator'].includes(item.role))
-        .forEach((item) => recipientIds.add(item.id));
-
-      race.date = date;
-      race.raceDate = date;
-      race.time = time;
-      race.raceTime = time;
-      race.registrationOpensAt = regOpens.toISOString();
-      race.registrationClosesAt = regCloses.toISOString();
-      race.status = 'registration-open';
-      race.participants = 0;
-      race.ownerConfirmed = 0;
-      race.jockeyConfirmed = 0;
-      race.resultStatus = 'draft';
-      race.awardsPublished = false;
-      race.replayTimeline = null;
-      race.updatedAt = new Date().toISOString();
-
-      db.raceEntries = (db.raceEntries || []).filter((entry) => entry.raceId !== race.id);
-      db.horseRaceRegistrations = (db.horseRaceRegistrations || []).filter(
-        (registration) => registration.raceId !== race.id
-      );
-      db.jockeyRaceRegistrations = (db.jockeyRaceRegistrations || []).filter(
-        (registration) => registration.raceId !== race.id
-      );
-      db.jockeyInvitations = (db.jockeyInvitations || []).filter(
-        (invitation) => invitation.raceId !== race.id
-      );
-      db.refereeReports = (db.refereeReports || []).filter(
-        (report) => report.raceId !== race.id && !entryIds.has(report.raceEntryId)
-      );
-
-      recipientIds.forEach((userId) =>
-        createNotification(
-          db,
-          userId,
-          'Race reset',
-          `${race.name} has been reset with a new registration window and start time.`
-        )
-      );
-
-      recordRaceAction(db, {
-        raceId: race.id,
-        userId: c.get('user').id,
-        action,
-        fromStatus,
-        toStatus: race.status,
-        details: `Reset schedule to ${date} ${time} and cleared race registrations`,
-      });
-
-      await writeDb(db);
-      broadcastRaceUpdate(race.id);
-      return c.json({
-        race,
-        entries: [],
-        notifications: db.notifications || [],
-      });
-    }
-
-    if (action === 'close-registration') {
-      if (race.status !== 'registration-open') {
-        return c.json({ message: 'Only an open registration can be closed' }, 400);
-      }
-      const maxRaceEntries = raceFieldSize(db);
-      if (entries.length > maxRaceEntries) {
-        return c.json(
-          { message: `A race can have at most ${maxRaceEntries} horses and ${maxRaceEntries} jockeys on the track.` },
-          400
-        );
-      }
-      if (
-        approvedPairEntries.length !== maxRaceEntries ||
-        approvedHorseCount !== maxRaceEntries ||
-        approvedJockeyCount !== maxRaceEntries
-      ) {
-        return c.json(
-          {
-            message: `Registration can close only after Admin approves exactly ${maxRaceEntries} distinct horse-jockey pairs. Current: ${approvedPairCount}/${maxRaceEntries}.`,
-          },
-          400
-        );
-      }
-      if (assignedRefereeIds.length === 0) {
-        return c.json({ message: 'Assign at least one referee before closing registration' }, 400);
-      }
-
-      race.status = 'registration-closed';
-      race.participants = approvedPairEntries.length;
-      race.ownerConfirmed = approvedPairEntries.length;
-      race.jockeyConfirmed = approvedPairEntries.length;
-      race.updatedAt = new Date().toISOString();
-
-      const sortedEntries = [...approvedPairEntries];
-      for (let index = sortedEntries.length - 1; index > 0; index -= 1) {
-        const swapIndex = Math.floor(Math.random() * (index + 1));
-        [sortedEntries[index], sortedEntries[swapIndex]] = [
-          sortedEntries[swapIndex],
-          sortedEntries[index],
-        ];
-      }
-
-      const fieldRatings = sortedEntries.map((entry) => {
-        const horse = db.horses.find((item) => item.id === entry.horseId);
-        return officialHorseRating(horse);
-      });
-      const highestFieldRating = Math.max(...fieldRatings);
-
-      sortedEntries.forEach((entry, index) => {
-        const horse = db.horses.find((item) => item.id === entry.horseId);
-        const prepared = computeRaceHandicap(horse, race, highestFieldRating);
-        entry.lane = index + 1;
-        entry.ratingSnapshot = prepared.rating;
-        entry.handicap = prepared.handicap;
-        entry.preRaceStatus = 'ready-for-referee';
-      });
-
-      assignedRefereeIds.forEach((refereeId) =>
-        createNotification(db, refereeId, 'Race registration closed',
-          `${race.name} is ready for referee review. Starting gates, rating snapshots and carried weights have been assigned.`)
-      );
-    }
-
-    if (action === 'publish') {
-      if (!['registration-closed', 'published'].includes(race.status)) {
-        return c.json({ message: 'Close registration before publishing the race' }, 400);
-      }
-      if (
-        approvedPairEntries.length !== raceFieldSize(db) ||
-        approvedHorseCount !== raceFieldSize(db) ||
-        approvedJockeyCount !== raceFieldSize(db)
-      ) {
-        const maxRaceEntries = raceFieldSize(db);
-        return c.json(
-          {
-            message: `A race can be published only with exactly ${maxRaceEntries} distinct approved horse-jockey pairs. Current: ${approvedPairCount}/${maxRaceEntries}.`,
-          },
-          400
-        );
-      }
-      if (assignedRefereeIds.length === 0) {
-        return c.json({ message: 'Assign at least one referee before publishing the race' }, 400);
-      }
-      race.status = 'published';
-      race.updatedAt = new Date().toISOString();
-      entries.forEach((entry) => {
-        const horse = db.horses.find((item) => item.id === entry.horseId);
-        const ratingLabel =
-          entry.ratingSnapshot === null ||
-          entry.ratingSnapshot === undefined ||
-          entry.ratingSnapshot === ''
-            ? 'TBD'
-            : entry.ratingSnapshot;
-        const msg = `${race.name} has been published. Gate ${entry.lane}, rating ${ratingLabel}, assigned weight ${entry.handicap}lb.`;
-        createNotification(db, horse?.ownerUserId, 'Race published', msg);
-        createNotification(db, entry.jockeyUserId, 'Race published', msg);
-      });
-    }
-
-    if (action === 'start-race') {
-      if (race.status !== 'published') {
-        return c.json({ message: 'Race must be published before it can start' }, 400);
-      }
-
-      const readyEntries = entries.filter(
-        (entry) => entry.preRaceStatus === 'ready' && !entry.disqualified
-      );
-      const uncheckedEntries = entries.filter(
-        (entry) => !['ready', 'absent'].includes(entry.preRaceStatus) && !entry.disqualified
-      );
-
-      if (readyEntries.length === 0) {
-        return c.json({ message: 'At least one participant must be checked in as Ready before starting the race' }, 400);
-      }
-      if (uncheckedEntries.length > 0) {
-        return c.json({ message: 'Every participant must be marked Ready or Absent before starting the race' }, 400);
-      }
-      const requiredReadyCount = minReadiedParticipants(db);
-      if(readyEntries.length < requiredReadyCount) {
-        race.status = 'cancelled';
-        race.updatedAt = new Date().toISOString();
-        const refund = refundRaceBets(
-          db,
-          race.id,
-          `${race.name} was cancelled due to insufficient participants`
-        );
-        settledBets = (db.bets || []).filter(
-          (bet) => bet.raceId === race.id && bet.settledAt
-        );
-        affectedSpectators = refund.affectedUsers || [];
-        const recipientIds = new Set();
-          entries.forEach((entry) => {
-        const horse = db.horses.find((item) => item.id === entry.horseId);
-        if (horse?.ownerUserId) recipientIds.add(horse.ownerUserId);
-        if (entry.jockeyUserId) recipientIds.add(entry.jockeyUserId);
-        });
-       raceRefereeIds(db, race).forEach((refereeId) => recipientIds.add(refereeId));
-        db.users
-      .filter((item) => ['admin', 'spectator'].includes(item.role))
-        .forEach((item) => recipientIds.add(item.id));
-
-       recipientIds.forEach((userId) =>createNotification(db,userId,'Race cancelled',
-      `${race.name} has been cancelled due to insufficient participants. Only ${readyEntries.length} participants were marked Ready, but at least ${requiredReadyCount} are required.`
-      )
-      );
-      }else{
-      race.status = 'in-progress';
-      race.updatedAt = new Date().toISOString();
-      entries.forEach((entry) => {
-        if (entry.preRaceStatus === 'absent') entry.disqualified = true;
-      });
-
-      const tournament = db.tournaments.find((item) => item.id === race.tournamentId);
-      if (tournament && tournament.status !== 'completed') {
-        tournament.status = 'active';
-        tournament.updatedAt = race.updatedAt;
-        affectedTournament = tournament;
-      }
-
-      race.replayTimeline = buildProvisionalRaceTimeline({
-        race,
-        entries,
-        horses: db.horses,
-      });
-
-      raceRefereeIds(db, race).forEach((refereeId) =>
-        createNotification(
-          db,
-          refereeId,
-          'Race started',
-          `${race.name} has been started by Admin.`
-        )
-      );
-    }
-    }
-    if(action === 'cancel-race'){
-      if(race.status === 'in-progress' || race.status === 'finished' || race.status === 'completed'){
-        return c.json({ message: 'The race has started and cannot be cancelled.'}, 400);
-    }
-    race.status = 'cancelled';
-        race.updatedAt = new Date().toISOString();
-        const refund = refundRaceBets(db, race.id, `${race.name} was cancelled`);
-        settledBets = (db.bets || []).filter(
-          (bet) => bet.raceId === race.id && bet.settledAt
-        );
-        affectedSpectators = refund.affectedUsers || [];
-        const recipientIds = new Set();
-          entries.forEach((entry) => {
-        const horse = db.horses.find((item) => item.id === entry.horseId);
-        if (horse?.ownerUserId) recipientIds.add(horse.ownerUserId);
-        if (entry.jockeyUserId) recipientIds.add(entry.jockeyUserId);
-        });
-       raceRefereeIds(db, race).forEach((refereeId) => recipientIds.add(refereeId));
-        db.users
-      .filter((item) => ['admin', 'spectator'].includes(item.role))
-        .forEach((item) => recipientIds.add(item.id));
-
-       recipientIds.forEach((userId) =>
-      createNotification(
-      db,
-      userId,
-      'Race cancelled',
-      `${race.name} has been cancelled by the admin`
-      )
-      );
-  }
-    if (action === 'finish-race') {
-      if (race.status !== 'in-progress') {
-        return c.json({ message: 'Only an in-progress race can be finished' }, 400);
-      }
-
-      race.status = 'finished';
-      race.resultStatus = 'draft';
-      race.awardsPublished = false;
-      race.updatedAt = new Date().toISOString();
-      entries.forEach((entry) => {
-        entry.resultStatus = entry.preRaceStatus === 'absent' || entry.disqualified
-          ? 'disqualified'
-          : 'draft';
-      });
-
-      raceRefereeIds(db, race).forEach((refereeId) =>
-        createNotification(
-          db,
-          refereeId,
-          'Race finished',
-          `${race.name} has been finished by Admin. Enter and submit the official timing draft.`
-        )
-      );
-    }
-
-    if (action === 'complete-results') {
-      if (race.status !== 'finished' || race.resultStatus !== 'submitted') {
-        return c.json({ message: 'Only submitted race results can be approved by Admin' }, 400);
-      }
-
-      const competingEntries = entries.filter(
-        (entry) => entry.preRaceStatus !== 'absent' && !entry.disqualified
-      );
-      if (competingEntries.length === 0) {
-        return c.json({ message: 'A race needs at least one competing participant before completion' }, 400);
-      }
-
-      const ratingResults = competingEntries.map((entry) => ({
-        entry,
-        result: computePostRaceRating(entry, competingEntries),
-      }));
-      const invalidRatingResult = ratingResults.find(
-        ({ result }) =>
-          result.previousRating === null ||
-          (competingEntries.length >= 4 && !result.calcLog)
-      );
-      if (invalidRatingResult) {
-        return c.json(
-          {
-            message: `Cannot complete results because entry ${invalidRatingResult.entry.id} has a missing or invalid rating snapshot.`,
-          },
-          400
-        );
-      }
-
-      race.status = 'completed';
-      race.resultStatus = 'official';
-      race.awardsPublished = true;
-      race.updatedAt = new Date().toISOString();
-      entries.forEach((entry) => {
-        entry.resultStatus = entry.preRaceStatus === 'absent' || entry.disqualified
-          ? 'disqualified'
-          : 'official';
-      });
-      ratingResults.forEach(({ entry, result }) => {
-        const horse = db.horses.find((item) => item.id === entry.horseId);
-        entry.ratingChange = result.ratingChange;
-        entry.postRaceRating = result.postRaceRating;
-        entry.ratingLog = result.calcLog;
-        if (horse) {
-          horse.overallRating = result.postRaceRating;
-          horse.updatedAt = race.updatedAt;
-        }
-      });
-      affectedHorses = ratingResults
-        .map(({ entry }) => db.horses.find((item) => item.id === entry.horseId))
-        .filter(Boolean);
-
-      race.replayTimeline = buildOfficialReplayTimeline({
-        race,
-        entries: competingEntries,
-        horses: db.horses,
-      });
-
-      const settlement = settleRaceBets(db, race.id, entries);
-      settledBets = (db.bets || []).filter(
-        (bet) => bet.raceId === race.id && bet.settledAt
-      );
-      affectedSpectators = settlement.affectedUsers || [];
-
-      const recipientIds = new Set();
-      entries.forEach((entry) => {
-        const horse = db.horses.find((item) => item.id === entry.horseId);
-        if (horse?.ownerUserId) recipientIds.add(horse.ownerUserId);
-        if (entry.jockeyUserId) recipientIds.add(entry.jockeyUserId);
-      });
-      db.users
-        .filter((item) => ['admin', 'spectator'].includes(item.role))
-        .forEach((item) => recipientIds.add(item.id));
-      recipientIds.forEach((userId) =>
-        createNotification(
-          db,
-          userId,
-          'Official results published',
-          `${race.name} results were approved by Admin and are now official.`
-        )
-      );
-
-      const tournament = db.tournaments.find((item) => item.id === race.tournamentId);
-      if (tournament && tournamentHasEnded(tournament)) {
-        tournament.status = 'completed';
-        tournament.updatedAt = race.updatedAt;
-        affectedTournament = tournament;
-      }
-    }
-
-    recordRaceAction(db, {
-      raceId: race.id,
-      userId: c.get('user').id,
-      action,
-      fromStatus,
-      toStatus: race.status,
-      details: `${entries.length} approved participants`,
-    });
-
-    if (persistAdminRaceAction) {
-      await persistAdminRaceAction({
-        race,
-        raceEntries: entries,
-        horses: affectedHorses,
-        tournament: affectedTournament,
-        bets: settledBets,
-        users: affectedSpectators,
-        creditTransactions: (db.creditTransactions || []).filter(
-          (transaction) => !existingCreditTransactionIds.has(transaction.id)
-        ),
-        notifications: (db.notifications || []).filter(
-          (notification) => !existingNotificationIds.has(notification.id)
-        ),
-        actionLogs: (db.raceActionLogs || []).filter(
-          (log) => !existingActionLogIds.has(log.id)
-        ),
-      });
-    } else {
-      await writeDb(db);
-    }
-    broadcastRaceUpdate(race.id);
-    return c.json({
-      race,
-      entries: publicRaceEntries(db).filter((entry) => entry.raceId === race.id),
-      notifications: db.notifications || [],
-    });
-  });
 
   // Phê duyệt hoặc từ chối một mục cụ thể (ngựa, tài khoản, đăng ký race của jockey/horse, pairing)
   app.post('/approvals/:entityType/:id', async (c) => {

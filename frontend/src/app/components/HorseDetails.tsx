@@ -174,17 +174,19 @@ export default function HorseDetails({
   const [profileExpanded, setProfileExpanded] = useState(false);
   const [raceHistoryExpanded, setRaceHistoryExpanded] = useState(false);
   const [message, setMessage] = useState('');
-  const activeHorse = horse || loadedHorse;
-  const canOpenHorseList = currentUser?.role === 'owner';
+  const activeHorse =
+    (horse?.id === horseId ? horse : null) ||
+    (loadedHorse?.id === horseId ? loadedHorse : null);
+  const canOpenHorseList = ['admin', 'owner'].includes(currentUser?.role || '');
 
   useEffect(() => {
-    const activeHorseId = horse?.id || horseId;
+    const activeHorseId = horseId || horse?.id;
 
     if (!activeHorseId) return;
 
-    getBootstrap()
+    getBootstrap({ scope: 'horses' })
       .then((data) => {
-        if (!horse) {
+        if (horse?.id !== activeHorseId) {
           setLoadedHorse(
             data.horses.find((item) => item.id === activeHorseId) || null
           );

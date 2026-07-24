@@ -7,8 +7,10 @@ export const FRONTEND_URL = process.env.FRONTEND_URL || 'http://127.0.0.1:5173/'
 export const MAX_RACE_FIELD_SIZE = Number(process.env.MAX_RACE_FIELD_SIZE || 10);
 export const MIN_READIED_PARTICIPANTS = Number(process.env.MIN_READIED_PARTICIPANTS || 5);
 export const MAX_TOURNAMENT_RACES = Number(process.env.MAX_TOURNAMENT_RACES || 10);
-export const MAX_OWNER_HORSES = Number(process.env.MAX_OWNER_HORSES || 10);
+export const MAX_OWNER_HORSES = Number(process.env.MAX_OWNER_HORSES || 20);
 export const SPECTATOR_STARTING_CREDITS = Number(process.env.SPECTATOR_STARTING_CREDITS || 100);
+/** Default max stake per bet when creating a race. Null/omit means unlimited. */
+export const DEFAULT_RACE_BET_LIMIT = Number(process.env.DEFAULT_RACE_BET_LIMIT || 50);
 export const BETTING_CLOSE_BEFORE_RACE_MS = 60 * 1000;
 /** Race date/time fields are entered as Vietnam wall-clock time. */
 export const RACE_TIMEZONE_OFFSET = process.env.RACE_TIMEZONE_OFFSET || '+07:00';
@@ -57,12 +59,3 @@ export const PUBLIC_RACE_STATUSES = [
   'finished',
   'completed',
 ];
-
-export const RACE_CLASS_WEIGHT_RANGES = {
-  'Class 1': { topWeightLb: 135, minWeightLb: 115 },
-  'Class 2': { topWeightLb: 135, minWeightLb: 115 },
-  'Class 3': { topWeightLb: 133, minWeightLb: 113 },
-  'Class 4': { topWeightLb: 132, minWeightLb: 112 },
-  'Class 5': { topWeightLb: 130, minWeightLb: 110 },
-  Open: { topWeightLb: 135, minWeightLb: 110 },
-};

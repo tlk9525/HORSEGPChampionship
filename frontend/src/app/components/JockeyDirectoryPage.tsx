@@ -29,7 +29,7 @@ export default function JockeyDirectoryPage() {
   const [assignmentsExpanded, setAssignmentsExpanded] = useState(false);
 
   useEffect(() => {
-    getBootstrap()
+    getBootstrap({ scope: 'jockeys' })
       .then((data) => {
         setJockeys(data.jockeyProfiles || []);
         setRaceEntries(data.raceEntries || []);

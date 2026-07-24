@@ -32,11 +32,8 @@ interface BettingPageProps {
   onUserUpdate?: (user: AuthUser) => void;
 }
 
-const BETTING_CLOSE_MS = 60 * 1000;
-/** Match backend: race schedules are Vietnam wall-clock (+07:00). */
-const RACE_TIMEZONE_OFFSET = '+07:00';
-
-const raceStartMs = (race: RaceRecord) => {
+// Ghi chú: Hàm này chuyển lịch race theo giờ Việt Nam thành timestamp để tính thời gian đóng cược.
+const raceStartMs = (race: RaceRecord, raceTimezoneOffset: string) => {
   const date = String(race.date || race.raceDate || '').slice(0, 10);
   const rawTime = String(race.time || race.raceTime || '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !rawTime) return Number.NaN;
@@ -46,26 +43,44 @@ const raceStartMs = (race: RaceRecord) => {
     .padStart(2, '0')
     .slice(0, 2)}`;
 
-  return new Date(`${date}T${normalized}${RACE_TIMEZONE_OFFSET}`).getTime();
+  return new Date(`${date}T${normalized}${raceTimezoneOffset}`).getTime();
 };
 
+// Ghi chú: Hàm này kiểm tra race entry đã duyệt, không bị loại và không vắng mặt.
 const isBettableEntry = (entry: RaceEntryRecord) =>
   entry.status === 'approved' &&
   !entry.disqualified &&
   entry.preRaceStatus !== 'absent';
 
-const isBettingOpen = (race: RaceRecord) => {
+// Ghi chú: Hàm này kiểm tra race đang publish và chưa đến mốc đóng cược.
+const isBettingOpen = (
+  race: RaceRecord,
+  bettingCloseBeforeRaceMs: number,
+  raceTimezoneOffset: string
+) => {
   if (race.status !== 'published') return false;
-  const startMs = raceStartMs(race);
+  const startMs = raceStartMs(race, raceTimezoneOffset);
   if (!Number.isFinite(startMs)) return false;
-  return Date.now() < startMs - BETTING_CLOSE_MS;
+  return Date.now() < startMs - bettingCloseBeforeRaceMs;
 };
 
-const formatCountdown = (race: RaceRecord) => {
-  const startMs = raceStartMs(race);
+// Ghi chú: Chuẩn hóa bet limit của race thành số nguyên dương hoặc không giới hạn.
+const raceMaxBet = (race: RaceRecord) => {
+  const limit = Number(race.betLimit);
+  if (!Number.isFinite(limit) || limit <= 0) return null;
+  return Math.floor(limit);
+};
+
+// Ghi chú: Tính chuỗi đếm ngược đến thời điểm đóng cược của race.
+const formatCountdown = (
+  race: RaceRecord,
+  bettingCloseBeforeRaceMs: number,
+  raceTimezoneOffset: string
+) => {
+  const startMs = raceStartMs(race, raceTimezoneOffset);
   if (!Number.isFinite(startMs)) return 'Start time unavailable';
 
-  const closeMs = startMs - BETTING_CLOSE_MS;
+  const closeMs = startMs - bettingCloseBeforeRaceMs;
   const remaining = closeMs - Date.now();
 
   if (remaining <= 0) return 'Betting closed';
@@ -82,6 +97,7 @@ const formatCountdown = (race: RaceRecord) => {
   return `${minutes}m ${seconds}s until betting closes`;
 };
 
+// Ghi chú: Hàm này render trang betting và quản lý ví, pot cược cùng lịch sử cược của spectator.
 export default function BettingPage({
   currentUser,
   onNavigate,
@@ -102,14 +118,23 @@ export default function BettingPage({
   const [submittingEntryId, setSubmittingEntryId] = useState('');
   const [cancellingBetId, setCancellingBetId] = useState('');
   const [message, setMessage] = useState('');
-  const [now, setNow] = useState(Date.now());
+  const [, setNow] = useState(Date.now());
+  const [bettingCloseBeforeRaceMs, setBettingCloseBeforeRaceMs] = useState(0);
+  const [raceTimezoneOffset, setRaceTimezoneOffset] = useState('');
 
+  // Ghi chú: Hàm này tải đồng thời dữ liệu hệ thống, ví spectator và các pot cược mới nhất.
   const loadData = () => {
-    Promise.all([getBootstrap(), getSpectatorWallet(), getRacePots()])
+    Promise.all([
+      getBootstrap({ scope: 'betting' }),
+      getSpectatorWallet(),
+      getRacePots(),
+    ])
       .then(([bootstrap, wallet, { pots, entryTotals: apiEntryTotals }]) => {
         setTournaments(bootstrap.tournaments);
         setRaces(bootstrap.races);
         setRaceEntries(bootstrap.raceEntries || []);
+        setBettingCloseBeforeRaceMs(bootstrap.limits.bettingCloseBeforeRaceMs);
+        setRaceTimezoneOffset(bootstrap.limits.raceTimezoneOffset);
         setCredits(wallet.credits);
         setLoginStreak(wallet.loginStreak);
         setDailyReward(wallet.dailyReward);
@@ -151,11 +176,12 @@ export default function BettingPage({
   }, [bets]);
 
   const betStats = useMemo(() => {
-    const total = bets.length;
+    const countedBets = bets.filter((bet) => bet.status !== 'cancelled');
+    const total = countedBets.length;
     const won = bets.filter((b) => b.status === 'won').length;
     const lost = bets.filter((b) => b.status === 'lost').length;
     const pending = bets.filter((b) => b.status === 'pending').length;
-    const totalWagered = bets.reduce((s, b) => s + Number(b.amount || 0), 0);
+    const totalWagered = countedBets.reduce((s, b) => s + Number(b.amount || 0), 0);
     const totalWon = bets
       .filter((b) => b.status === 'won')
       .reduce((s, b) => s + Number(b.payout || 0), 0);
@@ -171,12 +197,12 @@ export default function BettingPage({
       races
         .filter((race) => race.status === 'published' || bets.some((bet) => bet.raceId === race.id))
         .sort((a, b) => {
-          const startA = raceStartMs(a);
-          const startB = raceStartMs(b);
+          const startA = raceStartMs(a, raceTimezoneOffset);
+          const startB = raceStartMs(b, raceTimezoneOffset);
           return (Number.isFinite(startA) ? startA : Infinity) -
             (Number.isFinite(startB) ? startB : Infinity);
         }),
-    [bets, races, now]
+    [bets, races, raceTimezoneOffset]
   );
 
   const tournamentNameById = useMemo(() => {
@@ -185,6 +211,7 @@ export default function BettingPage({
     return map;
   }, [tournaments]);
 
+  // Ghi chú: Hàm này kiểm tra số credit rồi gửi yêu cầu đặt cược và cập nhật giao diện.
   const handlePlaceBet = (entry: RaceEntryRecord, race: RaceRecord) => {
     const amount = Number(betAmounts[entry.id] || 0);
     if (!Number.isInteger(amount) || amount <= 0) {
@@ -194,6 +221,12 @@ export default function BettingPage({
 
     if (amount > credits) {
       setMessage('You do not have enough credits for this bet.');
+      return;
+    }
+
+    const maxBet = raceMaxBet(race);
+    if (maxBet !== null && amount > maxBet) {
+      setMessage(`This race limits bets to ${maxBet} credits each.`);
       return;
     }
 
@@ -224,6 +257,7 @@ export default function BettingPage({
       .finally(() => setSubmittingEntryId(''));
   };
 
+  // Ghi chú: Hàm này hủy một cược đang chờ, hoàn credit và cập nhật lại pot trên giao diện.
   const handleCancelBet = (bet: BetRecord) => {
     setCancellingBetId(bet.id);
     setMessage('');
@@ -330,9 +364,15 @@ export default function BettingPage({
               const entries = raceEntries
                 .filter((entry) => entry.raceId === race.id && isBettableEntry(entry))
                 .sort((a, b) => (a.lane || 999) - (b.lane || 999));
-              const open = isBettingOpen(race);
+              const open = isBettingOpen(
+                race,
+                bettingCloseBeforeRaceMs,
+                raceTimezoneOffset
+              );
               const tournamentName = tournamentNameById.get(race.tournamentId || '') || 'Tournament';
               const potTotal = potsByRaceId[race.id] || 0;
+              const maxBet = raceMaxBet(race);
+              const maxStake = maxBet === null ? credits : Math.min(credits, maxBet);
 
               return (
                 <article
@@ -358,7 +398,13 @@ export default function BettingPage({
                             : 'border border-red-400/30 bg-red-500/10 text-red-300'
                         }`}
                       >
-                        {open ? formatCountdown(race) : 'Betting closed'}
+                        {open
+                          ? formatCountdown(
+                              race,
+                              bettingCloseBeforeRaceMs,
+                              raceTimezoneOffset
+                            )
+                          : 'Betting closed'}
                       </div>
                     </div>
 
@@ -409,6 +455,10 @@ export default function BettingPage({
                       <div className="flex items-center gap-3 text-sm text-[#f6d77a]">
                         <Coins className="h-4 w-4 text-[#d4af37]" />
                         Pot {potTotal} credits
+                      </div>
+                      <div className="flex items-center gap-3 text-sm text-gray-300 sm:col-span-2 xl:col-span-1">
+                        <Coins className="h-4 w-4 text-[#d4af37]" />
+                        Max bet {maxBet === null ? 'Unlimited' : `${maxBet} credits`}
                       </div>
                     </div>
                   </div>
@@ -501,7 +551,7 @@ export default function BettingPage({
                                         <input
                                           type="number"
                                           min={1}
-                                          max={credits}
+                                          max={maxStake}
                                           step={1}
                                           value={betAmounts[entry.id] || ''}
                                           onChange={(event) =>
@@ -510,7 +560,11 @@ export default function BettingPage({
                                               [entry.id]: event.target.value,
                                             }))
                                           }
-                                          placeholder="Amount"
+                                          placeholder={
+                                            maxBet === null
+                                              ? 'Amount'
+                                              : `Max ${maxBet}`
+                                          }
                                           className="w-full rounded-lg border border-white/10 bg-[#0b223d] px-4 py-2 text-white outline-none focus:border-[#d4af37]"
                                         />
                                         <button
@@ -528,10 +582,12 @@ export default function BettingPage({
                                             onClick={() =>
                                               setBetAmounts((current) => ({
                                                 ...current,
-                                                [entry.id]: String(Math.min(preset, credits)),
+                                                [entry.id]: String(
+                                                  Math.min(preset, maxStake || 0)
+                                                ),
                                               }))
                                             }
-                                            disabled={credits < 1}
+                                            disabled={maxStake < 1}
                                             className="flex-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs font-semibold text-gray-300 hover:bg-[#d4af37]/20 hover:text-[#d4af37] hover:border-[#d4af37]/30 transition-all disabled:opacity-40"
                                           >
                                             {preset}
@@ -541,13 +597,13 @@ export default function BettingPage({
                                           onClick={() =>
                                             setBetAmounts((current) => ({
                                               ...current,
-                                              [entry.id]: String(credits),
+                                              [entry.id]: String(maxStake),
                                             }))
                                           }
-                                          disabled={credits < 1}
+                                          disabled={maxStake < 1}
                                           className="flex-1 rounded-lg border border-[#d4af37]/30 bg-[#d4af37]/10 px-2 py-1.5 text-xs font-bold text-[#d4af37] hover:bg-[#d4af37]/30 transition-all disabled:opacity-40"
                                         >
-                                          All In
+                                          {maxBet !== null && maxBet < credits ? 'Max' : 'All In'}
                                         </button>
                                       </div>
                                       {(() => {
@@ -605,7 +661,14 @@ export default function BettingPage({
                 <tbody>
                   {bets.map((bet) => {
                     const betRace = races.find((r) => r.id === bet.raceId);
-                    const canCancel = bet.status === 'pending' && betRace && isBettingOpen(betRace);
+                    const canCancel =
+                      bet.status === 'pending' &&
+                      betRace &&
+                      isBettingOpen(
+                        betRace,
+                        bettingCloseBeforeRaceMs,
+                        raceTimezoneOffset
+                      );
                     return (
                       <tr key={bet.id} className="border-b border-white/5 text-gray-200">
                         <td className="px-3 py-4">{bet.raceName || bet.raceId}</td>

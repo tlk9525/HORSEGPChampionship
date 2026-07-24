@@ -7,6 +7,8 @@ import {
   EyeOff,
   Trophy,
   User,
+  Check,
+  X,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
@@ -20,6 +22,8 @@ interface LoginPageProps {
   initialMode?: 'login' | 'register';
   onLogin: (user: AuthUser) => void;
 }
+
+const SPECIAL_CHARACTER_PATTERN = /[!@#$%^&*()_+\-={}\[\]:;"'<>,.?/\\|`~]/;
 
 // Ghi chú: Hàm này render form đăng nhập và đăng ký tài khoản.
 export default function LoginPage({
@@ -43,6 +47,18 @@ export default function LoginPage({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showVerificationHelp, setShowVerificationHelp] = useState(false);
 
+  const passwordRequirements = [
+    { label: 'At least 8 characters', met: password.length >= 8 },
+    { label: 'At least 1 letter', met: /[A-Za-z]/.test(password) },
+    { label: 'At least 1 number', met: /\d/.test(password) },
+    {
+      label: 'At least 1 special character',
+      met: SPECIAL_CHARACTER_PATTERN.test(password),
+    },
+    { label: 'No whitespace', met: password.length > 0 && !/\s/.test(password) },
+  ];
+  const isPasswordValid = passwordRequirements.every(({ met }) => met);
+
   useEffect(() => {
     setIsRegister(initialMode === 'register');
   }, [initialMode]);
@@ -56,6 +72,10 @@ export default function LoginPage({
 
     try {
       if (isRegister) {
+        if (!isPasswordValid) {
+          throw new Error('Please meet all password requirements');
+        }
+
         if (password !== confirmPassword) {
           throw new Error('Password confirmation does not match');
         }
@@ -295,6 +315,34 @@ export default function LoginPage({
                   </button>
 
                 </div>
+
+                {isRegister && (
+                  <div
+                    className="mt-3 rounded-xl border border-white/10 bg-[#071a2f]/70 px-4 py-3"
+                    aria-live="polite"
+                  >
+                    <p className="mb-2 text-sm font-medium text-gray-300">
+                      Your password must include:
+                    </p>
+                    <ul className="grid gap-1.5 text-sm sm:grid-cols-2">
+                      {passwordRequirements.map(({ label, met }) => (
+                        <li
+                          key={label}
+                          className={`flex items-center gap-2 ${
+                            met ? 'text-emerald-400' : 'text-gray-400'
+                          }`}
+                        >
+                          {met ? (
+                            <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+                          ) : (
+                            <X className="h-4 w-4 shrink-0 text-red-400" aria-hidden="true" />
+                          )}
+                          <span>{label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
 
               {/* CONFIRM PASSWORD */}
@@ -370,8 +418,8 @@ export default function LoginPage({
               <button
                 type="button"
                 onClick={submit}
-                disabled={isSubmitting}
-                className="w-full h-14 rounded-xl bg-[#d4af37] hover:bg-[#b8892d] transition-all text-white font-bold text-lg shadow-lg shadow-[#d4af37]/30"
+                disabled={isSubmitting || (isRegister && !isPasswordValid)}
+                className="w-full h-14 rounded-xl bg-[#d4af37] hover:bg-[#b8892d] transition-all text-white font-bold text-lg shadow-lg shadow-[#d4af37]/30 disabled:cursor-not-allowed disabled:opacity-50"
               >
 
                 {isSubmitting

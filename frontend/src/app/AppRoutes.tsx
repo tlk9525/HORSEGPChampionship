@@ -1,5 +1,5 @@
 import { lazy } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AuthUser, HorseRecord } from './services/api';
 
 const LandingPage = lazy(() => import('./components/LandingPage'));
@@ -19,9 +19,11 @@ const ResultsPage = lazy(() => import('./components/ResultsPage'));
 const AdminPanel = lazy(() => import('./components/AdminPanel'));
 const CreateRacePage = lazy(() => import('./components/CreateRacePage'));
 const EditRacePage = lazy(() => import('./components/EditRacePage'));
+const RaceClassCatalog = lazy(() => import('./components/RaceClassCatalog'));
 const UserManagement = lazy(() => import('./components/UserManagement'));
 const LoginPage = lazy(() => import('./components/LoginPage'));
 const BettingPage = lazy(() => import('./components/BettingPage'));
+const AdminBettingPage = lazy(() => import('./components/AdminBettingPage'));
 
 interface AppRoutesProps {
   currentUser: AuthUser | null;
@@ -41,6 +43,10 @@ export default function AppRoutes({
   onLogin,
   onUserUpdate,
 }: AppRoutesProps) {
+  const { pathname } = useLocation();
+  const currentHorseRouteId = pathname.match(/^\/horses\/([^/]+)(?:\/edit)?\/?$/)?.[1];
+  const routeHorse = selectedHorse?.id === currentHorseRouteId ? selectedHorse : null;
+
   return (
     <Routes>
       <Route path="/" element={<LandingPage onNavigate={onNavigate} />} />
@@ -63,11 +69,11 @@ export default function AppRoutes({
       />
       <Route
         path="/horses/:horseId"
-        element={<HorseDetails currentUser={currentUser} horse={selectedHorse} onNavigate={onNavigate} />}
+        element={<HorseDetails currentUser={currentUser} horse={routeHorse} onNavigate={onNavigate} />}
       />
       <Route
         path="/horses/:horseId/edit"
-        element={<RegisterHorsePage horse={selectedHorse} mode="edit" onNavigate={onNavigate} />}
+        element={<RegisterHorsePage horse={routeHorse} mode="edit" onNavigate={onNavigate} />}
       />
       <Route path="/jockey-portal" element={<JockeyPage currentUser={currentUser} onNavigate={onNavigate} />} />
       <Route path="/jockeys" element={<JockeyDirectoryPage />} />
@@ -87,6 +93,7 @@ export default function AppRoutes({
           />
         }
       />
+      <Route path="/admin/betting" element={<AdminBettingPage onNavigate={onNavigate} />} />
       <Route path="/admin" element={<AdminPanel onNavigate={onNavigate} />} />
       <Route
         path="/admin/users"
@@ -94,6 +101,7 @@ export default function AppRoutes({
       />
       <Route path="/admin/races/new" element={<CreateRacePage onNavigate={onNavigate} />} />
       <Route path="/admin/races/:raceId/edit" element={<EditRacePage onNavigate={onNavigate} />} />
+      <Route path="/admin/race-classes" element={<RaceClassCatalog onNavigate={onNavigate} />} />
       <Route path="/login" element={<LoginPage onLogin={onLogin} />} />
       <Route path="/register" element={<LoginPage initialMode="register" onLogin={onLogin} />} />
       <Route
