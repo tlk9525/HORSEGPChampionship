@@ -302,10 +302,10 @@ export default function JockeyPage({
           </p>
 
           <button
-            onClick={() => onNavigate('horses')}
+            onClick={() => onNavigate('tournaments')}
             className="px-6 py-3 rounded-xl bg-[#d4af37] text-white font-bold hover:bg-[#b8892d] transition-all"
           >
-            Go to Owner Portal
+            Go to Tournaments
           </button>
         </div>
       </div>

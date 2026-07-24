@@ -65,6 +65,7 @@ const requiredRuntimeTables = [
   'refereeReports',
   'notifications',
   'sessions',
+  'passwordResetRequests',
   'creditTransactions',
 ];
 
@@ -336,6 +337,7 @@ const upsertChangedRows = async (
 const tableDeleteOrder = [
   'notifications',
   'sessions',
+  'passwordResetRequests',
   'creditTransactions',
   'bets',
   'wallets',

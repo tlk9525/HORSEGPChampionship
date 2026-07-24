@@ -30,3 +30,43 @@ export const logout = async () =>
 
 // Lấy người dùng đang đăng nhập từ session cookie.
 export const getMe = async () => request<{ user: AuthUser }>('/me');
+
+export const changePassword = async (
+  currentPassword: string,
+  newPassword: string,
+) =>
+  request<{ ok: boolean; message: string }>('/change-password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+
+export type PasswordResetStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'completed'
+  | 'expired'
+  | 'unknown';
+
+export const requestPasswordReset = async (email: string) =>
+  request<{ recoveryCode: string; message: string }>('/password-reset-requests', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+
+export const getPasswordResetStatus = async (recoveryCode: string) =>
+  request<{ status: PasswordResetStatus }>(
+    `/password-reset-requests/${encodeURIComponent(recoveryCode)}/status`,
+  );
+
+export const completePasswordReset = async (
+  recoveryCode: string,
+  newPassword: string,
+) =>
+  request<{ ok: boolean; message: string }>(
+    `/password-reset-requests/${encodeURIComponent(recoveryCode)}/complete`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ newPassword }),
+    },
+  );

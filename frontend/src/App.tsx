@@ -108,7 +108,7 @@ export default function App() {
       {/* PAGE CONTENT */}
       <main className="pt-16 min-h-screen">
 
-        {!authChecked && protectedPages[currentPage] ? (
+        {!authChecked && isProtectedPage(currentPage) ? (
           <div className="min-h-screen bg-[#071a2f] pt-24 px-4 text-gray-300">
             <div className="max-w-4xl mx-auto rounded-xl border border-white/10 bg-[#0b223d] p-8">
               Loading secure race data...
