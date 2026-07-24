@@ -24,7 +24,7 @@ interface SystemSettingsModalProps {
   onClose: () => void;
 }
 
-// Ghi chú: Modal quản lý rule race, approval, notification và system setting.
+// Manages race rules, approvals, notifications, and system settings.
 export default function SystemSettingsModal({
   settings,
   tab,
@@ -34,7 +34,7 @@ export default function SystemSettingsModal({
   onSave,
   onClose,
 }: SystemSettingsModalProps) {
-  // Ghi chú: Render một setting dạng số và chuyển giá trị nhập về đúng kiểu cấu hình.
+  // Renders a numeric setting and converts its input to the expected setting type.
   const renderNumberSetting = (
     label: string,
     description: string,
@@ -59,7 +59,7 @@ export default function SystemSettingsModal({
     </label>
   );
 
-  // Ghi chú: Render công tắc bật/tắt cho một setting boolean của hệ thống.
+  // Renders an on/off control for a boolean system setting.
   const renderToggleSetting = (
     label: string,
     description: string,
@@ -97,7 +97,7 @@ export default function SystemSettingsModal({
           <div>
             <h2 className="text-3xl font-black text-white">System Settings</h2>
             <p className="text-gray-400 mt-2">
-              Cấu hình vận hành hệ thống. Lưu xong sẽ áp dụng cho các race tiếp theo.
+              Configure system operations. Saved changes will apply to upcoming races.
             </p>
           </div>
           <button
@@ -136,40 +136,40 @@ export default function SystemSettingsModal({
             <div className="min-h-0 flex-1 overflow-y-auto pr-1">
               {tab === 'race' && (
                 <div className="grid md:grid-cols-2 gap-4">
-                  {renderNumberSetting('Default race distance', 'Distance tự động đề xuất khi admin tạo race mới.', 'defaultDistanceMeters', 400)}
-                  {renderNumberSetting('Max horses per race', 'Giới hạn số horse-jockey pair được publish trong một race.', 'maxHorsesPerRace', 2)}
-                  {renderNumberSetting('Minimum ready horses per race', 'Số horse tối thiểu phải được referee đánh dấu Ready trước khi start race.', 'minReadiedParticipants', 1)}
-                  {renderNumberSetting('Max races per tournament', 'Giới hạn số race tối đa trong một tournament.', 'maxRacesPerTournament', 1)}
-                  {renderNumberSetting('Close registration before race', 'Số giờ khóa đăng ký trước giờ race bắt đầu.', 'closeRegistrationHours')}
+                  {renderNumberSetting('Default race distance', 'Automatically suggested when an admin creates a new race.', 'defaultDistanceMeters', 400)}
+                  {renderNumberSetting('Max horses per race', 'Maximum number of horse-jockey pairs that can be published in a race.', 'maxHorsesPerRace', 2)}
+                  {renderNumberSetting('Minimum ready horses per race', 'Minimum number of horses the referee must mark as Ready before a race can start.', 'minReadiedParticipants', 1)}
+                  {renderNumberSetting('Max races per tournament', 'Maximum number of races allowed in a tournament.', 'maxRacesPerTournament', 1)}
+                  {renderNumberSetting('Close registration before race', 'Number of hours before the race when registration closes.', 'closeRegistrationHours')}
                   <div className="md:col-span-2">
-                    {renderToggleSetting('Auto publish results', 'Tự publish kết quả sau khi referee hoàn tất race report.', 'autoPublishResults')}
+                    {renderToggleSetting('Auto publish results', 'Automatically publish results after the referee completes the race report.', 'autoPublishResults')}
                   </div>
                 </div>
               )}
 
               {tab === 'approval' && (
                 <div className="grid md:grid-cols-2 gap-4">
-                  {renderToggleSetting('Allow self-registration', 'Cho phép owner, jockey, referee tự tạo tài khoản.', 'allowSelfRegistration')}
-                  {renderToggleSetting('Owner requires admin approval', 'Owner mới phải chờ admin duyệt trước khi dùng hệ thống.', 'requireOwnerApproval')}
-                  {renderToggleSetting('Jockey requires admin approval', 'Jockey mới phải chờ admin duyệt trước khi nhận lời mời hoặc đăng ký race.', 'requireJockeyApproval')}
-                  {renderToggleSetting('Referee requires admin approval', 'Referee mới phải được duyệt trước khi được assign race.', 'requireRefereeApproval')}
+                  {renderToggleSetting('Allow self-registration', 'Allow owners, jockeys, and referees to create their own accounts.', 'allowSelfRegistration')}
+                  {renderToggleSetting('Owner requires admin approval', 'New owners must be approved by an admin before using the system.', 'requireOwnerApproval')}
+                  {renderToggleSetting('Jockey requires admin approval', 'New jockeys must be approved before accepting invitations or registering for races.', 'requireJockeyApproval')}
+                  {renderToggleSetting('Referee requires admin approval', 'New referees must be approved before they can be assigned to races.', 'requireRefereeApproval')}
                 </div>
               )}
 
               {tab === 'notifications' && (
                 <div className="space-y-5">
                   <div className="grid md:grid-cols-3 gap-4">
-                    {renderToggleSetting('Horse registration', 'Gửi thông báo khi owner đăng ký horse mới.', 'notifyHorseRegistration')}
-                    {renderToggleSetting('Jockey registration', 'Gửi thông báo khi jockey đăng ký hoặc phản hồi lời mời.', 'notifyJockeyRegistration')}
-                    {renderToggleSetting('Race result', 'Gửi thông báo khi race có kết quả hoặc award được publish.', 'notifyRaceResults')}
+                    {renderToggleSetting('Horse registration', 'Send a notification when an owner registers a new horse.', 'notifyHorseRegistration')}
+                    {renderToggleSetting('Jockey registration', 'Send a notification when a jockey registers or responds to an invitation.', 'notifyJockeyRegistration')}
+                    {renderToggleSetting('Race result', 'Send a notification when race results or awards are published.', 'notifyRaceResults')}
                   </div>
                   <div className="rounded-2xl border border-white/10 bg-[#071a2f]/70 p-5">
                     <h3 className="text-white font-black mb-4">Recipient roles</h3>
                     <div className="grid sm:grid-cols-2 gap-4">
-                      {renderToggleSetting('Admins', 'Nhận cảnh báo duyệt hồ sơ.', 'notifyAdmins')}
-                      {renderToggleSetting('Referees', 'Nhận race assignment.', 'notifyReferees')}
-                      {renderToggleSetting('Owners', 'Nhận trạng thái horse/race.', 'notifyOwners')}
-                      {renderToggleSetting('Jockeys', 'Nhận lời mời và kết quả race.', 'notifyJockeys')}
+                      {renderToggleSetting('Admins', 'Receive profile approval alerts.', 'notifyAdmins')}
+                      {renderToggleSetting('Referees', 'Receive race assignments.', 'notifyReferees')}
+                      {renderToggleSetting('Owners', 'Receive horse and race status updates.', 'notifyOwners')}
+                      {renderToggleSetting('Jockeys', 'Receive invitations and race results.', 'notifyJockeys')}
                     </div>
                   </div>
                 </div>
@@ -177,9 +177,9 @@ export default function SystemSettingsModal({
 
               {tab === 'system' && (
                 <div className="grid md:grid-cols-2 gap-4">
-                  {renderToggleSetting('Maintenance mode', 'Khóa người dùng thường, chỉ admin vào được hệ thống.', 'maintenanceMode')}
-                  {renderToggleSetting('Audit settings changes', 'Ghi lại admin nào đổi setting nào và thời điểm thay đổi.', 'auditSettingsChanges')}
-                  {renderNumberSetting('Archive completed tournaments', 'Số ngày sau khi completed thì tournament được đưa vào archive.', 'archiveCompletedAfterDays', 1)}
+                  {renderToggleSetting('Maintenance mode', 'Restrict system access to admins during maintenance.', 'maintenanceMode')}
+                  {renderToggleSetting('Audit settings changes', 'Record which admin changed each setting and when it was changed.', 'auditSettingsChanges')}
+                  {renderNumberSetting('Archive completed tournaments', 'Number of days after completion before a tournament is archived.', 'archiveCompletedAfterDays', 1)}
                 </div>
               )}
             </div>
