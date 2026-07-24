@@ -31,6 +31,12 @@ export const logout = async () =>
 // Lấy người dùng đang đăng nhập từ session cookie.
 export const getMe = async () => request<{ user: AuthUser }>('/me');
 
+export const updateAccountName = async (name: string) =>
+  request<{ user: AuthUser; message: string }>('/account/name', {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  });
+
 export const changePassword = async (
   currentPassword: string,
   newPassword: string,
